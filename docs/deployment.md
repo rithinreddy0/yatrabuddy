@@ -24,7 +24,7 @@ Once Render finishes the first deployment, open `https://<render-service>.onrend
 
 ## Deploy the frontend on Vercel
 
-Import the GitHub repository into a personal Hobby project and use its root directory. In the Vercel project, set `RENDER_API_ORIGIN` for Production to the actual Render HTTPS origin, for example `https://yatrabuddy-api.onrender.com`. The value has no path. `vercel.ts` installs with `npm ci`, builds the Vite app into `dist`, and configures the API rewrite. Use the Vercel dashboard or a current CLI for programmatic configuration. Keep the frontend's Vercel environment separate from Render's application credentials. [Vercel project configuration](https://vercel.com/docs/project-configuration/vercel-ts), [Vercel external rewrites](https://vercel.com/docs/routing/rewrites)
+Import the GitHub repository into a personal Hobby project and use its root directory. `vercel.json` installs with `npm ci`, builds the Vite app into `dist`, and proxies `/api/` to `https://yatrabuddy-api.onrender.com`. If you create a different Render service, change the rewrite destination to its actual HTTPS origin. Keep application credentials on Render. [Vercel project configuration](https://vercel.com/docs/project-configuration), [Vercel external rewrites](https://vercel.com/docs/routing/rewrites)
 
 ## Verify the live app
 
