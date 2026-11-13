@@ -1,0 +1,50 @@
+{
+  "name": "Goa Escape",
+  "origin": "Delhi",
+  "destination": "Goa",
+  "date": "2026-11-22",
+  "travellers": 2,
+  "budget": 30000,
+  "stay": "Palolem Beach Cottages",
+  "weather": 32,
+  "booked": 3,
+  "toPlan": 2,
+  "goaHubs": [
+    {"name":"Goa International Airport","kind":"Airport","lat":15.3808,"lon":73.8314},
+    {"name":"Manohar International Airport","kind":"Airport","lat":15.743,"lon":73.86},
+    {"name":"Madgaon Junction","kind":"Rail station","lat":15.2675,"lon":73.9707},
+    {"name":"Thivim railway station","kind":"Rail station","lat":15.6194,"lon":73.8755},
+    {"name":"Canacona railway station","kind":"Rail station","lat":15.0098,"lon":74.0481}
+  ],
+  "journeys": [
+    {"origin":"Delhi","destination":"Goa","railStop":"Madgaon","airport":"Goa International Airport","prices":[6280,2700,3520],"minutes":[335,1640,1520]},
+    {"origin":"Mumbai","destination":"Goa","railStop":"Madgaon","airport":"Goa International Airport","prices":[4900,1700,2300],"minutes":[240,720,665]},
+    {"origin":"Bengaluru","destination":"Goa","railStop":"Madgaon","airport":"Goa International Airport","prices":[4100,1900,2400],"minutes":[230,830,780]},
+    {"origin":"Mumbai","destination":"Kochi","railStop":"Ernakulam","airport":"Cochin International Airport","prices":[5600,2600,3300],"minutes":[280,1430,1350]},
+    {"origin":"Delhi","destination":"Jaipur","railStop":"Jaipur Junction","airport":"Jaipur International Airport","prices":[4200,900,1500],"minutes":[225,340,385]}
+  ],
+  "routes": [
+    {"id":"flight","name":"Flight + shuttle","price":6280,"minutes":335,"buffer":65,"transfers":1,"theme":"comfort","reason":"Shortest journey with a 65-minute connection."},
+    {"id":"rail","name":"Rail + local bus","price":2700,"minutes":1640,"buffer":50,"transfers":1,"theme":"value","reason":"Lowest fare, with a tighter connection."},
+    {"id":"coast","name":"Rail + coastal transfer","price":3520,"minutes":1520,"buffer":100,"transfers":1,"theme":"explore","reason":"A coastal route with the longest connection buffer."}
+  ],
+  "expenses": [
+    {"name": "Flights", "amount": 9640, "day": 0},
+    {"name": "Beach cottages", "amount": 11200, "day": 1},
+    {"name": "Food and spice farm", "amount": 4100, "day": 2},
+    {"name": "Kayak and local travel", "amount": 2380, "day": 3},
+    {"name": "Departure transfer", "amount": 1080, "day": 4}
+  ],
+  "days": [
+    {"title":"Arrival in Goa","stops":[{"name":"Land GOI","time":"10:20","place":"Goa International Airport"},{"name":"Cottage check-in","time":"2:00 pm","place":"Palolem Beach Cottages"}]},
+    {"title":"Slow South Goa","stops":[{"name":"Palolem beach walk","time":"9:00 am","place":"Palolem Beach"},{"name":"Sunset at the fort","time":"5:30 pm","place":"Cabo de Rama"}]},
+    {"title":"Spice farms and coast","stops":[{"name":"Land GOI","time":"10:20","place":"Goa International Airport","day":0},{"name":"Spice farm lunch","time":"1:00 pm","place":"Ponda"}]},
+    {"title":"Out on the water","stops":[{"name":"Palolem kayak","time":"9:30 am","place":"Palolem Beach"},{"name":"Cafe lunch","time":"1:00 pm","place":"Canacona"}]},
+    {"title":"One last beach morning","stops":[{"name":"Beach breakfast","time":"8:30 am","place":"Palolem Beach"},{"name":"Airport transfer","time":"11:00 am","place":"Goa International Airport"}]}
+  ],
+  "sources": [
+    {"name":"IndiGo 6E-2171","detail":"Sample flight record","kind":"flight"},
+    {"name":"IMD Weather","detail":"Sample weather record","kind":"weather"},
+    {"name":"Google Maps","detail":"Sample place record","kind":"map"}
+  ]
+}

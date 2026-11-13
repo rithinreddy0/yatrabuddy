@@ -1,0 +1,96 @@
+.trip-transport {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.trip-transport h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.trip-transport-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 255px), 1fr));
+  gap: 10px;
+}
+
+.trip-transport-card {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--white);
+}
+
+.trip-transport-card h3,
+.trip-transport-card p {
+  margin: 0;
+}
+
+.trip-transport-card h3,
+.trip-transport-route {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: .94rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.trip-transport-card h3 svg,
+.trip-transport-route svg {
+  flex: none;
+  align-self: center;
+  color: var(--deep);
+}
+
+.trip-transport-card > p:not(.trip-transport-route),
+.trip-transport-guide p {
+  color: var(--muted);
+  font-size: .85rem;
+  line-height: 1.45;
+}
+
+.trip-transport-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.trip-transport-fares,
+.trip-transport-guide {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  font-size: .84rem;
+}
+
+.trip-transport-fares ul {
+  padding-inline-start: 18px;
+  margin-block: 5px;
+  color: var(--muted);
+}
+
+.trip-transport-fares > .source-pill {
+  display: inline-flex;
+  margin-top: 6px;
+}
+
+.trip-transport-guide summary {
+  padding-block: 3px;
+  cursor: pointer;
+  color: var(--deep);
+  font-weight: 750;
+}
+
+.trip-transport-guide p {
+  margin-block: 5px 8px;
+}
+
+.trip-transport-action {
+  justify-self: start;
+}

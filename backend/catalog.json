@@ -1,0 +1,692 @@
+[
+  {
+    "id": "hyderabad",
+    "name": "Hyderabad",
+    "region": "Telangana, India",
+    "image": "hyderabad",
+    "theme": "Culture",
+    "tagline": "Old City stories & spice trails",
+    "season": "Oct – Feb",
+    "color": "#7a574a",
+    "places": [
+      {
+        "name": "Charminar",
+        "area": "Old City",
+        "lat": 17.3616,
+        "lon": 78.4747,
+        "price": 25,
+        "minutes": 60,
+        "hours": "09:30–17:30",
+        "theme": "Culture"
+      },
+      {
+        "name": "Laad Bazaar",
+        "area": "Old City",
+        "lat": 17.3618,
+        "lon": 78.4725,
+        "price": 0,
+        "minutes": 50,
+        "hours": "10:00–21:00",
+        "theme": "Culture"
+      },
+      {
+        "name": "Chowmahalla Palace",
+        "area": "Khilwat",
+        "lat": 17.3579,
+        "lon": 78.4717,
+        "price": 100,
+        "minutes": 85,
+        "hours": "10:00–17:00",
+        "theme": "Culture"
+      },
+      {
+        "name": "Salar Jung Museum",
+        "area": "Darulshifa",
+        "lat": 17.3714,
+        "lon": 78.4804,
+        "price": 50,
+        "minutes": 120,
+        "hours": "10:00–17:00",
+        "theme": "Culture"
+      },
+      {
+        "name": "Golconda Fort",
+        "area": "Ibrahim Bagh",
+        "lat": 17.3833,
+        "lon": 78.4011,
+        "price": 25,
+        "minutes": 110,
+        "hours": "09:00–17:30",
+        "theme": "Adventure"
+      },
+      {
+        "name": "Qutb Shahi Tombs",
+        "area": "Ibrahim Bagh",
+        "lat": 17.395,
+        "lon": 78.3944,
+        "price": 20,
+        "minutes": 65,
+        "hours": "09:30–16:30",
+        "theme": "Culture"
+      },
+      {
+        "name": "Durgam Cheruvu",
+        "area": "Madhapur",
+        "lat": 17.4327,
+        "lon": 78.3913,
+        "price": 0,
+        "minutes": 50,
+        "hours": "06:00–20:00",
+        "theme": "Nature"
+      },
+      {
+        "name": "Shilparamam",
+        "area": "HITEC City",
+        "lat": 17.4528,
+        "lon": 78.3797,
+        "price": 60,
+        "minutes": 80,
+        "hours": "10:30–20:00",
+        "theme": "Culture"
+      },
+      {
+        "name": "Necklace Road",
+        "area": "Hussain Sagar",
+        "lat": 17.4245,
+        "lon": 78.4717,
+        "price": 0,
+        "minutes": 60,
+        "hours": "Open public promenade",
+        "theme": "Nature"
+      },
+      {
+        "name": "Nimrah Café",
+        "area": "Old City",
+        "lat": 17.3615,
+        "lon": 78.4742,
+        "price": 180,
+        "minutes": 35,
+        "hours": "07:00–23:00",
+        "theme": "Food"
+      },
+      {
+        "name": "Govind Ki Bandi",
+        "area": "Ghansi Bazaar",
+        "lat": 17.3675,
+        "lon": 78.4764,
+        "price": 220,
+        "minutes": 40,
+        "hours": "07:00–12:00",
+        "theme": "Food"
+      }
+    ],
+    "stays": [
+      {
+        "name": "Old City guesthouse",
+        "area": "Near Charminar",
+        "lat": 17.3673,
+        "lon": 78.4735,
+        "price": 1700,
+        "minutes": 0,
+        "hours": "Check-in from 14:00",
+        "theme": "Stay"
+      },
+      {
+        "name": "Banjara Hills boutique stay",
+        "area": "Banjara Hills",
+        "lat": 17.42,
+        "lon": 78.4462,
+        "price": 3400,
+        "minutes": 0,
+        "hours": "Check-in from 14:00",
+        "theme": "Stay"
+      },
+      {
+        "name": "HITEC City hotel",
+        "area": "Madhapur",
+        "lat": 17.448,
+        "lon": 78.383,
+        "price": 5200,
+        "minutes": 0,
+        "hours": "Check-in from 14:00",
+        "theme": "Stay"
+      }
+    ]
+  },
+  {
+    "id": "kerala",
+    "name": "Varkala",
+    "region": "Kerala, India",
+    "image": "kerala",
+    "theme": "Nature",
+    "tagline": "Cliff paths & unhurried sunsets",
+    "season": "Nov – Mar",
+    "color": "#356f57",
+    "places": [
+      {
+        "name": "Varkala Cliff",
+        "area": "North Cliff",
+        "lat": 8.7367,
+        "lon": 76.7039,
+        "price": 0,
+        "minutes": 65,
+        "hours": "Open public trail",
+        "theme": "Nature"
+      },
+      {
+        "name": "Papanasam Beach",
+        "area": "Varkala",
+        "lat": 8.7341,
+        "lon": 76.7068,
+        "price": 0,
+        "minutes": 80,
+        "hours": "Daylight recommended",
+        "theme": "Nature"
+      },
+      {
+        "name": "Janardanaswamy Temple",
+        "area": "Varkala",
+        "lat": 8.733,
+        "lon": 76.7107,
+        "price": 0,
+        "minutes": 45,
+        "hours": "Morning and evening sessions",
+        "theme": "Culture"
+      },
+      {
+        "name": "Odayam Beach",
+        "area": "North Varkala",
+        "lat": 8.7518,
+        "lon": 76.6955,
+        "price": 0,
+        "minutes": 75,
+        "hours": "Daylight recommended",
+        "theme": "Nature"
+      },
+      {
+        "name": "Kappil Lake",
+        "area": "Kappil",
+        "lat": 8.7797,
+        "lon": 76.6715,
+        "price": 450,
+        "minutes": 90,
+        "hours": "Daylight recommended",
+        "theme": "Adventure"
+      },
+      {
+        "name": "Sivagiri Mutt",
+        "area": "Sivagiri",
+        "lat": 8.7316,
+        "lon": 76.7315,
+        "price": 0,
+        "minutes": 55,
+        "hours": "Daylight recommended",
+        "theme": "Culture"
+      },
+      {
+        "name": "Cliffside Kerala lunch",
+        "area": "North Cliff",
+        "lat": 8.7392,
+        "lon": 76.7019,
+        "price": 420,
+        "minutes": 60,
+        "hours": "12:00–21:00",
+        "theme": "Food"
+      },
+      {
+        "name": "Varkala local market",
+        "area": "Town centre",
+        "lat": 8.737,
+        "lon": 76.7176,
+        "price": 0,
+        "minutes": 60,
+        "hours": "Morning recommended",
+        "theme": "Culture"
+      },
+      {
+        "name": "Edava Beach",
+        "area": "Edava",
+        "lat": 8.7621,
+        "lon": 76.685,
+        "price": 0,
+        "minutes": 55,
+        "hours": "Daylight recommended",
+        "theme": "Nature"
+      }
+    ],
+    "stays": [
+      {
+        "name": "Varkala cliff guesthouse",
+        "area": "North Cliff",
+        "lat": 8.738,
+        "lon": 76.702,
+        "price": 1900,
+        "minutes": 0,
+        "hours": "Check-in from 14:00",
+        "theme": "Stay"
+      },
+      {
+        "name": "Odayam garden retreat",
+        "area": "Odayam",
+        "lat": 8.75,
+        "lon": 76.697,
+        "price": 3100,
+        "minutes": 0,
+        "hours": "Check-in from 14:00",
+        "theme": "Stay"
+      },
+      {
+        "name": "Edava seaside stay",
+        "area": "Edava",
+        "lat": 8.762,
+        "lon": 76.686,
+        "price": 4600,
+        "minutes": 0,
+        "hours": "Check-in from 14:00",
+        "theme": "Stay"
+      }
+    ]
+  },
+  {
+    "id": "goa",
+    "name": "South Goa",
+    "region": "Goa, India",
+    "image": "goa",
+    "theme": "Adventure",
+    "tagline": "Quiet coves & coastal trails",
+    "season": "Nov – Feb",
+    "color": "#456b68",
+    "places": [
+      {
+        "name": "Palolem Beach",
+        "area": "Canacona",
+        "lat": 15.01,
+        "lon": 74.0232,
+        "price": 0,
+        "minutes": 75,
+        "hours": "Daylight recommended",
+        "theme": "Nature"
+      },
+      {
+        "name": "Butterfly Beach",
+        "area": "Canacona",
+        "lat": 15.0302,
+        "lon": 74.0083,
+        "price": 900,
+        "minutes": 130,
+        "hours": "Boat access depends on sea conditions",
+        "theme": "Adventure"
+      },
+      {
+        "name": "Patnem Beach",
+        "area": "Canacona",
+        "lat": 14.9982,
+        "lon": 74.0341,
+        "price": 0,
+        "minutes": 65,
+        "hours": "Daylight recommended",
+        "theme": "Nature"
+      },
+      {
+        "name": "Cotigao Wildlife Sanctuary",
+        "area": "Canacona",
+        "lat": 14.9695,
+        "lon": 74.1594,
+        "price": 100,
+        "minutes": 140,
+        "hours": "07:00–17:30",
+        "theme": "Nature"
+      },
+      {
+        "name": "Agonda Beach",
+        "area": "Agonda",
+        "lat": 15.0438,
+        "lon": 73.9904,
+        "price": 0,
+        "minutes": 80,
+        "hours": "Daylight recommended",
+        "theme": "Nature"
+      },
+      {
+        "name": "Cabo de Rama Fort",
+        "area": "Canaguinim",
+        "lat": 15.0889,
+        "lon": 73.9204,
+        "price": 0,
+        "minutes": 70,
+        "hours": "Daylight recommended",
+        "theme": "Culture"
+      },
+      {
+        "name": "Margao market",
+        "area": "Margao",
+        "lat": 15.2694,
+        "lon": 73.956,
+        "price": 0,
+        "minutes": 60,
+        "hours": "Morning recommended",
+        "theme": "Culture"
+      },
+      {
+        "name": "Goan lunch near Palolem",
+        "area": "Canacona",
+        "lat": 15.0105,
+        "lon": 74.025,
+        "price": 450,
+        "minutes": 60,
+        "hours": "12:00–21:00",
+        "theme": "Food"
+      },
+      {
+        "name": "Talpona Beach",
+        "area": "Talpona",
+        "lat": 14.969,
+        "lon": 74.039,
+        "price": 0,
+        "minutes": 55,
+        "hours": "Daylight recommended",
+        "theme": "Nature"
+      }
+    ],
+    "stays": [
+      {
+        "name": "Palolem beach hut",
+        "area": "Palolem",
+        "lat": 15.009,
+        "lon": 74.025,
+        "price": 2200,
+        "minutes": 0,
+        "hours": "Check-in from 14:00",
+        "theme": "Stay"
+      },
+      {
+        "name": "Agonda coastal cottage",
+        "area": "Agonda",
+        "lat": 15.043,
+        "lon": 73.992,
+        "price": 3500,
+        "minutes": 0,
+        "hours": "Check-in from 14:00",
+        "theme": "Stay"
+      },
+      {
+        "name": "South Goa eco lodge",
+        "area": "Canacona",
+        "lat": 14.987,
+        "lon": 74.048,
+        "price": 4900,
+        "minutes": 0,
+        "hours": "Check-in from 14:00",
+        "theme": "Stay"
+      }
+    ]
+  },
+  {
+    "id": "singapore",
+    "name": "Singapore",
+    "region": "Singapore",
+    "image": "singapore",
+    "theme": "Food",
+    "tagline": "Hawker stops & skyline walks",
+    "season": "Feb – Apr",
+    "color": "#3d5777",
+    "places": [
+      {
+        "name": "Gardens by the Bay",
+        "area": "Marina Bay",
+        "lat": 1.2816,
+        "lon": 103.8636,
+        "price": 0,
+        "minutes": 100,
+        "hours": "Outdoor gardens from 05:00",
+        "theme": "Nature"
+      },
+      {
+        "name": "Marina Bay Promenade",
+        "area": "Downtown",
+        "lat": 1.2831,
+        "lon": 103.8559,
+        "price": 0,
+        "minutes": 60,
+        "hours": "Open public promenade",
+        "theme": "Culture"
+      },
+      {
+        "name": "Maxwell Food Centre",
+        "area": "Chinatown",
+        "lat": 1.2803,
+        "lon": 103.8447,
+        "price": 650,
+        "minutes": 65,
+        "hours": "Hours vary by stall",
+        "theme": "Food"
+      },
+      {
+        "name": "Singapore Botanic Gardens",
+        "area": "Tanglin",
+        "lat": 1.3138,
+        "lon": 103.8159,
+        "price": 0,
+        "minutes": 115,
+        "hours": "05:00–00:00",
+        "theme": "Nature"
+      },
+      {
+        "name": "National Gallery Singapore",
+        "area": "Civic District",
+        "lat": 1.2903,
+        "lon": 103.8518,
+        "price": 1150,
+        "minutes": 105,
+        "hours": "10:00–19:00",
+        "theme": "Culture"
+      },
+      {
+        "name": "Kampong Glam",
+        "area": "Arab Street",
+        "lat": 1.3022,
+        "lon": 103.8594,
+        "price": 0,
+        "minutes": 75,
+        "hours": "Daylight recommended",
+        "theme": "Culture"
+      },
+      {
+        "name": "Lau Pa Sat",
+        "area": "Downtown",
+        "lat": 1.2807,
+        "lon": 103.8504,
+        "price": 850,
+        "minutes": 60,
+        "hours": "Hours vary by stall",
+        "theme": "Food"
+      },
+      {
+        "name": "Southern Ridges",
+        "area": "Mount Faber",
+        "lat": 1.2791,
+        "lon": 103.8185,
+        "price": 0,
+        "minutes": 120,
+        "hours": "Daylight recommended",
+        "theme": "Adventure"
+      },
+      {
+        "name": "Little India",
+        "area": "Serangoon Road",
+        "lat": 1.3066,
+        "lon": 103.8518,
+        "price": 0,
+        "minutes": 70,
+        "hours": "Daylight recommended",
+        "theme": "Culture"
+      }
+    ],
+    "stays": [
+      {
+        "name": "Chinatown budget stay",
+        "area": "Chinatown",
+        "lat": 1.283,
+        "lon": 103.844,
+        "price": 5400,
+        "minutes": 0,
+        "hours": "Check-in from 14:00",
+        "theme": "Stay"
+      },
+      {
+        "name": "Bugis city hotel",
+        "area": "Bugis",
+        "lat": 1.299,
+        "lon": 103.855,
+        "price": 8900,
+        "minutes": 0,
+        "hours": "Check-in from 14:00",
+        "theme": "Stay"
+      },
+      {
+        "name": "Marina Bay hotel",
+        "area": "Marina Bay",
+        "lat": 1.283,
+        "lon": 103.861,
+        "price": 15600,
+        "minutes": 0,
+        "hours": "Check-in from 14:00",
+        "theme": "Stay"
+      }
+    ]
+  },
+  {
+    "id": "kutch",
+    "name": "Rann of Kutch",
+    "region": "Gujarat, India",
+    "image": "kutch",
+    "theme": "Culture",
+    "tagline": "Salt flats & craft villages",
+    "season": "Nov – Feb",
+    "color": "#8b6851",
+    "places": [
+      {
+        "name": "White Rann viewpoint",
+        "area": "Dhordo",
+        "lat": 23.8106,
+        "lon": 69.5003,
+        "price": 150,
+        "minutes": 120,
+        "hours": "Daylight and sunset",
+        "theme": "Nature"
+      },
+      {
+        "name": "Dhordo craft stalls",
+        "area": "Dhordo",
+        "lat": 23.788,
+        "lon": 69.503,
+        "price": 0,
+        "minutes": 65,
+        "hours": "Seasonal hours",
+        "theme": "Culture"
+      },
+      {
+        "name": "Kalo Dungar",
+        "area": "Khavda",
+        "lat": 23.939,
+        "lon": 69.808,
+        "price": 0,
+        "minutes": 100,
+        "hours": "Daylight recommended",
+        "theme": "Adventure"
+      },
+      {
+        "name": "Hodka village crafts",
+        "area": "Hodka",
+        "lat": 23.686,
+        "lon": 69.629,
+        "price": 0,
+        "minutes": 60,
+        "hours": "Daytime by arrangement",
+        "theme": "Culture"
+      },
+      {
+        "name": "Kutch Museum",
+        "area": "Bhuj",
+        "lat": 23.248,
+        "lon": 69.667,
+        "price": 50,
+        "minutes": 80,
+        "hours": "Daytime, check closures",
+        "theme": "Culture"
+      },
+      {
+        "name": "Prag Mahal",
+        "area": "Bhuj",
+        "lat": 23.255,
+        "lon": 69.669,
+        "price": 40,
+        "minutes": 75,
+        "hours": "Daytime, check closures",
+        "theme": "Culture"
+      },
+      {
+        "name": "Gujarati thali",
+        "area": "Bhuj",
+        "lat": 23.247,
+        "lon": 69.668,
+        "price": 350,
+        "minutes": 60,
+        "hours": "Lunch hours vary",
+        "theme": "Food"
+      },
+      {
+        "name": "Hamirsar Lake",
+        "area": "Bhuj",
+        "lat": 23.252,
+        "lon": 69.665,
+        "price": 0,
+        "minutes": 60,
+        "hours": "Open public promenade",
+        "theme": "Nature"
+      },
+      {
+        "name": "Bhujodi handloom village",
+        "area": "Bhujodi",
+        "lat": 23.209,
+        "lon": 69.738,
+        "price": 0,
+        "minutes": 75,
+        "hours": "Daylight recommended",
+        "theme": "Culture"
+      }
+    ],
+    "stays": [
+      {
+        "name": "Bhuj guesthouse",
+        "area": "Bhuj",
+        "lat": 23.25,
+        "lon": 69.674,
+        "price": 1800,
+        "minutes": 0,
+        "hours": "Check-in from 14:00",
+        "theme": "Stay"
+      },
+      {
+        "name": "Hodka village stay",
+        "area": "Hodka",
+        "lat": 23.686,
+        "lon": 69.63,
+        "price": 3900,
+        "minutes": 0,
+        "hours": "Check-in from 14:00",
+        "theme": "Stay"
+      },
+      {
+        "name": "Dhordo tent stay",
+        "area": "Dhordo",
+        "lat": 23.788,
+        "lon": 69.502,
+        "price": 6900,
+        "minutes": 0,
+        "hours": "Check-in from 14:00",
+        "theme": "Stay"
+      }
+    ]
+  }
+]

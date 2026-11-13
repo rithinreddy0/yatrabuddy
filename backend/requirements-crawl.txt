@@ -1,0 +1,2 @@
+-r requirements.txt
+Crawl4AI==0.9.5

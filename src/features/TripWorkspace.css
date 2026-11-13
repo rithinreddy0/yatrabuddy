@@ -1,0 +1,271 @@
+.trip-room {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  align-content: start;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  overflow: hidden;
+}
+.trip-room-header,
+.trip-room-section-heading,
+.trip-room-entry-heading,
+.trip-room-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.trip-room-header {
+  align-items: flex-start;
+  padding: 24px 22px 18px;
+}
+.trip-room-header h2 {
+  margin: 0 0 10px;
+  font: 800 clamp(24px, 4vw, 36px)/1.1 var(--sans);
+  letter-spacing: -.045em;
+  overflow-wrap: anywhere;
+}
+.trip-room-header > .trip-room-actions {flex: 0 0 auto}
+.trip-room-actions {justify-content: flex-start; flex-wrap: wrap; gap: 7px}
+.trip-room-facts {display: flex; flex-wrap: wrap; gap: 7px}
+.trip-room-facts span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--muted);
+  font-size: .79rem;
+}
+.trip-room-tabs {
+  display: flex;
+  gap: 12px;
+  padding-inline: 18px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.trip-room-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 46px;
+  padding: 3px 4px;
+  white-space: nowrap;
+  color: var(--muted);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font: 700 .89rem var(--sans);
+}
+.trip-room-tabs button[aria-selected=true] {color: var(--ink); border-bottom-color: var(--forest)}
+.trip-room-tabs button:focus-visible {outline-offset: -3px}
+.trip-room-body {
+  overflow: auto;
+  padding: 17px 20px 20px;
+  scrollbar-width: none;
+}
+.trip-room-body h3 {font: 800 1.08rem/1.35 var(--sans); letter-spacing: 0; margin: 0}
+.trip-room-muted {color: var(--muted); margin: 0; font-size: .86rem; line-height: 1.45}
+.trip-room-itinerary,
+.trip-room-chat {display: grid; gap: 13px}
+.trip-room-stay,
+.trip-room-stop,
+.trip-room-day {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.trip-room-stay,
+.trip-room-stop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: var(--white);
+}
+.trip-room-stay > span,
+.trip-room-stop-copy {display: grid; gap: 3px; flex: 1; min-width: 0; overflow-wrap: anywhere}
+.trip-room-stop-actions {display: flex; flex-wrap: wrap; align-items: center; gap: 5px}
+.trip-room-stay > .source-pill {flex-shrink: 0}
+.trip-room-stop-actions .icon-btn {width: 34px; min-height: 34px; border-color: var(--line); border-radius: 50%}
+.trip-room-stop figure {width: 68px; flex: 0 0 68px; margin: 0; overflow: hidden}
+.trip-room-stop figure img {width: 100%; height: 54px; object-fit: cover; border-radius: 7px}
+.trip-room-stop figure figcaption {font-size: .58rem; line-height: 1.15}
+.trip-room-stop-thumb {display: grid; flex: 0 0 68px; min-width: 0; overflow: hidden}
+.trip-room-stop-thumb .place-photo {margin: 0}
+.trip-room-stop-thumb .place-photo img {width: 68px; height: 54px; object-fit: cover; border-radius: 8px}
+.trip-room-stop-thumb figcaption {font-size: .58rem; line-height: 1.15}
+.trip-room-stop-icon {display: grid; width: 68px; height: 54px; place-items: center; border-radius: 8px; color: var(--deep); background: var(--mint)}
+.trip-room-stop-title {display: flex; align-items: baseline; gap: 5px}
+.trip-room-day-tools {display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 7px}
+.trip-room-day-tools:empty {display: none}
+.trip-room-day-tools > .icon-btn:only-child {margin-inline-start: auto}
+.trip-room-day-map {margin-bottom: 10px}
+.trip-room-day-map .journey-map {height: min(380px, 58vh); min-height: 210px}
+.trip-room-day {padding: 0 10px 10px}
+.trip-room-day > .btn {margin-top: 9px}
+.trip-room-day summary {cursor: pointer; padding: 10px 2px}
+.trip-room-day summary span {margin-left: 8px; color: var(--muted); font-size: .84rem}
+.trip-room-day > summary > small {margin-left: 8px}
+.trip-room-day ol {list-style: none; display: grid; gap: 8px; padding: 0; margin: 0}
+.trip-room-day ol:empty {display: none}
+.trip-room-leg {padding: 0 0 7px 10px; color: var(--muted); font-size: .82rem}
+.trip-room-place-button {
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: 750;
+  text-align: left;
+  padding: 0;
+}
+.trip-room-place-button:hover {text-decoration: underline}
+.trip-room small {color: var(--muted); font-size: .77rem}
+.trip-room-calendar {
+  display: grid;
+  grid-auto-columns: minmax(130px, 1fr);
+  grid-auto-flow: column;
+  gap: 7px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 10px;
+}
+.trip-room-calendar-day {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  background: var(--white);
+  border-radius: 12px;
+  padding: 8px;
+  min-height: 120px;
+}
+.trip-room-calendar-day h3 {font-size: .9rem; padding: 5px}
+.trip-room-event {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  background: var(--mint);
+  border-radius: 8px;
+  padding: 8px;
+  border-inline-start: 2px solid var(--forest);
+  overflow-wrap: anywhere;
+}
+.trip-room-event[data-category=Food] {border-inline-start-color: #dfab72}
+.trip-room-event[data-category=Nature] {border-inline-start-color: #72b49a}
+.trip-room-event[data-category=Sight] {border-inline-start-color: #a2a5ea}
+.trip-room-empty {
+  padding: 32px 14px;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+  color: var(--muted);
+}
+.trip-room-empty p {margin: 0}
+.trip-room-form,
+.trip-room-entries,
+.trip-room-candidates ul {display: grid; gap: 10px; margin: 12px 0; padding: 0; list-style: none}
+.trip-room-form label {display: grid; gap: 6px; color: var(--ink); font-weight: 700; font-size: .89rem}
+.trip-room-form-row {display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px}
+.trip-room-form input,
+.trip-room-form textarea,
+.trip-room-compose input,
+.trip-room-media-filter select,
+.trip-room-picker-search input {
+  min-width: 0;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--ink);
+  font: 500 .91rem var(--sans);
+}
+.trip-room-form input[type=file] {padding: 6px 8px}
+.trip-room-form textarea {resize: vertical}
+.trip-room-entries li,
+.trip-room-candidates li {
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  padding: 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.trip-room-entries li {display: grid; gap: 8px; align-content: start}
+.trip-room-entries li p {margin: 0; color: var(--muted); white-space: pre-wrap}
+.trip-room-entry-heading > div {display: grid; gap: 3px; min-width: 0}
+.trip-room-candidates summary {cursor: pointer; color: var(--forest)}
+.trip-room-candidates li {display: flex; justify-content: space-between; gap: 8px; align-items: center}
+.trip-room-candidates li > span {display: grid; gap: 3px}
+.trip-room-media {grid-template-columns: repeat(auto-fit,minmax(min(100%,210px),1fr))}
+.trip-room-media-filter {display: grid; gap: 4px; max-width: 290px; margin: 7px 0 12px; font-size: .86rem; font-weight: 700}
+.trip-room-media-preview {
+  width: 100%;
+  height: auto;
+  max-height: 260px;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border: 0;
+  border-radius: 10px;
+}
+video.trip-room-media-preview {object-fit: contain; background: #14201d}
+.trip-room-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 170px;
+  max-height: min(42vh, 420px);
+  overflow: auto;
+  scrollbar-width: none;
+  padding: 4px 3px;
+}
+.trip-room-message {
+  align-self: start;
+  max-width: 92%;
+  padding: 7px 10px 9px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+  overflow-wrap: anywhere;
+}
+.trip-room-message.mine {align-self: end; background: var(--mint)}
+.trip-room-message div {display: flex; gap: 8px; align-items: center; flex-wrap: wrap}
+.trip-room-message time {font-size: .72rem; color: var(--muted)}
+.trip-room-message p {margin: 3px 0 0; white-space: pre-wrap}
+.trip-room-message .icon-btn {width: 32px; height: 32px}
+.trip-room-compose {display: flex; gap: 7px; align-items: center}
+.trip-room-compose > input {flex: 1}
+.trip-room-invite .dialog-content {display: grid; gap: 12px}
+.trip-room-invite .dialog-content > p {margin: 0}
+.trip-room-join {max-width: 520px; margin: 30px auto; padding: 22px; gap: 12px}
+.trip-room-join h2 {font: 800 1.6rem/1.2 var(--sans); margin: 0}
+.trip-room-list {display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin: 16px 0}
+.trip-room-list h2 {width: 100%; margin: 0; font: 750 1.1rem var(--sans)}
+.trip-room-list .btn span:not(.icon) {font-size: .73rem; color: var(--muted)}
+.trip-room-idea-shortcut {display: flex; gap: 10px; align-items: center; text-align: left; padding: 8px 12px; color: var(--ink); background: var(--white); border: 1px solid var(--line); border-radius: 12px}
+.trip-room-idea-shortcut > span:nth-child(2) {display: grid; flex: 1; gap: 2px}
+.trip-room-picker {width: min(620px, calc(100% - 24px)); max-height: min(780px, 92vh); overflow: auto; scrollbar-width: none}
+.trip-room-picker .dialog-inner {padding: 20px}
+.trip-room-picker h2 {font: 800 1.5rem/1.15 var(--sans); padding-inline-end: 32px; margin: 0 0 12px}
+.trip-room-picker-search {display: grid; gap: 5px; font-size: .9rem; font-weight: 700}
+.trip-room-picker-query {display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px}
+.trip-room-picker-query .btn {min-height: 40px}
+.trip-room-picker-results {display: grid; gap: 7px; padding: 0; list-style: none; margin: 10px 0 0}
+.trip-room-picker-results li {display: flex; gap: 9px; align-items: center; padding: 7px; border: 1px solid var(--line); border-radius: 10px; background: var(--white)}
+.trip-room-picker-results li > span {display: grid; flex: 1; min-width: 0; overflow-wrap: anywhere}
+.trip-room-picker-results small {color: var(--muted)}
+@media (max-width: 580px) {
+  .trip-room-header {padding: 15px 12px; flex-wrap: wrap}
+  .trip-room-tabs {padding-inline: 10px; gap: 9px}
+  .trip-room-body {padding: 12px 10px}
+  .trip-room-stop {flex-wrap: wrap}
+  .trip-room-section-heading {flex-wrap: wrap}
+}
+@media (max-width: 420px) {.trip-room-picker-query {grid-template-columns: 1fr}}

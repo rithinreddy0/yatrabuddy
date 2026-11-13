@@ -1,0 +1,11 @@
+.agent-connection {border:1px solid var(--line);border-radius:16px;padding:12px 14px;background:var(--white)}
+.agent-connection summary {cursor:pointer;color:var(--ink);font-weight:700;min-height:28px}
+.agent-connection > summary svg {vertical-align:middle;margin:0 5px 2px 1px}
+.agent-connection > summary small {margin-left:8px;text-transform:uppercase;font-size:10px;letter-spacing:.06em;color:var(--muted)}
+.agent-connection-body {display:grid;gap:10px;justify-items:start;margin-top:8px}
+.agent-connection-body p {margin:0;line-height:1.45}
+.agent-connection-body label {display:block;max-width:100%;color:var(--ink)}
+.agent-connection-body input[type=range] {display:block;width:min(240px,100%);min-height:32px;accent-color:var(--forest)}
+.agent-connection-body input[type=number] {display:block;width:140px;padding:6px 9px;margin-block:4px;border:1px solid var(--line);border-radius:8px}
+.agent-connection-result {display:grid;gap:5px;justify-items:start}
+.agent-connection-result:empty {display:none}

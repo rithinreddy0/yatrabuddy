@@ -1,0 +1,22 @@
+.photo-rail{min-width:0;display:grid;gap:10px;margin:7px 0 18px}
+.photo-rail-header{display:flex;align-items:center;justify-content:space-between;gap:9px}
+.photo-rail-header h3{font:800 clamp(17px,2vw,25px)/1.18 var(--sans);margin:0}
+.photo-rail-header p,.photo-rail-tile p,.reference-photos-loading{color:var(--muted);font-size:13px;margin:4px 0 0}
+.photo-rail-buttons{display:flex;gap:6px}
+.photo-rail-buttons button{width:37px;height:37px;display:grid;place-items:center;border:1px solid var(--line);border-radius:50%;background:var(--white);transition:background 180ms,transform 180ms}
+.photo-rail-buttons button:hover{background:var(--mint);transform:translateY(-1px)}
+.photo-rail-track{display:grid;grid-auto-flow:column;grid-auto-columns:clamp(170px,24%,260px);gap:12px;overflow-x:auto;scrollbar-width:none;overscroll-behavior-inline:contain;scroll-snap-type:x proximity;padding:3px 3px 9px}
+.photo-rail-track>*{min-width:0;scroll-snap-align:start}
+.photo-rail-tile{border-radius:16px;overflow:hidden;border:1px solid var(--line);background:color-mix(in srgb,var(--white) 86%,transparent);padding-bottom:8px}
+.photo-rail-tile .place-photo{margin:0}
+.photo-rail-tile .place-photo img,.photo-rail-tile>img{width:100%;height:auto;aspect-ratio:1.55;object-fit:cover;background:var(--mint)}
+.photo-rail-tile p,.photo-rail-tile .place-photo figcaption{padding:5px 9px 0}
+.reference-photos-loading{display:flex;gap:8px;align-items:center;min-height:33px}
+.reference-photos-loading span{height:9px;width:9px;border-radius:50%;background:var(--accent);animation:reference-photo-pulse 1.3s ease-out infinite}
+.news-photo-rail .photo-rail-track{grid-auto-columns:clamp(230px,35%,335px)}
+.place-detail-rail .photo-rail-track{grid-auto-columns:clamp(160px,68%,265px)}
+.news-card-photo{position:relative;border-radius:13px;overflow:hidden;margin-bottom:4px}
+.news-card-photo img{width:100%;aspect-ratio:1.65;object-fit:cover;background:var(--mint)}
+.news-card-photo button{position:absolute;bottom:7px;right:7px;display:flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid #ffffff61;border-radius:30px;color:white;background:#16262bbd;backdrop-filter:blur(7px)}
+@keyframes reference-photo-pulse{50%{opacity:.38;transform:scale(.8)}}
+@media(prefers-reduced-motion:reduce){.reference-photos-loading span{animation:none}.photo-rail-buttons button{transition:none}}

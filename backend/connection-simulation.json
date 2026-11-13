@@ -1,0 +1,8 @@
+{
+  "minimumConnection": 30,
+  "maximumDelay": 240,
+  "alternatives": [
+    {"name": "Next scheduled local shuttle", "amount": 450, "wait": 90, "latestDelay": 120},
+    {"name": "On-demand local transfer", "amount": 1100, "wait": 35, "latestDelay": 240}
+  ]
+}

@@ -1,0 +1,8 @@
+.result-scroll-anchor,.trip-overview-subheader,.trip-room [role=tabpanel],.world-results{scroll-margin-top:84px}
+.result-scroll-anchor{height:0;min-height:0;pointer-events:none}
+.result-scroll-anchor:focus,.trip-overview-subheader:focus{outline:none}
+.google-entry{min-height:100svh;display:grid;place-items:center;padding:24px;background:linear-gradient(155deg,#10354a99,#112d43e8),url('/images/hero.jpg') center/cover}
+.google-entry-card{width:min(100%,430px);padding:clamp(17px,5vw,39px);border-radius:26px;background:#fafdffef;backdrop-filter:blur(18px);box-shadow:0 20px 70px #0005}
+.google-entry-card .dialog-content{padding:0;display:grid;gap:15px}
+.google-entry-card h2{font:800 clamp(28px,6vw,41px)/1.05 var(--sans);letter-spacing:-.03em}
+.google-entry-card .social-login{display:grid;gap:8px}

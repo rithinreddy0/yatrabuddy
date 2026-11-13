@@ -1,0 +1,21 @@
+.agent-tool-status li[data-tool-state="running"] > svg {
+  animation: agent-lookup-spin 900ms linear infinite;
+}
+
+.agent-tool-status li[data-tool-state="done"] > svg {
+  color: var(--forest);
+  animation: agent-lookup-enter 180ms ease-out both;
+}
+
+@keyframes agent-lookup-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes agent-lookup-enter {
+  from { opacity: .45; transform: scale(.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-tool-status li[data-tool-state] > svg { animation: none; }
+}

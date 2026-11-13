@@ -1,0 +1,233 @@
+.buddy-mascot {
+  --buddy-halo: 145 204 158;
+  --buddy-pale: #e0f2bc;
+  --buddy-light: #8dd9b1;
+  --buddy-mid: #4b9c83;
+  --buddy-dark: #245d5d;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  justify-items: center;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgb(var(--buddy-halo) / .19);
+  border-radius: 21px;
+  background:
+    radial-gradient(ellipse at 50% 47%, rgb(var(--buddy-halo) / .15), transparent 59%),
+    linear-gradient(153deg, #18271e, #111a18 68%);
+  transition: border-color .3s ease;
+}
+
+.buddy-mascot[data-state="listening"] {
+  --buddy-halo: 191 232 148;
+  --buddy-pale: #f0fac0;
+  --buddy-light: #a6e7a0;
+  --buddy-mid: #61a88b;
+  border-color: rgb(var(--buddy-halo) / .48);
+}
+
+.buddy-mascot[data-state="thinking"] {
+  --buddy-halo: 153 179 235;
+  --buddy-light: #a9d0eb;
+  --buddy-mid: #6e9bbb;
+  --buddy-dark: #405783;
+}
+
+.buddy-mascot[data-state="speaking"] {
+  --buddy-halo: 242 196 138;
+  --buddy-pale: #fff0bc;
+  --buddy-light: #c9dda7;
+  --buddy-mid: #80aa84;
+  border-color: rgb(var(--buddy-halo) / .44);
+}
+
+.buddy-mascot-scene {
+  display: grid;
+  place-items: center;
+  position: relative;
+  width: 180px;
+  height: 158px;
+}
+
+.buddy-mascot-aura {
+  position: absolute;
+  inset: 12px 5px 0;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgb(var(--buddy-halo) / .35), transparent 68%);
+  filter: blur(11px);
+  animation: buddy-mascot-breathe 4s ease-in-out infinite;
+}
+
+.buddy-mascot-orbit {
+  position: absolute;
+  width: 135px;
+  height: 135px;
+  border: 1px solid rgb(var(--buddy-halo) / .42);
+  border-radius: 50%;
+  transform: rotate(-24deg);
+  animation: buddy-mascot-orbit 14s linear infinite;
+}
+
+.buddy-mascot-orbit::after {
+  position: absolute;
+  content: "";
+  top: 20px;
+  right: 11px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--buddy-pale);
+  box-shadow: 0 0 9px 2px rgb(var(--buddy-halo) / .57),
+    -8px -7px 0 -2px rgb(var(--buddy-halo) / .66),
+    -15px -13px 0 -2px rgb(var(--buddy-halo) / .4);
+}
+
+.buddy-mascot-shadow {
+  position: absolute;
+  bottom: 16px;
+  width: 76px;
+  height: 16px;
+  border-radius: 50%;
+  background: #0d1614;
+  opacity: .75;
+  filter: blur(5px);
+}
+
+.buddy-mascot-character {
+  position: relative;
+  width: 97px;
+  height: 96px;
+  animation: buddy-mascot-float 4s ease-in-out infinite;
+}
+
+.buddy-mascot-body {
+  position: absolute;
+  inset: 0 1px 7px;
+  overflow: hidden;
+  border: 1px solid rgb(var(--buddy-halo) / .75);
+  border-radius: 49% 49% 45% 45% / 53% 53% 44% 44%;
+  background:
+    radial-gradient(ellipse at 25% 20%, #ffffea99, transparent 30%),
+    radial-gradient(ellipse at 83% 81%, #234b736b, transparent 57%),
+    linear-gradient(145deg, var(--buddy-pale), var(--buddy-light) 31%, var(--buddy-mid) 65%, var(--buddy-dark));
+  box-shadow: inset 0 2px 4px #ffffea91, inset 0 -7px 15px #193c4a7d, 0 0 18px rgb(var(--buddy-halo) / .35);
+}
+
+.buddy-mascot-sheen {
+  position: absolute;
+  inset: 0 -14px auto;
+  height: 52%;
+  transform: rotate(-14deg);
+  border-radius: 50%;
+  background: linear-gradient(#ffffea45, #ffffea08);
+  pointer-events: none;
+}
+
+.buddy-mascot-arm,
+.buddy-mascot-foot {
+  position: absolute;
+  background: linear-gradient(145deg, var(--buddy-light), var(--buddy-dark));
+  border: 1px solid rgb(var(--buddy-halo) / .42);
+  box-shadow: inset 1px 1px 2px #fff6;
+}
+
+.buddy-mascot-arm { top: 49px; width: 15px; height: 23px; border-radius: 50%; }
+.buddy-mascot-arm-left { left: -6px; transform: rotate(28deg); }
+.buddy-mascot-arm-right { right: -6px; transform: rotate(-28deg); }
+.buddy-mascot-foot { bottom: 0; width: 27px; height: 15px; border-radius: 45%; }
+.buddy-mascot-foot-left { left: 20px; transform: rotate(-7deg); }
+.buddy-mascot-foot-right { right: 20px; transform: rotate(7deg); }
+
+.buddy-mascot-face {
+  position: absolute;
+  inset: 31px 15px 15px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 15px;
+  padding-top: 8px;
+  border: 1px solid #b6e2be80;
+  border-radius: 44% / 48%;
+  background: linear-gradient(165deg, #315c50, #17352f);
+  box-shadow: inset 0 2px 4px #0c221c87, 0 1px 3px #d8ffe580;
+}
+
+.buddy-mascot-eye {
+  display: block;
+  width: 7px;
+  height: 12px;
+  background: #edffce;
+  border-radius: 50%;
+  box-shadow: 0 0 5px #e8ffbd80;
+  animation: buddy-mascot-blink 5.6s infinite;
+}
+
+.buddy-mascot-mouth {
+  position: absolute;
+  width: 12px;
+  height: 6px;
+  bottom: 5px;
+  border: 2px solid #eaffbf;
+  border-top: 0;
+  border-radius: 0 0 9px 9px;
+}
+
+.buddy-mascot-caption {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 14px;
+  color: #dbe9dc;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.buddy-mascot-levels {
+  display: inline-flex;
+  height: 14px;
+  align-items: center;
+  gap: 2px;
+}
+
+.buddy-mascot-levels i {
+  width: 2px;
+  height: 4px;
+  border-radius: 5px;
+  background: rgb(var(--buddy-halo));
+}
+
+.buddy-mascot-levels i:nth-child(2),
+.buddy-mascot-levels i:nth-child(4) { height: 7px; }
+.buddy-mascot-levels i:nth-child(3) { height: 10px; }
+.buddy-mascot[data-state="listening"] .buddy-mascot-aura { animation-duration: 1.6s; }
+.buddy-mascot[data-state="thinking"] .buddy-mascot-orbit { animation-duration: 2.3s; }
+.buddy-mascot[data-state="speaking"] .buddy-mascot-mouth {
+  border: 0;
+  border-radius: 50%;
+  background: #eaffbf;
+  animation: buddy-mascot-speak .38s ease-in-out infinite alternate;
+}
+
+.buddy-mascot[data-state="listening"] .buddy-mascot-levels i,
+.buddy-mascot[data-state="speaking"] .buddy-mascot-levels i {
+  animation: buddy-mascot-level .6s ease-in-out var(--wave-delay, 0s) infinite alternate;
+}
+.buddy-mascot-levels i:nth-child(2) { --wave-delay: -.34s; }
+.buddy-mascot-levels i:nth-child(3) { --wave-delay: -.16s; }
+.buddy-mascot-levels i:nth-child(4) { --wave-delay: -.49s; }
+.buddy-mascot-levels i:nth-child(5) { --wave-delay: -.23s; }
+
+@keyframes buddy-mascot-breathe { 50% { transform: scale(1.13); opacity: .66; } }
+@keyframes buddy-mascot-float { 50% { transform: translateY(-5px); } }
+@keyframes buddy-mascot-orbit { to { transform: rotate(336deg); } }
+@keyframes buddy-mascot-blink { 0%, 43%, 47%, 100% { transform: scaleY(1); } 45% { transform: scaleY(.13); } }
+@keyframes buddy-mascot-speak { from { transform: scale(.57, .55); } to { transform: scale(1, 1.15); } }
+@keyframes buddy-mascot-level { from { transform: scaleY(.48); } to { transform: scaleY(1.35); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .buddy-mascot,
+  .buddy-mascot *,
+  .buddy-mascot *::after { animation: none !important; transition: none !important; }
+}

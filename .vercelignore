@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+.git
+.venv
+.vercel
+data
+dist
+node_modules
+tmp*/
+*.log
+**/__pycache__
+*.pyc
