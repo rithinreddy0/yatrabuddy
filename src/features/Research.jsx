@@ -41,9 +41,9 @@ export function Findings({result,compact=false}) {
   </>
 }
 
-export function Research({catalog,topic:initialTopic='overview',defaultDestination='hyderabad',onResults,profile,trip,compact=false,auto=false}) {
+export function Research({catalog,topic:initialTopic='overview',defaultDestination=null,onResults,profile,trip,compact=false,auto=false}) {
   const [topic,setTopic]=useState(initialTopic)
-  const [selected,setSelected]=useState(()=>typeof defaultDestination==='object'&&defaultDestination?.id?defaultDestination:catalog.find(item=>item.id===defaultDestination)||catalog[0])
+  const [selected,setSelected]=useState(()=>typeof defaultDestination==='object'&&defaultDestination?.id?defaultDestination:catalog.find(item=>item.id===defaultDestination)||(compact||trip?catalog[0]:null))
   const [result,setResult]=useState(null)
   const [pending,setPending]=useState(false)
   const [error,setError]=useState('')
@@ -58,7 +58,7 @@ export function Research({catalog,topic:initialTopic='overview',defaultDestinati
 
   useEffect(()=>()=>active.current?.abort(),[])
   useEffect(()=>{
-    if(auto)run(selected,topic)
+    if(auto&&selected)run(selected,topic)
   },[auto,selected,topic,profile])
   useEffect(()=>{
     if(!auto||compact)return
@@ -105,7 +105,7 @@ export function Research({catalog,topic:initialTopic='overview',defaultDestinati
   }
 
   function changeSelection(place){
-    if(place.id===selected.id)return
+    if(place.id===selected?.id)return
     pickedCity.current=true
     active.current?.abort()
     setPending(false)
@@ -116,13 +116,14 @@ export function Research({catalog,topic:initialTopic='overview',defaultDestinati
   }
 
   return <div className={'research-body '+(compact?'research-compact':'')}>
-    <form className="panel research-form" onSubmit={event=>{event.preventDefault();run(selected,topic,true);reveal()}}>
+    <form className="panel research-form" onSubmit={event=>{event.preventDefault();if(selected){run(selected,topic,true);reveal()}}}>
       <DestinationSearch catalog={catalog} selected={selected} onSelect={changeSelection} global={!trip}/>
       {!compact&&<Button type="button" icon="compass" onClick={()=>locate()} disabled={locationBusy}>{locationBusy?'Locating…':'Use my location'}</Button>}
       {!compact&&<div className="filters" aria-label="Research topic"><Pill active={topic==='overview'} onClick={()=>{setTopic('overview');reveal()}}>Overview</Pill>{researchTopics.map(([id,icon,label])=><Pill icon={icon} key={id} active={topic===id} onClick={()=>{setTopic(id);reveal()}}>{label}</Pill>)}</div>}
-      <Button type="submit" variant={compact?'secondary':'primary'} icon="search" disabled={pending}>{pending?'Checking…':result?'Refresh sources':'Find live sources'}</Button>
+      <Button type="submit" variant={compact?'secondary':'primary'} icon="search" disabled={pending||!selected}>{pending?'Checking…':result?'Refresh sources':'Find live sources'}</Button>
     </form>
     {locationNote&&<p className="form-note" role="status">{locationNote}</p>}
+    {!selected&&!locationNote&&<p className="form-note">Use your current location or choose a city to open its travel briefing.</p>}
     <div className="result-scroll-anchor" ref={resultsRef} tabIndex={-1}/>
     {pending&&<AgentProgress label={'Checking sources for '+selected.name} steps={compact?[]:['Travel guides','Local conditions','Source references']}/>}
     {error&&<p className="form-error" role="alert">{error}</p>}
