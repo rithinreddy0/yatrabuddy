@@ -12,6 +12,8 @@
 - The saved-trip connection check uses the selected demo journey, the itinerary's planned total, and the [shared simulation rules](backend/connection-simulation.json). The delay, replacement prices, and connection outcomes are simulated.
 - Travel Sources links directly to [IndiGo](https://www.goindigo.in/), [IRCTC](https://www.irctc.co.in/nget/train-search), [Uber](https://m.uber.com/), [redBus](https://www.redbus.in/), [Goa River Navigation](https://rnd.goa.gov.in/), [Goa Tourism](https://bookings.goa-tourism.com/Appln/UIL/ActivitiesHome), [Cordelia](https://www.cordeliacruises.com/), and [Booking.com](https://www.booking.com/). Current quotes depend on dates, availability, and provider access. Booking.com in-app results require partner credentials.
 - The desktop views reuse the existing bundled Goa image. Verify its provenance and reuse rights before distributing the submission.
+- Landing cards and missing-photo illustrations reuse bundled travel imagery from `public/images`. Illustrative images do not identify individual venues. Confirm the existing bundled assets' distribution rights before public release.
+- The booking lobby, calendar, rail transport, and travel journal images are generated decorative illustrations. They do not depict specific providers, bookings, or services.
 
 ## Conversational planning
 

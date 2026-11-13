@@ -200,6 +200,10 @@ async def nearby_report(location_id):
 @router.get("/locations/{location_id}/local-transport")
 async def local_transport(location_id: int, request: Request):
     limit(request, "local-transport", 16, 60)
+    return await transit_passes(location_id)
+
+
+async def transit_passes(location_id):
     if cached := transit_cache.get(location_id, 3600):
         return source_result(cached, "cached")
     async with httpx.AsyncClient(timeout=5, follow_redirects=True, headers={"User-Agent": USER_AGENT}) as client:
@@ -354,7 +358,8 @@ async def build_draft(location_id: int, selection: WorldwideSelection, request: 
     return await prepare_draft(location_id, selection, with_advice=True)
 
 
-async def prepare_draft(location_id, selection, *, with_advice=False):
+async def prepare_draft(location_id, selection, *, with_advice=False, fit_annotations=None, weather=None,
+                        weather_status="not_requested", weather_note=None, report=None, distribute_meals=False):
     from .place_photos import cached_place_photo
     from .place_search import verified_place
 
@@ -363,7 +368,8 @@ async def prepare_draft(location_id, selection, *, with_advice=False):
         raise HTTPException(422, f"Choose unique stops and up to {capacity} per day at this pace.")
     if not set(selection.stopCosts) <= set(selection.stops):
         raise HTTPException(422, "Enter costs only for selected stops.")
-    report = await nearby_report(location_id)
+    if report is None:
+        report = await nearby_report(location_id)
     city = report["location"]
     candidates = list(report["places"])
     known = {place["url"] for place in candidates}
@@ -379,12 +385,29 @@ async def prepare_draft(location_id, selection, *, with_advice=False):
         raise HTTPException(503, "The place sources are unavailable. Try again shortly.")
     places = {place["url"]: {**place, "photo": place.get("photo") or cached_place_photo(place["url"])}
               for place in candidates}
+    for key, annotation in (fit_annotations or {}).items():
+        if key in places:
+            places[key].update(annotation)
     if any(key not in places or places[key]["category"] == "Stay" for key in selection.stops):
         raise HTTPException(422, "One or more stops are missing from the current city results.")
     stay = places.get(selection.stay)
     if selection.stay and (stay is None or stay["category"] != "Stay"):
         raise HTTPException(422, "Choose a stay from the current city results.")
-    days = group_draft_stops([places[key] for key in selection.stops], selection.days, stay or city, capacity)
+    selected = [places[key] for key in selection.stops]
+    if distribute_meals:
+        meals = [place for place in selected if place["category"] == "Food"]
+        visits = [place for place in selected if place["category"] != "Food"]
+        days = group_draft_stops(visits, selection.days, stay or city, capacity - 1 if meals else capacity)
+        for meal in meals:
+            options = [day for day in days if len(day) < capacity and all(stop["category"] != "Food" for stop in day)]
+            if not options:
+                break
+            day = min(options, key=lambda stops: (not bool(stops), min(distance_metres(meal, stop) for stop in (stops or [stay or city]))))
+            insert_at = min(range(1, len(day) + 1), key=lambda i: distance_metres(day[i - 1], meal), default=0)
+            day.insert(insert_at, meal)
+            day[:] = ordered_day(day)
+    else:
+        days = group_draft_stops(selected, selection.days, stay or city, capacity)
     legs_and_geometry = await asyncio.gather(*(estimate_day_route(day, stay, include_geometry=True) for day in days))
     routes, geometry = map(list, zip(*legs_and_geometry))
     advice = await itinerary_advice(city, selection, days, routes) if with_advice else None
@@ -393,4 +416,5 @@ async def prepare_draft(location_id, selection, *, with_advice=False):
                           travelers=selection.travelers, party=selection.party, budget=selection.budget, pace=selection.pace,
                           mealPreference=selection.mealPreference, localModes=list(dict.fromkeys(selection.localModes)),
                           routes=routes, routeGeometry=geometry, routeAdvice=advice,
-                          stopCosts=selection.stopCosts, updated=int(time() * 1000))
+                          stopCosts=selection.stopCosts, updated=int(time() * 1000), weather=weather or [],
+                          weatherStatus=weather_status, weatherNote=weather_note)

@@ -1,5 +1,6 @@
 import React, {useEffect,useRef} from 'react'
 import {icon} from '../icons.mjs'
+import {visibleSource} from './sourceUrl.mjs'
 
 export function Icon({name,size=19}) {
   return <span className="icon" aria-hidden="true" dangerouslySetInnerHTML={{__html:icon(name,size)}}/>
@@ -31,14 +32,16 @@ export function Empty({title,description,icon='compass',action}) {
   return <section className="empty"><span className="empty-icon"><Icon name={icon} size={24}/></span><h2>{title}</h2><p>{description}</p>{action}</section>
 }
 export function SourcePill({url,label}) {
-  const href = new URL(url)
-  if (!['http:','https:'].includes(href.protocol)) return null
+  const href = visibleSource(url)
+  if (!href) return null
   return <a className="source-pill" href={href.href} target="_blank" rel="noreferrer"><Icon name="link" size={13}/> {label || href.hostname.replace(/^www\./,'')} <Icon name="corner" size={12}/></a>
 }
-export function AgentProgress({label='Searching for travel sources',steps=[]}) {
-  return <div className="agent-progress" role="status">
+export function AgentProgress({label='Searching for travel sources',steps=[],activeStep=null,skippedSteps=[],className=''}) {
+  return <div className={'agent-progress '+className} role="status">
     <span className="agent-orb"><Icon name="sparkle" size={21}/></span>
-    <div><strong>{label}</strong>{steps.length>0&&<div className="agent-progress-steps">{steps.map(step=><span key={step}>{step}</span>)}</div>}</div>
+    <div><strong>{label}</strong>{steps.length>0&&<div className="agent-progress-steps">{steps.map((step,index)=><span key={step}
+      className={skippedSteps.includes(index)?'is-skipped':activeStep===index?'is-active':activeStep!==null&&index<activeStep?'is-complete':''}
+      aria-current={activeStep===index?'step':undefined}>{step}</span>)}</div>}</div>
     <span className="agent-dots" aria-hidden="true"><i/><i/><i/></span>
   </div>
 }

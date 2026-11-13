@@ -157,7 +157,7 @@ async def weather_agent(client, place, departure=None, days=1):
               "current": "temperature_2m,weather_code", "timezone": "auto"}
     forecast_available = departure and date.today() <= departure <= date.today() + timedelta(days=15)
     if forecast_available:
-        params.update(daily="weather_code,temperature_2m_max,temperature_2m_min",
+        params.update(daily="weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
                       forecast_days=min(16, (departure - date.today()).days + days))
     if key:
         params["apikey"] = key
@@ -176,10 +176,14 @@ async def weather_agent(client, place, departure=None, days=1):
     forecast = []
     if forecast_available:
         daily = payload.get("daily", {})
-        forecast = [{"date": day, "min": low, "max": high, "code": code}
-                    for day, low, high, code in zip(daily.get("time", []), daily.get("temperature_2m_min", []),
-                                                     daily.get("temperature_2m_max", []), daily.get("weather_code", []))
-                    if day >= departure.isoformat() and low is not None and high is not None]
+        days_data = daily.get("time", [])
+        rain = daily.get("precipitation_probability_max") or [None] * len(days_data)
+        forecast = [{"date": day, "min": low, "max": high, "code": code,
+                     "rainProbability": probability}
+                    for day, low, high, code, probability in zip(
+                        days_data, daily.get("temperature_2m_min", []), daily.get("temperature_2m_max", []),
+                        daily.get("weather_code", []), rain)
+                    if day >= departure.isoformat() and low is not None and high is not None and code is not None]
     return {"temperature": current["temperature_2m"], "conditions": conditions, "forecast": forecast,
             "time": current["time"], "timezone": payload["timezone"],
             "url": WEATHER_DOCS if key else str(httpx.URL(endpoint, params=params))}

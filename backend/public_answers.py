@@ -27,7 +27,7 @@ TOPICS = {
 STOP_WORDS = set("a about an and are around at best can do does for from have here how i in is it like me of on or should show tell the there to travel trip what when where which who why with you".split())
 HOURS = r"\b(?:opening hours|closing hours|what time (?:does|do|is|are).+?\b(?:open|close)|(?:when|how late) (?:does|do).+?\b(?:open|close)|is .+? open)\b"
 PRICE = r"\b(?:admission|entrance fees?|entry fees?|ticket prices?|how much (?:is|are|does|do).+?\bcost)\b"
-LOOKUP_WORDS = r"\b(?:safe(?:ty)?|danger\w*|scams?|watch out|precautions?|risks?|customs?|etiquette|culture|history|language|festivals?|local dishes|cuisine|dress code|cost|fares?|bus passes?|day passes?|reviews?|menus?|accessib\w*|when to visit|best time)\b"
+LOOKUP_WORDS = r"\b(?:safe(?:ty)?|danger\w*|scams?|watch out|precautions?|risks?|customs?|etiquette|culture|history|language|festivals?|local dishes|cuisine|dress code|cost|fares?|bus passes?|day passes?|reviews?|menus?|accessib\w*|when to visit|best time|neighbou?rhoods?|currency|tipping|packing|what to pack)\b"
 VENUE_PATTERN = re.compile(r"\b(?:what time|when|how late|how much)\s+(?:does|do|is|are)\s+(.+?)\s+(?:open|close|cost)\b", re.I)
 VENUE_PREPOSITION = re.compile(r"\b(?:opening hours|closing hours|admission|entrance fees?|entry fees?|ticket prices?)\s+(?:for|of|at)\s+(.+?)(?=\s+in\s+|\s+(?:today|tomorrow)\b|$)", re.I)
 HERE = {"here", "there", "this city", "that city", "this place", "that place"}

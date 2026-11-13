@@ -177,6 +177,9 @@
   color: var(--ink);
 }
 .onboarding-chat-input textarea { resize: vertical; max-height: 120px; }
+.onboarding-chat-city .destination-search { width: 100%; max-width: 100%; }
+.onboarding-chat-city .destination-search-input { min-height: 45px; border-radius: 13px; background: rgb(255 255 255 / 88%); }
+.onboarding-chat-city .destination-popover { top: auto; bottom: calc(100% + 5px); width: 100%; max-width: 100%; z-index: 8; }
 .onboarding-chat-error { color: #973829; font-weight: 750; }
 .onboarding-chat-footnote { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
 

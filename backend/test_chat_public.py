@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from .test_api import app
 from . import public_answers
 from .source_cache import SourceCache
-from .trip_intake import ranked_places
+from .trip_intake import draft_from_sources, ranked_places
 
 
 CITY = {"id": 1269843, "name": "Hyderabad", "lat": 17.38, "lon": 78.47}
@@ -127,6 +127,7 @@ class ChatPublicTest(unittest.TestCase):
               patch("backend.planning_agent.wikivoyage_document", new=AsyncMock(return_value=([], ["Chennai", "Salem_(India)"], []))),
               patch("backend.planning_agent.lookup", new=AsyncMock(return_value={"results": [chennai]})),
               patch("backend.planning_agent.nearby_report", new=AsyncMock(return_value={"places": []})),
+              patch("backend.planning_agent.lookup_places", new=AsyncMock(return_value={"places": []})),
               patch("backend.planning_agent.draft_from_sources", new=AsyncMock(return_value=None))):
             session, event = self.turn("Plan a trip to tamil nadu 5 days 3 members with flexible dates from Mumbai and a budget of ₹30000")
             self.assertEqual(event["destinationChoices"][0]["name"], "Chennai")
@@ -162,9 +163,8 @@ class ChatPublicTest(unittest.TestCase):
             nearby.assert_not_awaited()
 
     def test_trip_intake_asks_before_search_and_carries_other_answers(self):
-        with patch("backend.planning_agent.live_itinerary", new=AsyncMock(return_value=(None, [], []))) as live:
-            for text, field in [("Plan a trip", "destination"), ("Hyderabad", "date"),
-                                ("Flexible dates", "days"), ("3 days", "people"),
+        with patch("backend.planning_agent.live_place_research", new=AsyncMock(return_value=(None, [], [], "empty"))) as live:
+            for text, field in [("Plan a trip", "destination"), ("Hyderabad", "days"), ("3 days", "people"),
                                 ("3", "origin"), ("Mumbai", "budget")]:
                 _, event = self.turn(text)
                 self.assertEqual(event["intakeQuestion"]["field"], field, text)
@@ -177,6 +177,36 @@ class ChatPublicTest(unittest.TestCase):
             live.assert_awaited_once()
             self.groq.assert_not_called()
 
+    def test_resume_question_after_a_side_lookup_and_reload(self):
+        with patch("backend.planning_agent.lookup_places", new=AsyncMock(return_value=LOOKUP_RESULT)):
+            _, first = self.turn("We want to visit Hyderabad for three days from Mumbai under 30k")
+            self.assertEqual(first["intakeQuestion"]["field"], "people")
+            current, reply = self.turn("What places can I visit in Hyderabad?")
+            self.assertTrue(reply["tools"][0]["result"]["places"])
+            self.assertEqual(current["currentItinerary"]["question"], first["intakeQuestion"])
+            restored = self.client.get(self.path.removesuffix("/turn")).json()
+            self.assertEqual(restored["currentItinerary"], current["currentItinerary"])
+            paused, _ = self.turn("2 travelers", offline=True)
+            self.assertTrue(paused["currentItinerary"]["needsBuild"])
+            self.assertIsNone(paused["currentItinerary"]["question"])
+            self.assertEqual(paused["currentItinerary"]["request"]["destination"], "Hyderabad")
+
+    def test_things_to_do_goes_to_places_and_transport_reports_measured_distance(self):
+        origin = {**CITY, "id": 1, "name": "Mumbai"}
+        with (patch("backend.planning_agent.lookup_places", new=AsyncMock(return_value=LOOKUP_RESULT)),
+              patch("backend.planning_agent.find_destinations", new=AsyncMock(side_effect=[[origin], [CITY]])),
+              patch("backend.planning_agent.destination_guide", new=AsyncMock(return_value={"sections": [
+                  {"title": "Getting there", "text": "Rail and bus connections", "sourceUrl": "https://en.wikivoyage.org/wiki/Hyderabad"},
+              ]})),
+              patch("backend.agents.route_points", new=AsyncMock(return_value={"kilometres": 710, "legMinutes": [680]}))):
+            _, sights = self.turn("Things to do in Hyderabad")
+            self.assertEqual(sights["tools"][0]["name"], "Place search")
+            _, transport = self.turn("Transport options from Mumbai to Hyderabad")
+            result = transport["tools"][0]["result"]
+            self.assertEqual(result["road"]["kilometres"], 710)
+            self.assertEqual(result["road"]["minutes"], 680)
+            self.assertEqual(result["guide"]["sections"][0]["title"], "Getting there")
+
     def test_more_like_these_excludes_previously_shown_places(self):
         second = {**PLACE, "name": "Golconda", "url": "https://en.wikipedia.org/wiki/Golconda"}
         with patch("backend.planning_agent.lookup_places", new=AsyncMock(side_effect=[LOOKUP_RESULT, {**LOOKUP_RESULT, "places": [PLACE, second]}])):
@@ -187,6 +217,20 @@ class ChatPublicTest(unittest.TestCase):
 
 
 class PublicEvidenceTest(unittest.IsolatedAsyncioTestCase):
+    async def test_food_preference_still_leaves_sightseeing_on_each_day(self):
+        location = {**CITY, "region": "Telangana", "country": "India"}
+        visits = [{**PLACE, "photo": None, "name": f"Museum {i}",
+                   "url": f"https://en.wikipedia.org/wiki/Museum_{i}", "lat": 17.36 + i * .001}
+                  for i in range(6)]
+        food = [{**place, "category": "Food", "name": f"Café {i}",
+                 "url": f"https://www.openstreetmap.org/node/{i + 1}"}
+                for i, place in enumerate(visits)]
+        with patch("backend.nearby.route_points", new=AsyncMock(return_value=None)):
+            draft = await draft_from_sources(location, [*food, *visits], {"days": 3, "interests": ["Food"]})
+        self.assertEqual(sum(map(len, draft.days)), 9)
+        for day in draft.days:
+            self.assertEqual(sum(stop.category == "Food" for stop in day), 1)
+            self.assertTrue(any(stop.category == "Sight" for stop in day))
     async def test_opening_hours_require_a_matching_record(self):
         venue = {**PLACE, "openingHours": "Mon–Sun 09:00–17:00"}
         unrelated = {**venue, "name": "Golconda Fort", "openingHours": "24 hours"}
@@ -221,5 +265,5 @@ class TripStopRankingTest(unittest.TestCase):
         separate = {**cathedral, "name": "Notre Dame Chapel", "lat": 48.8532,
                     "url": "https://en.wikipedia.org/wiki/Notre_Dame_Chapel"}
         remote = {**cathedral, "lat": 48.855, "url": "https://www.openstreetmap.org/way/100"}
-        self.assertEqual(ranked_places([cathedral, alias, separate, remote], {}, "Paris"),
-                         [cathedral, separate, remote])
+        self.assertEqual([place["url"] for place in ranked_places([cathedral, alias, separate, remote], {}, "Paris")],
+                         [place["url"] for place in (cathedral, separate, remote)])

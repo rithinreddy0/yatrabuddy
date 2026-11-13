@@ -110,6 +110,17 @@ function pinElement(place, select, showPreview, clearPreview) {
   } else {
     button.innerHTML = icon(categoryIcon[place.category] || 'pin', 17)
   }
+  const thumbnail = place.photo?.url || place.photo?.originalUrl
+  if (/^https:\/\//i.test(thumbnail || '')) {
+    const image = document.createElement('img')
+    image.src = thumbnail
+    image.alt = ''
+    image.referrerPolicy = 'no-referrer'
+    image.className = 'journey-pin-thumbnail'
+    image.addEventListener('error', () => { image.remove(); button.classList.remove('journey-map-pin-photo') }, {once:true})
+    button.append(image)
+    button.classList.add('journey-map-pin-photo')
+  }
   button.addEventListener('click', event => {
     event.stopPropagation()
     clearPreview(place)
@@ -304,10 +315,6 @@ export function JourneyMap({
 
   const mapName = center?.name || 'Trip map'
   const hover=ready&&preview&&visiblePlaces.includes(preview.item)?preview:null
-  const linkPoint = selection || visiblePlaces[0] || center
-  const mapLink = validPoint(linkPoint)
-    ? 'https://www.openstreetmap.org/?mlat=' + linkPoint.lat + '&mlon=' + linkPoint.lon + '#map=15/' + linkPoint.lat + '/' + linkPoint.lon
-    : null
 
   return <section className={'journey-map ' + className} aria-label={mapName + ' map'}>
     <div className="journey-map-canvas" ref={container}/>
@@ -317,7 +324,7 @@ export function JourneyMap({
       <div className="journey-pin-preview-copy"><small>{[hover.item.category,hover.item.day&&`Day ${hover.item.day}`,Number.isFinite(hover.item.rating)&&`★ ${hover.item.rating}`].filter(Boolean).join(' · ')}</small>
         <strong>{hover.item.name}</strong>
         {(hover.item.description||hover.item.overview||hover.item.address)&&<p>{hover.item.description||hover.item.overview||hover.item.address}</p>}
-        <small>{hover.item.openingHours?'Published hours: '+hover.item.openingHours:hover.item.publishedPrice||hover.item.source||'Select the pin for more details'}</small>
+        <small>{hover.item.openingHours?'Published hours: '+hover.item.openingHours:hover.item.publishedPrice||'Select the pin for more details'}</small>
       </div>
     </div>}
     <div className="journey-map-top">
@@ -358,14 +365,13 @@ export function JourneyMap({
     {!ready && !unavailable && <div className="journey-map-loading" role="status"><span/>Loading map</div>}
     {unavailable && <div className="journey-map-unavailable">
       <Icon name="map" size={26}/><strong>The interactive map could not load</strong>
-      {mapLink && <a href={mapLink} target="_blank" rel="noreferrer">Open in OpenStreetMap</a>}
       {!!visiblePlaces.length && <button type="button" onClick={toggleSearch}>Browse map places</button>}
     </div>}
     {ready && <div className="journey-map-bottom">
       {visibleRoutes.some(route => !route.approximate) && <span>Driving route · <a href="https://project-osrm.org/" target="_blank" rel="noreferrer">OSRM</a></span>}
       {visibleRoutes.some(route => route.approximate && route.points?.length > 1) && <span className="journey-map-estimate">
         {visibleRoutes.find(route => route.approximate && route.label)?.label || 'Visit order'}</span>}
-      {tilesUnavailable && <span>Map tiles unavailable {mapLink && <a href={mapLink} target="_blank" rel="noreferrer">Open map</a>}</span>}
+      {tilesUnavailable && <span>Map tiles unavailable</span>}
       {fallback && !tilesUnavailable && <span>Street map</span>}
     </div>}
     {ready && <IconButton className="journey-map-fit" icon="compass" label="Fit map to places" onClick={() => fitMap(map.current, visiblePlaces, center)}/>}

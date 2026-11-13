@@ -1,6 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react'
 import {ArrowLeft, ArrowUp, Check, Compass, Pencil, Sparkles} from 'lucide-react'
 import {Brand, Button} from '../components/UI.jsx'
+import {DestinationSearch} from '../components/DestinationSearch.jsx'
 import {money} from '../planner.mjs'
 import {defaultProfile, preferences} from '../profile.mjs'
 import './OnboardingChat.css'
@@ -205,7 +206,12 @@ export function OnboardingChat({name, initial, onDone, onSignOut}) {
       </footer> : <form className="onboarding-chat-composer" aria-labelledby="onboarding-prompt" onSubmit={submit}>
         {question.options && <ChoiceList question={question} value={draft} onChange={value => {setDraft(value); setError('')}}
           locked={Boolean(busy)}/>}
-        {['text', 'budget', 'notes'].includes(question.kind) && <label className="onboarding-chat-input">
+        {question.key === 'homeCity' && <div className="onboarding-chat-city">
+          <DestinationSearch catalog={[]} global label="Usual departure city" placeholder="Search or enter a city"
+            inputValue={draft} onInputChange={value => {setDraft(value); setError('')}}
+            onSelect={place => {setDraft(place.name); setError('')}} maxLength={question.limit} disabled={Boolean(busy)}/>
+        </div>}
+        {['text', 'budget', 'notes'].includes(question.kind) && question.key !== 'homeCity' && <label className="onboarding-chat-input">
           <span className="sr-only">{question.label}</span>
           {question.kind === 'notes' ? <textarea rows={3} maxLength={question.limit} placeholder={question.placeholder}
             value={draft} disabled={Boolean(busy)} onChange={event => setDraft(event.target.value)}/> :

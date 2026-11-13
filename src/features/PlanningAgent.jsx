@@ -1,8 +1,8 @@
 import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react'
-import {ArrowDown, ArrowUp, CalendarDays, ChevronLeft, ChevronRight, Copy, Ellipsis, ExternalLink, Heart, MapPin, Mic, Minus, Pencil, Plus, RotateCcw, Sparkles, Square, X} from 'lucide-react'
+import {ArrowDown, ArrowUp, Bookmark, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Copy, Ellipsis, ExternalLink, Heart, MapPin, Minus, Pencil, Plus, RotateCcw, Sparkles, Square, X} from 'lucide-react'
 import {PlacePhoto} from '../components/PlacePhoto.jsx'
 import {PhotoRail} from '../components/PhotoRail.jsx'
-import {AgentProgress, Button, Dialog} from '../components/UI.jsx'
+import {AgentProgress, Button, Dialog, Pill} from '../components/UI.jsx'
 import {freshnessLabel, request, travelData} from '../api.mjs'
 import {money} from '../planner.mjs'
 import TripConnectionCheck from './TripConnectionCheck.jsx'
@@ -10,15 +10,19 @@ import {AgentMessage, AgentToolStatus} from './AgentMessage.jsx'
 import {AgentOptions} from './AgentOptions.jsx'
 import {GroqResearchResult} from './GroqResearch.jsx'
 import {useVoiceInput} from './useVoiceInput.mjs'
+import {DictationControl} from './DictationControl.jsx'
 import {JourneyMap, draftMapData} from './JourneyMap.jsx'
 import {PlaceDetails, placeMapUrl} from './PlaceDetails.jsx'
 import {TripWorkspace} from './TripWorkspace.jsx'
 import {draftSchedule, visitTime} from './draftSchedule.mjs'
+import {draftBudget} from './tripOverview.mjs'
+import {visibleSource} from '../components/sourceUrl.mjs'
 import {TravelProviderSources} from './TransportSources.jsx'
 import {discoveryPlaceKey, isSaveableDiscoveryPlace, toggleDiscoverySaved, useSavedDiscoveryPlaces} from './discoveryPlaces.mjs'
 import './JourneyChat.css'
 
 const stages = ['Transport', 'Stay', 'Activities', 'Food', 'Local transport', 'Weather', 'Review']
+const liveBuildStages = ['Researching verified places', 'Checking date weather', 'Ranking for fit', 'Grouping and timing days']
 const questions = {
   destination: 'Where would you like to go?', origin: 'Where are you leaving from?',
   days: 'How many days are you travelling?', people: 'How many people are going?',
@@ -76,11 +80,7 @@ async function createSession(signal) {
 const contextRevision = (token, trip) => `${token}:${trip.id}:${trip.updated}`
 
 function SourceLink({url, children}) {
-  let href
-  try {
-    const parsed = new URL(url)
-    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') href = parsed.href
-  } catch { /* Source may be temporarily unavailable. */ }
+  const href = visibleSource(url)?.href
   return href ? <a className="agent-source-link" href={href} target="_blank" rel="noreferrer">{children}<ExternalLink size={13} aria-hidden="true"/></a> : null
 }
 
@@ -108,23 +108,20 @@ function PlaceAnswer({result, images, onUseStay, activeStay, busy, onPlace, onAd
     const saveable = isSaveableDiscoveryPlace(item)
     const likedPlace = liked.some(place => discoveryPlaceKey(place) === discoveryPlaceKey(item))
     return <li key={item.id || `${item.url || item.name}-${index}`} className={card ? 'journey-place-card' : 'journey-place-row'}>
-      {card && <div className="journey-card-media">
-        <PlacePhoto place={item} hideUnavailable/>
-        <div className="journey-card-actions">
+      {card && <div className="journey-card-media"><PlacePhoto place={item} hideUnavailable fallback={!images}/></div>}
+      {!card && !images && <PlacePhoto place={item} compact fallback className="journey-row-thumbnail"/>}
+      {(saveable || map && onAdd && item.category) && <div className="journey-card-actions">
           {saveable && <button type="button" aria-pressed={likedPlace} aria-label={`${likedPlace ? 'Unsave' : 'Save'} ${item.name}`} onClick={() => toggleDiscoverySaved(item, result.location)}><Heart size={17} fill={likedPlace ? 'currentColor' : 'none'}/></button>}
           {map && onAdd && item.category && <button type="button" aria-pressed={Boolean(added)} aria-label={`${added ? 'Remove' : 'Add'} ${item.name} ${added ? 'from' : 'to'} trip shortlist`} onClick={() => onAdd(item)}>{added ? <Minus size={18}/> : <Plus size={18}/>}</button>}
-        </div>
       </div>}
       <h4>{onPlace ? <button type="button" onClick={() => onPlace(item)}>{item.name}</button> : item.name}</h4>
       <div className="journey-card-meta"><small>{item.category || (images ? 'Photo' : 'Place')}{Number.isFinite(item.distanceMetres) ? ` · ${(item.distanceMetres / 1000).toFixed(1)} km from centre` : ''}</small>{Number.isFinite(item.rating) && <small title={item.source}>★ {item.rating.toFixed(1)}{item.reviewCount > 0 ? ` (${item.reviewCount})` : ''}</small>}</div>
       {(item.description || item.address) && <p>{item.description || item.address}</p>}
       {item.openingHours && <small>{item.openingHours}</small>}
       {item.publishedPrice && <small>{item.publishedPrice} · published by the source</small>}
+      {item.website && <SourceLink url={item.website}>Official website</SourceLink>}
       <div className="agent-place-links">
         <SourceLink url={item.url}>{item.source || 'Place source'}<span className="yatra-sr-only"> for {item.name}</span></SourceLink>
-        {map && !onPlace && <SourceLink url={map}>Map<span className="yatra-sr-only"> for {item.name}</span></SourceLink>}
-        {!card && saveable && <Button aria-pressed={likedPlace} onClick={() => toggleDiscoverySaved(item, result.location)}>{likedPlace ? 'Unsave' : 'Save'}</Button>}
-        {!card && map && onAdd && item.category && <Button aria-pressed={Boolean(added)} onClick={() => onAdd(item)}>{added ? 'Remove from shortlist' : 'Add to shortlist'}</Button>}
         {onUseStay && category === 'stays' && <Button disabled={busy || activeStay === item.url} onClick={() => onUseStay(item)}>{activeStay === item.url ? 'In your plan' : 'Use this stay'}</Button>}
       </div>
     </li>
@@ -134,7 +131,7 @@ function PlaceAnswer({result, images, onUseStay, activeStay, busy, onPlace, onAd
       {illustrated.length > 1 && <div className="journey-rail-actions"><button type="button" aria-label="Previous place photos" onClick={() => nudge(-1)}><ChevronLeft size={18}/></button><button type="button" aria-label="Next place photos" onClick={() => nudge(1)}><ChevronRight size={18}/></button></div>}
     </div>
     <small className="agent-source-status">{['live', 'cached'].includes(result.status) ? (result.status === 'live' ? 'Public references' : 'Cached references') : resultStatus(result)}</small>
-    {category === 'stays' && places.length > 0 && <p>Check the property for current rates and availability. If you add a stay from these results, the trip total excludes its unconfirmed cost.</p>}
+    {['stays', 'hotels'].includes(category) && places.length > 0 && <p>Compare locations, available reviews and published rates. Check the property for a quote for your dates.</p>}
     {illustrated.length > 0 && <ul className="journey-place-strip" ref={rail} aria-label="Place photos" tabIndex={0}>{illustrated.map((record, index) => renderPlace(record, index, true))}</ul>}
     {other.length > 0 && (illustrated.length > 0 ? <details className="journey-more-places"><summary>More places ({other.length})</summary><ul>{other.map((record, index) => renderPlace(record, index, false))}</ul></details>
       : <ul className="journey-place-list">{other.map((record, index) => renderPlace(record, index, false))}</ul>)}
@@ -146,38 +143,75 @@ function mapPlace(place) {
   return {...place, lat: place.lat ?? place.latitude, lon: place.lon ?? place.longitude}
 }
 
-function PlannerTimeline({draft, onPlace, onSave, onEdit, saved, onAdd, shortlist}) {
+function placeToolResult(tool) {
+  const result = tool.result
+  return Array.isArray(result?.places) ? result : Array.isArray(result?.places?.places) ? result.places : null
+}
+
+function PlannerTimeline({draft, onPlace, onSave, onEdit, saved, onAdd, shortlist, onAsk}) {
   const illustrated = [...new Map([draft.stay, ...draft.days.flat()].filter(place => place?.photo).map(place => [place.url, place])).values()]
+  const {entered, unpriced} = draftBudget(draft)
+  const stopCount = draft.days.flat().length
+  const dateLabel = index => {
+    if (!draft.departure) return ''
+    const date = new Date(draft.departure + 'T00:00:00Z')
+    date.setUTCDate(date.getUTCDate() + index)
+    return date.toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric', timeZone:'UTC'})
+  }
   return <section className="journey-timeline" aria-label="Suggested itinerary">
-    <header><CalendarDays size={19}/><strong>{draft.name} itinerary</strong><span>{draft.days.length} days</span></header>
-    <div className="journey-timeline-actions journey-timeline-top">
-      <Button variant="primary" onClick={onSave}>{saved ? 'Open saved trip' : 'Save trip'}</Button>
-      <Button onClick={onEdit}>Edit stops and preferences</Button>
+    <header className="journey-itinerary-head">
+      <span className="journey-itinerary-icon"><CalendarDays size={21}/></span>
+      <div><h3>{draft.name} itinerary</h3><p>{draft.days.length} {draft.days.length === 1 ? 'day' : 'days'} · {stopCount} {stopCount === 1 ? 'stop' : 'stops'} · {draft.departure ? dateLabel(0) : 'Flexible dates'}</p></div>
+      <div className="journey-timeline-actions">
+        {onSave && <Button variant="primary" onClick={onSave}>{saved ? 'Open saved trip' : 'Save trip'}</Button>}
+        {onEdit && <Button onClick={onEdit}>Edit stops</Button>}
+      </div>
+    </header>
+    <div className="journey-itinerary-facts">
+      <div><small>Group budget</small><strong>{draft.budget == null ? 'Undecided' : money(draft.budget)}</strong><small>{entered ? `${money(entered)} entered` : 'No costs entered'}{unpriced > 0 && ` · ${unpriced} unpriced ${unpriced === 1 ? 'stop' : 'stops'}`}</small></div>
+      {draft.stay && <div><small>Suggested stay</small><button type="button" className="journey-inline journey-stop-title" onClick={() => onPlace(draft.stay)}>
+        <PlacePhoto place={draft.stay} className="journey-stop-photo" compact fallback/>{draft.stay.name}</button><small>Check rates and availability</small></div>}
     </div>
-    {draft.stay && <p>Suggested base: <button type="button" className="journey-inline" onClick={() => onPlace(draft.stay)}>{draft.stay.name}</button></p>}
-    {illustrated.length > 0 && <PlaceAnswer result={{places:illustrated,status:'live'}} onPlace={onPlace} onAdd={onAdd} shortlist={shortlist}/>}
-    {draft.days.map((stops, index) => <details key={index}>
-      <summary>Day {index + 1}<small>{stops.length ? `${stops.length} ${stops.length===1?'stop':'stops'} · ${stops.map(place => place.name).slice(0, 2).join(' · ')}` : 'Free time'}</small></summary>
-      <ol>{draftSchedule(draft, index).map(({place, leg, start, end}) => {
-        return <li key={place.url}>
-          {leg && <small>{leg.kilometres} km · {leg.minutes} min {leg.method === 'road' ? 'driving' : 'approx.'}</small>}
-          <button type="button" onClick={() => onPlace(place)}><MapPin size={15}/>{place.name}</button>
-          <small>{visitTime(start)} – {visitTime(end)} suggested{place.openingHours ? ` · ${place.openingHours} published hours` : ''}</small>
-          <small>{place.publishedPrice || 'Check the source for current prices'}</small>
-        </li>
-      })}</ol>
-    </details>)}
+    <div className="journey-itinerary-days">
+      {draft.days.map((stops, index) => <details className="journey-itinerary-day" key={index} open={index === 0 ? true : undefined}>
+        <summary><div><strong>Day {index + 1}{dateLabel(index) && ` · ${dateLabel(index)}`}</strong><small>{stops.length ? stops.map(place => place.name).slice(0, 2).join(' · ') : 'Free time'}</small></div><span>{stops.length} {stops.length === 1 ? 'stop' : 'stops'}</span><ChevronDown size={16}/></summary>
+        {stops.length > 0 && <ol>{draftSchedule(draft, index).map(({place, leg, start, end}) => <li key={place.url}>
+          <div className="journey-stop-time"><small>{visitTime(start)} – {visitTime(end)}</small></div>
+          <div className="journey-stop-info">
+            {leg && <small className="journey-stop-leg">{leg.kilometres} km · {leg.minutes} min {leg.method === 'road' ? 'by road' : 'estimated'}</small>}
+            <button type="button" className="journey-stop-title" onClick={() => onPlace(place)}>
+              <PlacePhoto place={place} className="journey-stop-photo" compact fallback/>{place.name}
+            </button>
+            <div className="journey-stop-meta"><span>{place.category}</span>{Number.isFinite(place.rating) && <span className="trip-room-rating">★ {place.rating.toFixed(1)} / 5{place.reviewCount ? ` · ${place.reviewCount} reviews` : ''}</span>}{place.publishedPrice && <span>{place.publishedPrice}</span>}<SourceLink url={place.url}>{place.source || 'Source'}</SourceLink></div>
+            {place.openingHours && <small>Published hours · {place.openingHours}</small>}
+          </div>
+        </li>)}</ol>}
+      </details>)}
+    </div>
+    <p className="journey-itinerary-note">Visit times are suggested. Check venue hours and current prices before you go.</p>
+    {onAsk && <div className="journey-timeline-actions">
+      {draft.origin && <Button onClick={() => onAsk(`Transport options from ${draft.origin} to ${draft.name}`)}>Check travel options</Button>}
+      <Button onClick={() => onAsk(`Find hotels in ${draft.name}`)}>Find stays</Button>
+    </div>}
+    {illustrated.length > 0 && <details className="journey-itinerary-photos"><summary>Trip photos</summary><PlaceAnswer result={{places:illustrated,status:'live'}} onPlace={onPlace} onAdd={onAdd} shortlist={shortlist}/></details>}
   </section>
 }
 
 function GuideAnswer({result}) {
+  const sections = result.sections || []
+  const overview = sections.find(entry => entry.title === 'Overview')
   return <section className="agent-source-answer journey-guide">
     <h3>{result.query ? `${result.query} travel guide` : 'Travel guide'}</h3>
     {result.error ? <p>{result.error}</p> : <>
-      <small className="agent-source-status">{resultStatus(result)} · Wikivoyage</small>
-      {result.sections?.map((entry, index) => <details key={entry.title} open={index < 2}>
-        <summary>{entry.title}</summary><p>{entry.text}</p><SourceLink url={entry.sourceUrl}>Read on Wikivoyage</SourceLink>
+      {overview && <p>{overview.text.split(/\n\s*\n/)[0]}</p>}
+      {!!result.photos?.length && <PhotoRail title="Destination photos" count={result.photos.length}>
+        {result.photos.map(place => <article className="photo-rail-tile" key={place.url || place.name}><PlacePhoto place={place} hideUnavailable/></article>)}
+      </PhotoRail>}
+      {sections.filter(entry => entry !== overview).map((entry, index) => <details key={entry.title} open={index === 0}>
+        <summary>{entry.title}</summary>{entry.text.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+        <SourceLink url={entry.sourceUrl}>Wikivoyage</SourceLink>
       </details>)}
+      {overview && <SourceLink url={overview.sourceUrl}>Wikivoyage destination guide</SourceLink>}
     </>}
   </section>
 }
@@ -203,7 +237,10 @@ function SourceAnswer({tool, onRetry, ...actions}) {
     </PhotoRail></>}
   </section>
   if (name === 'Destination guide') return <GuideAnswer result={result}/>
-  if (name === 'Travel providers') return <TravelProviderSources result={result}/>
+  if (name === 'Travel providers') return <>
+    <TravelProviderSources result={result} answerFirst/>
+    {result.places?.places?.length > 0 && <PlaceAnswer result={result.places} {...actions}/>}
+  </>
   if (name === 'Place search' || name === 'More places' || name === 'Images') return <>
     <PlaceAnswer result={result} images={name === 'Images'} {...actions}/>
     {result.error && onRetry && <Button className="agent-source-retry" onClick={onRetry} disabled={actions.busy}>Retry lookup</Button>}
@@ -237,7 +274,7 @@ function DraftPreview({draft, busy, onReview, onSave}) {
   </section>
 }
 
-export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, onOpenTrip, ready, contextTrip, contextId, contextDraft, newConversation, trips, drafts, onSaveDraft, onOpenDraft, onProfile, profile, onBuild}) {
+export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready, contextTrip, contextId, contextDraft, newConversation, trips, drafts, onSaveDraft, onOpenDraft, onProfile, profile, onBuild}) {
   const sessionKey = contextId ? `${sessionRoot}.${contextId}` : contextDraft ? `${sessionRoot}.draft.${contextDraft.id}` : newConversation ? `${sessionRoot}.new${typeof newConversation === 'string' ? '.' + newConversation : ''}` : sessionRoot
   const revisionKey = `${sessionKey}.revision`
   const canLoadContext = !contextId || ready
@@ -261,7 +298,7 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
   const [pendingMessage, setPendingMessage] = useState('')
   const [pendingNotice, setPendingNotice] = useState('')
   const [pendingAnswer, setPendingAnswer] = useState(null)
-  const [mapOpen, setMapOpen] = useState(false)
+  const [mapOpen, setMapOpen] = useState(() => matchMedia('(min-width: 1100px)').matches)
   const [selectedPlace, setSelectedPlace] = useState(null)
   const [shortlist, setShortlist] = useState(() => {
     try { return JSON.parse(localStorage.getItem(sessionKey + '.shortlist')) || [] } catch { return [] }
@@ -282,7 +319,7 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
   const active = useRef(null)
   const lock = useRef(false)
   const initialSent = useRef(false)
-  const voice = useVoiceInput({onTranscript: text => setQuery(text)})
+  const voice = useVoiceInput({continuous:false, onTranscript: text => setQuery(current => [current.trim(), text].filter(Boolean).join(' ').slice(0,600))})
   const ownsFocus = target => target === document.body || target.closest?.('.agent-workspace')
 
   function jumpToLatest() {
@@ -322,10 +359,6 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
     return () => document.removeEventListener('keydown', onShortcut)
   }, [sidebarOpen])
 
-  useEffect(() => {
-    if (!voiceRequested) return
-    composer.current?.focus()
-  }, [voiceRequested])
   useEffect(() => () => active.current?.abort(), [])
   useEffect(() => {
     const update = () => setOffline(!navigator.onLine)
@@ -412,7 +445,8 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
         body: JSON.stringify({version, offline, live_only: !contextId, live_context: contextDraft,
           preferences: profile ? {interests:profile.interests, style:profile.style, diet:profile.diet,
             pace:profile.pace, transport:profile.transport, mobility:profile.mobility, homeCity:profile.homeCity,
-            travelGroup:profile.travelGroup, stayPreferences:profile.stayPreferences, notes:profile.notes} : undefined, ...action}),
+            travelGroup:profile.travelGroup, stayPreferences:profile.stayPreferences, notes:profile.notes,
+            tripDays:profile.tripDays, budget:profile.budget, travelers:profile.travelers} : undefined, ...action}),
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25000)]),
       })
       if (!response.ok || !response.body) {
@@ -426,6 +460,7 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
       const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
       let buffer = ''
       let finished = false
+      let saveRequested
       while (true) {
         const {done, value} = await reader.read()
         if (done) break
@@ -448,6 +483,12 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
             setPendingNotice('')
             setPendingAnswer(null)
             setTools([])
+            if (event.events.at(-1)?.saveRequested) saveRequested = event.currentItinerary?.draft
+            if (!contextId && (event.events.at(-1)?.liveDraft || event.events.at(-1)?.tools?.some(tool => placeToolResult(tool)?.places?.length))) {
+              setSelectedPlace(null)
+              setRoomOpen(false)
+              setMapOpen(true)
+            }
             if ((event.syncPlan || ['save', 'save_draft'].includes(action.kind)) && event.state.plan) {
               if (contextId) localStorage.setItem(revisionKey, contextRevision(session, event.state.plan))
               onSave(event.state.plan)
@@ -456,6 +497,7 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
         }
       }
       if (!finished) throw new Error('The turn ended before it was saved. Try again.')
+      if (saveRequested) await persistTripAndExit(saveRequested, session)
       return true
     } catch (failure) {
       if (!controller.signal.aborted) {
@@ -517,25 +559,31 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
   const stage = stages[step]
   const recent = model?.events.at(-1)
   const itineraryRequest = model?.currentItinerary?.request
-  const chatDraft = model?.currentItinerary?.draft || contextDraft
+  const activeIntake = model?.currentItinerary
+  const chatDraft = model?.currentItinerary ? model.currentItinerary.draft : contextDraft
   const libraryDraft = drafts?.find(item => item.id === chatDraft?.id)
   const liveDraft = libraryDraft && libraryDraft.updated >= chatDraft.updated ? libraryDraft : chatDraft
   const mapData = useMemo(() => {
     const itinerary = liveDraft ? draftMapData(liveDraft) : {places: [], routes: []}
-    const lookup = [...(model?.events || []).flatMap(event => event.tools || []), ...tools].filter(tool => tool.result?.places?.length)
-    const latestLookup = lookup.at(-1)?.result
-    const center = latestLookup?.location || itineraryRequest?.location || itinerary.center
-    const sameArea = !liveDraft || !latestLookup?.location || latestLookup.location.id === liveDraft.cityId
-    const places = new Map([
-      ...(latestLookup?.places || []).map(mapPlace),
-      ...shortlist,
-      ...(sameArea ? itinerary.places : []),
-      ...(selectedPlace ? [selectedPlace] : []),
-    ].filter(place => placeMapUrl(place)).map(place => [place.url || place.name, place]))
-    return {center, places: [...places.values()], routes: sameArea ? itinerary.routes : []}
+    let lookup = tools.map(placeToolResult).findLast(result => result?.places?.some(place => placeMapUrl(mapPlace(place))))
+    if (!lookup) {
+      for (const event of [...(model?.events || [])].reverse()) {
+        if (event.liveDraft?.id === liveDraft?.id && event.liveDraft) break
+        lookup = event.tools?.map(placeToolResult).findLast(result => result?.places?.some(place => placeMapUrl(mapPlace(place))))
+        if (lookup) break
+      }
+    }
+    const topic = {food:'Food', hotels:'Stays', stays:'Stays', attractions:'Places to visit'}[lookup?.category]
+    const center = lookup ? {...lookup.location, name: [topic, lookup.location?.name || lookup.query].filter(Boolean).join(' · ')}
+      : itineraryRequest?.location || itinerary.center
+    const places = new Map([...(lookup ? lookup.places.map(mapPlace) : [...itinerary.places, ...shortlist]),
+      ...(selectedPlace ? [selectedPlace] : [])].filter(place => placeMapUrl(place)).map(place => [place.url || place.name, place]))
+    return {center, places: [...places.values()], routes: lookup ? [] : itinerary.routes}
   }, [itineraryRequest, liveDraft, model, selectedPlace, shortlist, tools])
   const [preferenceField, setPreferenceField] = useState(null)
   const [party, setParty] = useState(null)
+  const [interestSelection, setInterestSelection] = useState([])
+  const [interestsOpen, setInterestsOpen] = useState(false)
   const latestIntake = itineraryRequest || (contextDraft ? {destination: contextDraft.name, days: contextDraft.days.length, people: contextDraft.travelers, date: contextDraft.departure, budget: contextDraft.budget, diet: contextDraft.mealPreference, pace: contextDraft.pace, party:contextDraft.party} : {})
   const hasMap = Boolean(!contextId && (mapData.places.length || mapData.center || selectedPlace))
   const validDraft = drafts?.some(item => item.id === liveDraft?.id)
@@ -578,10 +626,38 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
   const roomIdeas = useMemo(() => shortlist, [shortlist])
   const roomMedia = useMemo(() => savedMedia, [savedMedia])
   function openRoom(draft) {
-    if (!drafts?.some(item => item.id === draft.id)) onSaveDraft?.(draft, {stayInChat:true})
+    const stored = drafts?.find(item => item.id === draft.id)
+    if (!stored || draft.updated > stored.updated) onSaveDraft?.(draft, {stayInChat:true})
     setRoomDraftId(draft.id)
     setSelectedPlace(null)
     setRoomOpen(true)
+  }
+
+  async function persistTripAndExit(draft, session) {
+    await onSaveDraft(draft, {stayInChat:true, requirePersistence:true})
+    if (session) {
+      try { await request('planning-agent/sessions/' + session, {method:'DELETE', signal:AbortSignal.timeout(5000)}) }
+      catch (failure) { if (!sessionUnavailable(failure)) throw new Error('Trip saved. Try Save trip again to clear the chat and open it.') }
+    }
+    for (const key of [sessionKey, revisionKey, sessionKey + '.shortlist', sessionKey + '.media']) localStorage.removeItem(key)
+    onOpenDraft(draft.id)
+  }
+
+  async function saveTripAndExit(draft) {
+    if (!draft || !ready || lock.current || busy) return false
+    lock.current = true
+    setBusy(true)
+    setError('')
+    try {
+      await persistTripAndExit(draft, token)
+      return true
+    } catch (failure) {
+      setError(plannerError(failure))
+      return false
+    } finally {
+      lock.current = false
+      setBusy(false)
+    }
   }
 
   function toggleShortlist(item) {
@@ -602,12 +678,27 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
   }
 
   function askFollowUp(text) {
-    setQuery('')
-    void send({kind:'message', text})
+    void send({kind:'message', text}).then(ok => {
+      if (!ok) setQuery(current => current || text)
+    })
+  }
+  function continueTrip() {
+    if (!activeIntake) askFollowUp('Plan a trip')
+    else if (activeIntake.question || activeIntake.awaitingDestination) composer.current?.focus()
+    else askFollowUp('Build my trip')
   }
   const fieldLabel = (field, value) => field === 'destination'
     ? catalog.find(item => item.id === value)?.name || value
     : field === 'budget' ? money(Number(value)) : String(value)
+  function editIntakeField(field) {
+    if (field === 'interests') {
+      setInterestSelection(Array.isArray(latestIntake.interests) ? latestIntake.interests : [])
+      setInterestsOpen(true)
+      return
+    }
+    if (field === 'people') setParty(latestIntake.party || {adults:latestIntake.people || 1, children:0, infants:0, pets:0})
+    setPreferenceField(field)
+  }
   const edit = (field, value) => {
     setEditing('')
     return send({kind: 'edit', field, value: String(value), label: fieldLabel(field, value)})
@@ -625,6 +716,12 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
     typeof item.reason === 'string' && item.reason.length <= 140) &&
     new Set(questionOptions.map(item => String(item.value))).size === questionOptions.length
   const quick = hasDynamicChoices ? questionOptions : defaultChoices.map(([value, label]) => ({value, label}))
+  const liveBuildTools = tools.filter(tool => liveBuildStages.includes(tool.name))
+  const runningBuildTool = liveBuildTools.find(tool => tool.status === 'running')
+  const latestBuildTool = liveBuildTools.at(-1)
+  const latestBuildIndex = latestBuildTool ? liveBuildStages.indexOf(latestBuildTool.name) : -1
+  const buildProgressStep = runningBuildTool ? liveBuildStages.indexOf(runningBuildTool.name)
+    : latestBuildIndex >= 0 && ['done','fallback'].includes(latestBuildTool.status) ? latestBuildIndex + 1 : null
   useEffect(() => {
     if (busy || !model?.version) return
     const heading=replyHeading.current
@@ -650,6 +747,11 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
   const sendMessage = async event => {
     event.preventDefault()
     if (!query.trim() || lock.current || busy || resuming || missingContext) return
+    if (voice.phase !== 'idle') voice.stop()
+    if (!messageEdit && !contextId && liveDraft && /^(?:please\s+)?(?:(?:make|build|create) (?:the |my |this )?trip(?: now)?[, ]+(?:and )?)?save(?: (?:my|the|this) trip| it)?(?: now)?[.! ]*$/i.test(query.trim())) {
+      await saveTripAndExit(liveDraft)
+      return
+    }
     if (messageEdit && messageEdit.version !== model?.version) {
       setMessageEdit(null)
       setError('The conversation changed. Review your message before sending it again.')
@@ -723,9 +825,10 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
         event.preventDefault()
         event.currentTarget.form.requestSubmit()
       }
-    }} maxLength={600} rows={1} placeholder="Message YatraBuddy…"/></label>
+    }} maxLength={600} rows={1} placeholder={liveDraft ? 'Ask about this trip or request a change…' : activeIntake?.question?.field === 'destination' ? 'Enter a city or region…' : 'Describe your trip or ask a travel question…'}/></label>
     <div className="agent-composer-actions">
-      {voice.browserSupported && <button type="button" className="agent-round" aria-label={voice.phase === 'idle' ? 'Dictate a message' : 'Stop microphone'} title="Dictate a message" onClick={voice.phase === 'idle' ? voice.startBrowser : voice.stop}><Mic size={19}/></button>}
+      {!contextId && liveDraft && <Button className="journey-composer-save" disabled={busy || !ready} onClick={() => saveTripAndExit(liveDraft)} aria-label="Save trip and open itinerary"><Bookmark size={16}/><span>Save trip</span></Button>}
+      <DictationControl voice={voice} disabled={busy}/>
       {busy ? <button type="button" className="agent-round agent-send" onClick={() => active.current?.abort()} aria-label="Stop response"><Square size={15}/></button>
         : <button type="submit" className="agent-round agent-send" disabled={!query.trim() || resuming || missingContext} aria-label={messageEdit ? 'Send edited message' : 'Send message'}
           onClick={() => {focusNextReply.current = true}}><ArrowUp size={20}/></button>}
@@ -733,17 +836,26 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
     {voice.error && <small role="status">{voice.error}</small>}
   </form>
 
-  const preferenceLabels = {date: 'Dates', people: 'Travellers', budget: 'Budget', diet: 'Food', preferences:'Preferences'}
+  const preferenceLabels = {destination:'Destination', origin:'Departure city', days:'Length', date: 'Dates', people: 'Travellers', budget: 'Budget', diet: 'Food', pace:'Pace', preferences:'Preferences'}
   const preferenceValues = {
-    date: [latestIntake.date,latestIntake.endDate].filter(Boolean).join(' to '), people: latestIntake.people && latestIntake.people + ' travellers',
-    budget: latestIntake.budget && money(latestIntake.budget), diet: latestIntake.diet,
+    destination: latestIntake.location?.name || latestIntake.destination,
+    origin: latestIntake.localStart ? 'Starting at destination' : latestIntake.origin || 'Choose departure city',
+    days: latestIntake.days ? `${latestIntake.days} ${latestIntake.days === 1 ? 'day' : 'days'}` : 'Choose trip length',
+    date: latestIntake.flexibleDates ? 'Flexible dates' : [latestIntake.date,latestIntake.endDate].filter(Boolean).join(' to ') || 'Choose dates',
+    people: latestIntake.people ? `${latestIntake.people} ${latestIntake.people === 1 ? 'traveller' : 'travellers'}` : 'Choose travellers',
+    budget: latestIntake.budgetOpen ? 'Undecided' : latestIntake.budget ? money(latestIntake.budget) : 'Choose budget',
+    diet: latestIntake.diet || 'No food preference', pace: latestIntake.pace || 'Choose pace',
+    interests: latestIntake.interests?.length ? latestIntake.interests.join(' · ') : 'Choose interests',
   }
   return <div className="page inner-page agent-workspace journey-chat">
-    <div className="agent-header"><div className="journey-chat-heading"><span><Sparkles size={14}/> YatraBuddy trip assistant</span><h1>{contextTrip ? `Discuss ${catalog.find(item => item.id === contextTrip.brief.destination)?.name || 'this trip'}` : latestIntake.destination ? `Trip to ${latestIntake.location?.name||liveDraft?.name||latestIntake.destination}` : 'Travel Assistant'}</h1></div>
+    <div className="agent-header"><div className="journey-chat-heading"><h1>{contextTrip ? `Discuss ${catalog.find(item => item.id === contextTrip.brief.destination)?.name || 'this trip'}` : latestIntake.destination ? `Trip to ${latestIntake.location?.name||liveDraft?.name||latestIntake.destination}` : 'AI Assistant'}</h1></div>
       <div className="agent-header-controls">
         {hasMap && <Button icon="map" aria-expanded={mapOpen && !roomOpen} onClick={() => {setSelectedPlace(null);setMapOpen(open => roomOpen || !open);setRoomOpen(false)}}>{mapOpen && !roomOpen ? 'Hide map' : 'Show map'}</Button>}
         {validDraft && <Button aria-expanded={roomOpen} onClick={() => roomOpen ? setRoomOpen(false) : openRoom(liveDraft)}>Trip workspace</Button>}
-        <Button icon="trip" onClick={() => openBuilder(liveDraft)}>Build itinerary{shortlist.length ? ' · ' + shortlist.length : ''}</Button>
+        {!contextId && <Button icon="trip" disabled={busy || resuming || !ready}
+          onClick={liveDraft && !activeIntake?.needsBuild ? () => openBuilder(liveDraft) : continueTrip}>
+          {liveDraft && !activeIntake?.needsBuild ? 'Edit itinerary' : activeIntake ? 'Continue planning' : 'Plan a trip'}
+        </Button>}
         {hasTripPanel && <Button ref={sidebarToggle} aria-expanded={sidebarOpen} aria-controls="agent-trip-panel" onClick={() => setSidebarOpen(open => !open)}>{sidebarOpen ? 'Hide trip details' : 'Trip details'}</Button>}
         <details className="agent-chat-menu" ref={chatMenu}><summary title="Conversation settings"><Ellipsis size={21}/><span className="yatra-sr-only">Conversation settings</span></summary>
           <div>
@@ -767,22 +879,34 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
           onClose={() => setSelectedPlace(null)} onShowMap={() => setSelectedPlace(null)}
           onAdd={selectedPlace.category && placeMapUrl(selectedPlace) ? toggleShortlist : undefined}
           added={shortlist.some(item => item.url === selectedPlace.url)} onSaveMedia={saveMedia} savedMedia={savedMedia}/>
-          : <JourneyMap {...mapData} onSelect={openPlace} onClose={() => setMapOpen(false)}/>}
+          : <JourneyMap key={mapData.center?.name} {...mapData} onSelect={openPlace} onClose={() => setMapOpen(false)}/>}
       </div>}
       <section className="agent-chat" aria-label="Travel conversation">
         <div className="agent-thread" ref={transcript} onScroll={updateScroll} tabIndex={0} aria-label="Conversation messages">
         {missingContext && <section className="agent-welcome"><h2>Trip unavailable</h2><a className="btn secondary" href="#trips">Open My Trips</a></section>}
-        {!model && !resuming && !missingContext && <section className="agent-welcome">
+        {!model?.events.length && !busy && !resuming && !missingContext && <section className="agent-welcome">
           <span className="agent-avatar"><Sparkles size={22}/></span>
           <h2>Where are we going?</h2>
-          <p>Tell me where you want to go. Explore places, compare stays, and build a trip around the stops you like.</p>
-          <div className="agent-pills">{[
-            ['Plan a trip', 'Plan a trip to '], ['Find stays', 'Find hotels in '],
+          <p>Share a destination, dates, or budget to start planning.</p>
+          <Button className="journey-example-prompt" onClick={() => {setQuery('Plan 3 days in Varkala from Mumbai for 2 people under ₹25,000');composer.current?.focus()}}>Try a three-day Varkala trip</Button>
+          <div className="agent-pills"><Button variant="primary" disabled={!ready} onClick={continueTrip}>Start planning</Button>{[
+            ['Find stays', 'Find hotels in '],
             ['Explore places', 'What can I see in '], ['Find photos', 'Show photos of '], ['Find videos', 'Show videos of '],
           ].map(([label, prompt]) => <Button key={label} onClick={() => {setQuery(prompt);composer.current?.focus()}}>{label}</Button>)}
           {onProfile && <Button onClick={onProfile}>{profile ? 'Edit travel profile' : 'Personalize my trips'}</Button>}</div>
         </section>}
         {resuming && !error && <p className="agent-tool" role="status">Opening your conversation…</p>}
+        {latestIntake.destination && <section className="journey-trip-summary" aria-label="Your trip so far">
+          <header><div><span className="journey-summary-eyebrow"><Sparkles size={13}/> YOUR TRIP SO FAR</span><h2>Your trip details</h2></div>
+            <p>Tap any detail to adjust it.</p></header>
+          <div className="journey-trip-chips">
+            {Object.entries(preferenceLabels).filter(([field]) => field !== 'preferences' && preferenceValues[field]).map(([field, label]) =>
+              <button type="button" className="journey-trip-chip" key={field} disabled={busy || !ready} onClick={() => editIntakeField(field)}>
+                <small>{label}</small><strong>{preferenceValues[field]}</strong>
+              </button>)}
+          </div>
+          {latestIntake.interests?.length > 0 && <p className="journey-summary-note">I’ll use your interests to rank places and shape each day.</p>}
+        </section>}
         {model?.events.map((event, index, events) => {
           const label = event.text || event.label
           const notice = typeof event.notice === 'string' ? event.notice : event.notice?.message
@@ -795,24 +919,20 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
             {label && <div className="agent-user-message"><p className="agent-user-turn">{label}</p>
               {canReplace && <button type="button" className="agent-action" aria-label="Edit last message" title="Edit last message" disabled={busy} onClick={editLastMessage}><Pencil size={17}/></button>}
             </div>}
-            {(response || notice || sources.length > 0 || event.liveDraft || (contextId && event.draftPreview)) && <section className="agent-reply" aria-label="YatraBuddy’s answer" aria-live={isLast ? 'polite' : undefined}>
+            {(response || notice || sources.length > 0 || event.liveDraft || event.buildConfirmation || (contextId && event.draftPreview)) && <section className="agent-reply" aria-label="YatraBuddy’s answer" aria-live={isLast ? 'polite' : undefined}>
               <span className="agent-avatar" aria-hidden="true"><Sparkles size={18}/></span>
               <div className="agent-answer" ref={isLatestAnswer ? replyHeading : undefined} tabIndex={isLatestAnswer ? -1 : undefined}>
                 <div className="agent-answer-content">
                   {response && <AgentMessage text={response} kind={event.answerKind}/>}
-                  {event.liveDraft && <PlannerTimeline draft={event.liveDraft} onPlace={openPlace}
-                    saved={drafts?.some(item => item.id === event.liveDraft.id)}
-                    onSave={() => liveDraft?.id === event.liveDraft.id ? openRoom(event.liveDraft) : onSaveDraft(event.liveDraft)}
-                    onEdit={() => openBuilder(event.liveDraft)} onAdd={toggleShortlist} shortlist={shortlist}/>}
+                  {event.liveDraft && (event.liveDraft.id === chatDraft?.id && event.liveDraft.updated === chatDraft.updated ? <PlannerTimeline draft={liveDraft} onPlace={openPlace}
+                    saved={drafts?.some(item => item.id === event.liveDraft.id && item.updated >= event.liveDraft.updated)}
+                    onSave={ready && !busy ? () => saveTripAndExit(liveDraft) : undefined}
+                    onEdit={liveDraft?.id === event.liveDraft.id ? () => openBuilder(liveDraft) : undefined}
+                    onAsk={!busy ? askFollowUp : undefined} onAdd={toggleShortlist} shortlist={shortlist}/>
+                    : <details className="journey-previous-plan"><summary>Earlier {event.liveDraft.name} itinerary</summary>
+                      <PlannerTimeline draft={event.liveDraft} onPlace={openPlace} onAdd={toggleShortlist} shortlist={shortlist}/>
+                    </details>)}
                   {notice && notice !== response && <p>{notice}</p>}
-                  {isLast&&!busy&&event.intakeQuestion&&<div className="agent-pills journey-intake-actions">
-                    {event.intakeQuestion.choices?.map(text=><Button key={text} onClick={()=>askFollowUp(text)}>{text}</Button>)}
-                    {event.intakeQuestion.field==='date'&&<Button icon="calendar" onClick={()=>setPreferenceField('date')}>Choose travel dates</Button>}
-                  </div>}
-                  {!!event.destinationChoices?.length&&<div className="journey-destination-choices" aria-label="Verified starting cities">
-                    {event.destinationChoices.map(city=><div key={city.id||city.name}><Button icon="pin" disabled={busy||!isLast} onClick={()=>askFollowUp([city.name,city.region||city.country].filter(Boolean).join(', '))}>{city.name}</Button>
-                      <SourceLink url={city.sourceUrl}>Location source</SourceLink></div>)}
-                  </div>}
                   {contextId && <DraftPreview draft={event.draftPreview} busy={busy || !ready || resuming}
                     onSave={isLast && !saved && step !== 6 ? () => send({kind: 'save_draft'}) : undefined}
                     onReview={() => send({kind: 'review_draft'})}/>}
@@ -825,9 +945,20 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
                     <Button icon="heart" onClick={()=>askFollowUp('More like these')}>More like these</Button>
                     <Button icon="edit" onClick={()=>{setQuery('Show me ');composer.current?.focus()}}>Refine search</Button>
                   </div>}
+                  {isLast && !busy && !contextId && (() => {
+                    const result = sources.map(placeToolResult).findLast(item => item?.places.length)
+                    const city = result?.location?.name || result?.query || latestIntake.destination
+                    if (!city) return null
+                    const transport = sources.find(tool => tool.name === 'Travel providers' && !tool.result.places)
+                    if (!result && !transport && !sources.some(tool => tool.name === 'Destination guide')) return null
+                    return <div className="agent-pills journey-intake-actions" aria-label="Next steps">
+                      {!activeIntake && <Button variant="primary" onClick={() => askFollowUp(`Plan a trip to ${city}`)}>Plan a trip here</Button>}
+                      {result?.category !== 'food' && <Button onClick={() => askFollowUp(`Find restaurants in ${city}`)}>Find food</Button>}
+                      {!transport && <Button onClick={() => askFollowUp(`Getting around ${city}`)}>Local transport</Button>}
+                    </div>
+                  })()}
                   {isLast&&!busy&&event.liveDraft&&<div className="agent-pills journey-intake-actions" aria-label="Refine itinerary">
-                    <Button icon="check" onClick={()=>openRoom(event.liveDraft)}>I like this plan</Button>
-                    <Button icon="edit" onClick={()=>setPreferenceField('preferences')}>Change the mix</Button>
+                    <Button icon="edit" onClick={()=>editIntakeField('interests')}>Change interests</Button>
                   </div>}
                 </div>
                 <AgentToolStatus tools={event.tools || []}/>
@@ -839,6 +970,27 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
             </section>}
           </React.Fragment>
         })}
+        {!busy && activeIntake && (activeIntake.question || activeIntake.needsBuild) && <section className="journey-planning-next" aria-label="Continue trip planning">
+          {activeIntake.question && <>
+            {recent?.intakeQuestion?.field !== activeIntake.question.field && <p>{activeIntake.question.prompt}</p>}
+            <div className="agent-pills journey-intake-actions">
+              {activeIntake.question.choices.map(text => <Button key={text} onClick={() => askFollowUp(text)}>{text}</Button>)}
+            </div>
+          </>}
+          {activeIntake.awaitingDestination && <>
+            {!recent?.awaitingDestination && <p>Choose or enter a city for your itinerary.</p>}
+            <div className="journey-destination-choices" aria-label="Verified starting cities">
+              {activeIntake.destinationChoices?.map(city => <div key={city.id || city.name}>
+                <Button icon="pin" onClick={() => askFollowUp([city.name, city.region || city.country].filter(Boolean).join(', '))}>{city.name}</Button>
+                <SourceLink url={city.sourceUrl}>Location source</SourceLink>
+              </div>)}
+            </div>
+          </>}
+          {activeIntake.needsBuild && !activeIntake.awaitingDestination && <div className="journey-confirm-actions">
+            <Button variant="primary" disabled={offline} onClick={continueTrip}>{recent?.buildConfirmation ? 'Build my trip' : 'Retry itinerary'}</Button>
+            {offline && <small>Resume online lookups in Conversation settings to build the itinerary.</small>}
+          </div>}
+        </section>}
         {pendingMessage && <div className="agent-user-message"><p className="agent-user-turn">{pendingMessage}</p></div>}
         {error && <div className="agent-error">
           <p className="form-error" role="alert">{error}</p>
@@ -847,7 +999,12 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
         {busy && <section className="agent-reply agent-pending" aria-label="YatraBuddy’s response in progress">
           <span className="agent-avatar" aria-hidden="true"><Sparkles size={18}/></span>
           <div className="agent-answer">
-            {!pendingAnswer && <AgentProgress label={tools.find(tool => tool.status === 'running')?.name || 'Preparing a reply'}/>}
+            {!pendingAnswer && <AgentProgress
+              label={runningBuildTool?.name || tools.find(tool => tool.status === 'running')?.name || 'Preparing a reply'}
+              steps={liveBuildTools.length ? ['Research places', latestIntake.date ? 'Check weather' : 'Weather optional', 'Rank for fit', 'Group and schedule'] : []}
+              activeStep={liveBuildTools.length ? buildProgressStep : null}
+              skippedSteps={!latestIntake.date ? [1] : []}
+              className={liveBuildTools.length ? 'journey-agent-progress' : ''}/>}
             {tools.some(tool => tool.status === 'running' && /photos|Images|Place search|Videos/i.test(tool.name)) && <div className="journey-media-loading" aria-hidden="true"><i/><i/><i/></div>}
             {pendingAnswer?.text && <AgentMessage text={pendingAnswer.text} kind={pendingAnswer.kind} pending/>}
             {pendingNotice && pendingNotice !== pendingAnswer?.text && <p>{pendingNotice}</p>}
@@ -961,7 +1118,9 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
         const end = fields.get('end')
         const text = {date:value ? `Travel on ${value}${end ? ` through ${end}` : ''}` : `${fields.get('days')} days with flexible dates`,
           people:party && `${party.adults} adults, ${party.children} children, ${party.infants} infants, ${party.pets} pets`,
-          budget:`Budget ₹${value}`, diet:value, preferences:`Trip preferences: ${value}`}[preferenceField]
+          budget:`Budget ₹${value}`, diet:value, preferences:`Trip preferences: ${value}`,
+          destination:`Plan a trip to ${value}`, origin:`Plan a trip to ${latestIntake.destination} from ${value}`,
+          days:`Plan a trip to ${latestIntake.destination} for ${value} days`, pace:`Trip preferences: ${value}`}[preferenceField]
         setPreferenceField(null)
         askFollowUp(text)
       }}>
@@ -977,11 +1136,27 @@ export function PlanningAgent({catalog, initialQuery, voiceRequested, onSave, on
           {preferenceField === 'diet' ? <select name="value" defaultValue={latestIntake.diet || 'No preference'}>
             {['No preference','Vegetarian','Non-vegetarian','Vegan','Jain','Halal'].map(diet => <option key={diet}>{diet}</option>)}
           </select> : preferenceField === 'preferences' ? <textarea name="value" required maxLength={450} rows={3} defaultValue={latestIntake.notes || ''} placeholder="For example: relaxed pace, museums, vegan meals"/>
-            : <input name="value" required={preferenceField !== 'date'} defaultValue={latestIntake[preferenceField] || ''} type={preferenceField === 'date' ? 'date' : 'number'}
-              min={preferenceField === 'budget' ? 1000 : undefined} max={preferenceField === 'budget' ? 10000000 : undefined}/>}
+            : <input name="value" required={preferenceField !== 'date'} defaultValue={latestIntake[preferenceField] || ''}
+              type={preferenceField === 'date' ? 'date' : ['budget','days'].includes(preferenceField) ? 'number' : 'text'}
+              min={preferenceField === 'budget' ? 1000 : preferenceField === 'days' ? 1 : undefined}
+              max={preferenceField === 'budget' ? 10000000 : preferenceField === 'days' ? 5 : undefined} maxLength={preferenceField === 'destination' || preferenceField === 'origin' ? 110 : undefined}/>}
         </label>}
         {preferenceField === 'date' && <><label>Last day (optional)<input name="end" type="date" defaultValue={latestIntake.endDate || ''}/></label><label>Duration when dates are flexible<select name="days" defaultValue={latestIntake.days || 2}>{[1,2,3,4,5].map(day => <option key={day} value={day}>{day} {day === 1 ? 'day' : 'days'}</option>)}</select></label></>}
         <Button variant="primary" type="submit">Update trip</Button>
+      </form>
+    </Dialog>}
+    {interestsOpen && <Dialog label="Choose trip interests" onClose={() => setInterestsOpen(false)}>
+      <form className="stack journey-preference-form" onSubmit={event => {
+        event.preventDefault()
+        setInterestsOpen(false)
+        void send({kind:'message', text:'Update my trip interests', preferences:{interests:interestSelection}, replace_interests:true})
+      }}>
+        <div><h2>What do you enjoy?</h2><p>Choose everything you’d like me to consider. I’ll rank verified places around these interests.</p></div>
+        <div className="journey-interest-options" aria-label="Trip interests">
+          {['Nature','Culture','Food','Adventure','Relaxation','Shopping','Arts & design','Nightlife'].map(interest => <Pill key={interest} active={interestSelection.includes(interest)} onClick={() => setInterestSelection(current => current.includes(interest)
+            ? current.filter(item => item !== interest) : [...current, interest])}>{interest}</Pill>)}
+        </div>
+        <Button variant="primary" type="submit" disabled={busy}>Done</Button>
       </form>
     </Dialog>}
   </div>

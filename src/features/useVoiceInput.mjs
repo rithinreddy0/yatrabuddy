@@ -14,7 +14,7 @@ const mediaErrors={
 }
 const audioTypes=['audio/webm;codecs=opus','audio/mp4','audio/ogg;codecs=opus']
 
-export function useVoiceInput({onTranscript,autoStart=false}){
+export function useVoiceInput({onTranscript,autoStart=false,continuous=true}){
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition
   const [phase,setPhase]=useState('idle')
   const [error,setError]=useState('')
@@ -104,6 +104,7 @@ export function useVoiceInput({onTranscript,autoStart=false}){
     }
     instance.onend=()=>{
       if(id!==session.current)return
+      if(!continuous){recognition.current=null;setPhase('idle');return}
       setPhase('waiting')
       timer.current=setTimeout(begin,400)
     }
@@ -169,6 +170,14 @@ export function useVoiceInput({onTranscript,autoStart=false}){
     capture.recorder.stop()
   }
 
+  function finish(){
+    if(phase==='listening'&&recognition.current){
+      setPhase('transcribing')
+      try{recognition.current.stop()}catch{stop()}
+    }else if(phase==='recording')finishRecording()
+    else stop()
+  }
+
   useEffect(()=>{
     mounted.current=true
     const controller=new AbortController()
@@ -185,5 +194,5 @@ export function useVoiceInput({onTranscript,autoStart=false}){
     }
   },[])
 
-  return {phase,error,secure,browserSupported,recordingSupported,startBrowser,startRecording,finishRecording,stop}
+  return {phase,error,secure,browserSupported,recordingSupported,startBrowser,startRecording,finishRecording,finish,stop}
 }

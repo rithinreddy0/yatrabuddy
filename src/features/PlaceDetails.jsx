@@ -6,13 +6,10 @@ import {AgentProgress, Button} from '../components/UI.jsx'
 import {request} from '../api.mjs'
 import {placeInterestScores} from './discoveryPlaces.mjs'
 import {revealResult} from '../components/revealResult.mjs'
+import {visibleSource} from '../components/sourceUrl.mjs'
 
 export function PlaceSource({url, children}) {
-  let href
-  try {
-    const parsed = new URL(url)
-    if (['http:', 'https:'].includes(parsed.protocol)) href = parsed.href
-  } catch { /* A record can omit its website. */ }
+  const href = visibleSource(url)?.href
   if (!href) return null
   return <a className="journey-source" href={href} target="_blank" rel="noreferrer">{children}<ExternalLink size={13}/></a>
 }
@@ -97,7 +94,7 @@ export function PlaceDetails({place, onClose, onShowMap, onAdd, added, onSaveMed
       <span>{place.category || 'Destination'}</span>
       {onShowMap && <Button onClick={onShowMap} icon="map">Map</Button>}
     </div>
-    {(place.photo || map) && <PlacePhoto place={place}/>}
+    <PlacePhoto place={place} fallback/>
     <h2>{place.name}</h2>
     {place.address && <p className="journey-detail-address"><MapPin size={15}/>{place.address}</p>}
     <div className="journey-detail-tabs" aria-label="Place views">
@@ -116,7 +113,6 @@ export function PlaceDetails({place, onClose, onShowMap, onAdd, added, onSaveMed
       <div className="journey-links">
         <PlaceSource url={place.url}>{place.source || 'Place source'}</PlaceSource>
         <PlaceSource url={place.website}>Official site</PlaceSource>
-        <PlaceSource url={map}>OpenStreetMap</PlaceSource>
         {map && <PlaceSource url={'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(`${place.name} ${place.lat},${place.lon}`)}>Check reviews</PlaceSource>}
       </div>
     </> : !media ? <AgentProgress label="Finding photos and videos nearby"/> : <>

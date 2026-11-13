@@ -132,7 +132,7 @@ export function Research({catalog,topic:initialTopic='overview',defaultDestinati
         <strong>{item.title}</strong>{item.snippet&&<p>{item.snippet}</p>}<a href={item.url} target="_blank" rel="noreferrer">{item.publisher||item.provider||'Source'} ↗</a>
       </li>)}</ul></div>}
     </CityBrief>}
-    {!compact&&<ReferencePhotos location={selected} description="Licensed destination photos for context. The source links above support the briefing."/>}
+    {!compact&&selected&&<ReferencePhotos key={selected.id} location={selected} grid description="Explore the city and nearby sights through licensed photos."/>}
     {result&&(compact?<Findings result={result} compact/>:<details className="panel research-source-details"><summary>Explore the sources and full findings</summary><Findings result={result}/></details>)}
   </div>
 }

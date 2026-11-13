@@ -1,5 +1,6 @@
 import json
 import os
+from uuid import uuid4
 from unittest import TestCase
 from unittest.mock import AsyncMock, patch
 
@@ -12,6 +13,83 @@ from .planning_agent import extract, grounded_order
 
 
 class PlanningAgentTest(TestCase):
+    def setUp(self):
+        from .auth import _ATTEMPTS
+        self.enterContext(patch.dict(_ATTEMPTS, clear=True))
+
+    def test_live_intake_builds_and_revises_a_sourced_trip(self):
+        with TestClient(app) as client, patch("backend.planning_agent.live_place_research", new_callable=AsyncMock) as research:
+            token = client.post("/api/planning-agent/sessions").json()["token"]
+            path = f"/api/planning-agent/sessions/{token}/turn"
+
+            def send(version, text, **values):
+                response = client.post(path, json={"version": version, "kind": "message", "text": text,
+                                                   "live_only": True, **values})
+                self.assertEqual(response.status_code, 200, response.text)
+                return json.loads(list(response.iter_lines())[-1])
+
+            pending = send(0, "Plan a three-day Panaji trip from Delhi under ₹12,000 each")
+            self.assertEqual(pending["events"][-1]["intakeQuestion"]["field"], "people")
+            self.assertNotIn("budget", pending["currentItinerary"]["request"])
+            research.assert_not_awaited()
+
+            location = {"id": 123, "name": "Panaji", "lat": 15.49, "lon": 73.82,
+                        "kind": "city", "region": "Goa", "country": "India"}
+            places = [{"name": name, "category": "Sight", "url": f"https://example.org/{index}",
+                       "lat": 15.49 + index * .002, "lon": 73.82, "source": "Wikipedia"}
+                      for index, name in enumerate(["First Museum", "Second Museum", "Third Museum", "Fourth Museum"])]
+            with (patch("backend.planning_agent.live_place_research", new=AsyncMock(
+                    return_value=(location, places, [], "ready"))) as research,
+                  patch("backend.nearby.route_points", new=AsyncMock(return_value=None))):
+                built = send(1, "four")
+                revised = send(2, "Actually make it ₹18,000 total, not per person")
+                research.assert_awaited_once()
+                research.side_effect = TimeoutError
+                failed = send(3, "Make it two days")
+                self.assertEqual(failed["currentItinerary"]["draft"], revised["currentItinerary"]["draft"])
+                self.assertTrue(failed["currentItinerary"]["needsBuild"])
+                research.side_effect = None
+                recovered = send(4, "make the trip now save")
+            draft = built["events"][-1]["liveDraft"]
+            self.assertEqual((draft["name"], len(draft["days"]), draft["travelers"], draft["budget"]), ("Panaji", 3, 4, 48000))
+            self.assertTrue(built["currentItinerary"]["request"]["flexibleDates"])
+            self.assertEqual({place["url"] for day in draft["days"] for place in day}, {place["url"] for place in places})
+            self.assertEqual([tool["name"] for tool in built["events"][-1]["tools"]], [
+                "Researching verified places", "Ranking for fit", "Grouping and timing days",
+            ])
+            self.assertTrue(all(tool["status"] == "done" for tool in built["events"][-1]["tools"]))
+            updated = revised["events"][-1]["liveDraft"]
+            self.assertEqual(updated["budget"], 18000)
+            self.assertEqual(updated["days"], draft["days"])
+            self.assertEqual(updated["id"], draft["id"])
+            recovered_draft = recovered["currentItinerary"]["draft"]
+            self.assertTrue(recovered["events"][-1]["saveRequested"])
+            self.assertEqual(recovered_draft["id"], draft["id"])
+            self.assertEqual(len(recovered_draft["days"]), 2)
+            cheaper = send(5, "Make it ₹3,000 cheaper")["currentItinerary"]["draft"]
+            self.assertEqual(cheaper["budget"], 15000)
+            self.assertEqual(cheaper["days"], recovered_draft["days"])
+            self.assertEqual(client.get(path.removesuffix("/turn")).json()["currentItinerary"]["draft"], cheaper)
+
+    def test_live_intake_can_replace_interests_without_losing_them_on_next_turn(self):
+        with TestClient(app) as client:
+            token = client.post("/api/planning-agent/sessions").json()["token"]
+            path = f"/api/planning-agent/sessions/{token}/turn"
+
+            def send(version, text, **values):
+                response = client.post(path, json={"version": version, "kind": "message", "text": text,
+                                                   "live_only": True, "offline": True, **values})
+                self.assertEqual(response.status_code, 200, response.text)
+                return json.loads(list(response.iter_lines())[-1])
+
+            first = send(0, "Plan Goa", preferences={"interests": ["Nature", "Food"]})
+            self.assertEqual(first["events"][-1]["itineraryRequest"]["interests"], ["Nature", "Food"])
+            changed = send(1, "Update my interests", preferences={"interests": ["Culture"]},
+                           replace_interests=True)
+            self.assertEqual(changed["events"][-1]["itineraryRequest"]["interests"], ["Culture"])
+            next_turn = send(2, "Flexible dates", preferences={"interests": ["Nature", "Food"]})
+            self.assertEqual(next_turn["events"][-1]["itineraryRequest"]["interests"], ["Culture"])
+
     @patch.dict(os.environ, {"TRAVEL_CHAT_PROVIDER": "groq"})
     def test_groq_failure_does_not_call_gemini(self):
         with (TestClient(app) as client,

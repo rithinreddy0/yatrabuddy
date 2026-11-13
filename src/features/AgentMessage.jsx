@@ -62,7 +62,8 @@ export function AgentToolStatus({tools, running = false}) {
     const fallback = tool.status === 'fallback'
     const StatusIcon = inProgress ? LoaderCircle : fallback ? CircleAlert : Check
     return <li key={tool.id || tool.name} data-tool-state={tool.status}><StatusIcon size={16} aria-hidden="true"/>
-      <span>{tool.name}</span><small>{inProgress ? 'Checking' : fallback ? 'Unavailable' : 'Complete'}</small>
+      <span>{tool.name}{typeof tool.detail === 'string' && tool.detail.trim() && <small className="agent-tool-detail">{tool.detail}</small>}</span>
+      <small>{inProgress ? 'Checking' : fallback ? 'Unavailable' : 'Complete'}</small>
     </li>
   })}</ul>
   return running ? <div className="agent-tool-status" aria-label="Current lookups">{items}</div> : <details className="agent-tool-status">

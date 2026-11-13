@@ -27,3 +27,9 @@ services:
         sync: false
       - key: FIREBASE_WEB_APP_ID
         sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_API_KEY_FALLBACK
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-20b

@@ -1,0 +1,405 @@
+:root {
+  color-scheme: dark;
+  --paper: #000000;
+  --side: #101114;
+  --white: #191a20;
+  --ink: #f4f5fa;
+  --muted: #b2b7c9;
+  --line: #343745;
+  --forest: #a9a6ff;
+  --deep: #dedbff;
+  --mint: #292841;
+  --lime: #343154;
+  --accent: #b8adff;
+  --primary: #5746cf;
+  --primary-hover: #6956dc;
+  --shadow: 0 16px 34px rgb(0 0 0 / 26%);
+  --glass: rgb(23 24 31 / 80%);
+  --glass-strong: rgb(22 23 29 / 96%);
+  --glass-border: rgb(221 224 255 / 14%);
+  --ease-ui: cubic-bezier(.2, .75, .25, 1);
+}
+
+body {
+  background-color: var(--paper);
+  background-image: none;
+  color: var(--ink);
+  font-size:13px;
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+button:disabled { cursor: not-allowed; }
+
+.sidebar,
+.mobile-workspace-dock {
+  background: var(--glass-strong);
+  border-color: var(--glass-border);
+  -webkit-backdrop-filter: blur(22px) saturate(1.25);
+  backdrop-filter: blur(22px) saturate(1.25);
+}
+
+.sidebar { box-shadow: var(--shadow); padding-top:18px; }
+.sidebar .brand { margin-bottom:20px; }
+.sidebar .nav-item { min-height:40px; }
+.sidebar .nav-item small { background:var(--lime); color:var(--ink); }
+.side-utilities { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+.compact-nav .side-utilities .btn { font-size:.68rem; padding-inline:4px; }
+.mobile-workspace-dock { display:none; }
+.workspace-menu-anchor { display:none;position:absolute;z-index:5;top:12px;left:12px; }
+.workspace-menu-anchor .icon-btn { background:var(--glass);border:1px solid var(--glass-border);border-radius:50%;backdrop-filter:blur(16px); }
+.sidebar-heading {display:flex;align-items:center;justify-content:space-between;gap:3px;margin-bottom:18px}
+.sidebar-heading .brand {margin:0;padding:0;gap:7px}
+.sidebar-heading .desktop-menu {flex:none;width:29px;min-height:32px}
+.compact-nav .sidebar-heading {flex-direction:column}
+.sidebar .nav-item { color: var(--muted); transition: color 180ms var(--ease-ui), background 180ms var(--ease-ui), transform 180ms var(--ease-ui); }
+.sidebar .nav-item:hover,
+.sidebar .nav-item.active { color: var(--deep); background: var(--mint); }
+.sidebar .nav-item:hover { transform: translateX(2px); }
+.breadcrumb,
+.nav-item,
+.currency span { color: var(--muted); }
+.eyebrow { color: var(--deep); }
+.home-hero {
+  background: linear-gradient(135deg, var(--mint), var(--paper));
+  border: 1px solid var(--glass-border);
+}
+.home-hero .hero-starters .primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.home-hero .hero-starters .primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+.home-hero .hero-starters .btn:not(.primary) { color: var(--deep); border-color: rgb(55 107 128 / 30%); }
+.home-hero .hero-starters .btn:not(.primary):hover { background: var(--mint); color: var(--deep); }
+
+.primary,
+.primary:hover {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+.outline,
+.secondary,
+.top-actions .outline,
+.pill,
+.source-pill {
+  background: var(--glass-strong);
+  color: var(--ink);
+  border-color: rgb(92 132 148 / 22%);
+}
+.outline:hover,
+.secondary:hover,
+.pill:hover,
+.pill.on {
+  background: var(--mint);
+  color: var(--deep);
+  border-color: rgb(55 107 128 / 38%);
+}
+.pill.on { box-shadow: inset 0 0 0 1px rgb(55 107 128 / 8%); }
+.btn,
+.pill,
+.icon-btn {
+  transition: background-color 180ms var(--ease-ui), color 180ms var(--ease-ui),
+    border-color 180ms var(--ease-ui), box-shadow 180ms var(--ease-ui), transform 180ms var(--ease-ui);
+}
+.btn:not(:disabled):active,
+.pill:not(:disabled):active,
+.icon-btn:not(:disabled):active { transform: scale(.975); }
+.btn:focus-visible,
+.pill:focus-visible,
+.icon-btn:focus-visible { outline-offset: 3px; }
+
+.panel,
+.empty,
+.research-form,
+.world-result,
+.destination-card,
+.trip-card,
+.preference-panel,
+.home-research,
+.provider-card,
+.news-card,
+.trip-overview-glass,
+.trip-overview-composer,
+.trip-overview-room .trip-room,
+.agent-sidebar {
+  background: var(--glass);
+  border-color: var(--glass-border);
+  box-shadow: var(--shadow), inset 0 1px 0 rgb(255 255 255 / 6%);
+  -webkit-backdrop-filter: blur(18px) saturate(1.18);
+  backdrop-filter: blur(18px) saturate(1.18);
+}
+.empty { border-style: dashed; }
+.panel { border-radius: 19px; }
+.destination-card,
+.trip-card { overflow: hidden; border-radius: 22px; }
+.trip-card-text,
+.card-footer { background: transparent; }
+.destination-popover,
+.agent-chat-menu > div,
+.map-zoom {
+  background: var(--glass-strong);
+  border-color: var(--glass-border);
+  box-shadow: 0 18px 42px rgb(27 54 68 / 18%);
+  -webkit-backdrop-filter: blur(22px) saturate(1.3);
+  backdrop-filter: blur(22px) saturate(1.3);
+}
+.destination-popover li { color: var(--ink); }
+.destination-popover li[aria-selected=true],
+.destination-popover li:hover { background: var(--mint); }
+.destination-popover small,
+.destination-popover p { color: var(--muted); }
+.destination-search-input,
+.stack input,
+.stack select,
+.dialog-content textarea,
+.research-form select,
+.news-controls select,
+.nearby-actions input,
+.nearby-actions select,
+.world-search input,
+.world-search select {
+  background: var(--white);
+  border-color: var(--line);
+  color: var(--ink);
+}
+.destination-search-input:focus-within,
+.profile-dialog .destination-search-input:focus-within,
+.profile-budget-input:focus-within { border-color: var(--accent); }
+.destination-search-input:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.source-pill { color: var(--deep); }
+.source-pill:hover { background: var(--mint); }
+.conversation-prompt { background: var(--mint); border-color: rgb(55 107 128 / 20%); color: var(--deep); }
+.agent-progress { background: var(--glass); border-color: var(--glass-border); color: var(--ink); }
+.agent-orb { background: var(--lime); color: var(--deep); }
+.agent-progress-steps > span { border-color: rgb(89 134 151 / 26%); color: var(--muted); }
+.agent-dots i { background: var(--accent); }
+
+dialog,
+dialog.profile-dialog {
+  background: var(--glass-strong);
+  border-color: var(--glass-border);
+  box-shadow: var(--shadow);
+  -webkit-backdrop-filter: blur(24px) saturate(1.25);
+  backdrop-filter: blur(24px) saturate(1.25);
+}
+dialog::backdrop { background: rgb(22 48 60 / 48%); backdrop-filter: blur(7px); }
+dialog[open] { animation: dialog-arrive 220ms var(--ease-ui) both; }
+.dialog-close { background: var(--white); color: var(--muted); }
+.dialog-close:hover { background: var(--mint); color: var(--deep); }
+
+.google-entry {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 4vw, 40px);
+  background: var(--paper);
+}
+.google-entry-card { width: min(100%, 470px); padding: 0; border-radius: 28px; }
+.google-entry-card .dialog-content { padding: clamp(25px, 5vw, 42px); }
+.google-entry-card .auth-brand { margin-bottom: 22px; color: var(--deep); }
+.google-entry-card .dialog-content h2 { font: 800 clamp(30px, 6vw, 42px)/1.04 var(--sans); letter-spacing: -.045em; }
+.social-login .btn { min-height: 50px; }
+
+.onboarding-chat {
+  background: var(--paper);
+}
+.onboarding-chat-header,
+.onboarding-chat-panel { animation: page-arrive 360ms var(--ease-ui) both; }
+.onboarding-chat-panel {
+  background: var(--glass);
+  border-color: var(--glass-border);
+  box-shadow: var(--shadow);
+}
+.onboarding-chat-intro,
+.onboarding-chat-composer { border-color: rgb(92 132 148 / 17%); }
+.onboarding-chat-composer { background: var(--glass-strong); }
+.onboarding-chat-bubble,
+.onboarding-chat-user button { background: var(--white); border-color: var(--line); }
+.onboarding-chat-user .onboarding-chat-bubble { background: var(--mint); }
+.onboarding-chat-choices button,
+.profile-options button {
+  transition: transform 160ms var(--ease-ui), background 160ms var(--ease-ui),
+    border-color 160ms var(--ease-ui), box-shadow 160ms var(--ease-ui);
+}
+.onboarding-chat-choices button[aria-pressed=true],
+.profile-options button[aria-pressed=true] { box-shadow: inset 0 0 0 1px rgb(55 107 128 / 10%); }
+.onboarding-chat-choices button:hover,
+.profile-options button:hover { transform: translateY(-1px); }
+.profile-dialog .dialog-inner { background: transparent; }
+.profile-photo { box-shadow: inset 0 1px 0 rgb(255 255 255 / 24%); }
+.profile-wizard { animation: profile-arrive 280ms var(--ease-ui) both; }
+.profile-step-fields { animation: page-arrive 250ms var(--ease-ui) both; }
+.profile-progress button[aria-current]::before { box-shadow: 0 0 0 2px rgb(55 107 128 / 12%); }
+
+.app-layout main > .page { animation: page-arrive 300ms var(--ease-ui) both; }
+.shell > main > .page { padding-top:clamp(14px,2vw,26px); }
+.section-heading h1,.inner-page h1 { font-size:clamp(23px,2.7vw,34px); line-height:1.18; font-weight:500; }
+.section-heading { margin-bottom:12px; }
+.app-layout :is(h1,h2,h3,h4,.btn,.pill,.nav-item,strong) { font-weight:500; }
+.app-layout .sidebar .brand { font-size:18px;font-weight:500;letter-spacing:-.02em; }
+.app-layout .trip-grid :is(.trip-card-text h3,.trip-choice h3) { font-size:17px;font-weight:500; }
+.app-layout .journey-chat .agent-welcome h2 { font-size:clamp(22px,3vw,36px);font-weight:500; }
+.app-layout .agent-workspace .agent-header h1 { font-size:16px;font-weight:500; }
+.app-layout .agent-answer { font-size:14px; }
+.app-layout :is(.agent-answer h3,.journey-itinerary-head h3,.city-brief-points h3) { font-size:15px;font-weight:500; }
+.app-layout .trip-overview-header h1 { font-size:clamp(23px,2.8vw,35px);font-weight:500; }
+.app-layout .trip-overview-intro h2 { font-size:clamp(20px,2.2vw,27px);font-weight:500; }
+.app-layout :is(.trip-room-place-button,.journey-stop-title,.journey-itinerary-day summary,.trip-room-day-summary strong,.trip-overview-meta button,.trip-overview-shortcuts button) { font-weight:500; }
+.app-layout .city-brief-head h2 { font-size:clamp(17px,2.2vw,25px);font-weight:500; }
+.landing-grid { display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:24px;align-items:center; }
+.landing-hero,.landing-features,.landing-discovery { padding-block:96px;border-bottom:1px solid var(--line); }
+.landing-copy { grid-column:span 7;display:grid;justify-items:start;gap:16px;min-width:0; }
+.landing-copy h1 { font-size:clamp(31.25px,4vw,48.83px);line-height:1.15;letter-spacing:-.035em;max-width:20ch; }
+.landing-copy p,.landing-discovery p { max-width:65ch;line-height:1.5; }
+.landing-copy p { color:var(--muted);font-size:16px; }
+.landing-hero-visual { grid-column:span 5;position:relative;min-width:0; }
+.landing-hero-image { width:100%;height:auto;aspect-ratio:1.25;object-fit:cover;border-radius:24px;border:1px solid var(--glass-border); }
+.landing-hero-link { position:absolute;left:12px;bottom:12px;display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--glass-border);border-radius:999px;background:#131318ce;backdrop-filter:blur(14px);color:#fff; }
+.landing-actions { display:flex;flex-wrap:wrap;gap:8px; }
+.landing-prompt { width:min(100%,520px);background:var(--glass-strong);border:1px solid var(--glass-border); }
+.landing-features h2 { grid-column:1/-1; }
+.landing-features h2,.landing-discovery h2 { font-size:24.41px;line-height:1.15; }
+.landing-features .yatra-overview-card { grid-column:span 3;display:grid;grid-template-columns:minmax(0,1fr);gap:0;overflow:hidden;border-radius:24px;background:var(--glass);padding:0;backdrop-filter:blur(16px); }
+.landing-features .yatra-overview-card img { width:100%;height:auto;aspect-ratio:1.65;object-fit:cover; }
+.landing-features .yatra-overview-card > div { display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;padding:12px; }
+.landing-features .yatra-overview-card small { margin-top:3px; }
+.landing-features .yatra-overview-card:nth-of-type(2) .yatra-overview-icon { color:#ffce88;background:#30271d; }
+.landing-features .yatra-overview-card:nth-of-type(3) .yatra-overview-icon { color:#a3dfd4;background:#1b2d2a; }
+.landing-features .yatra-overview-card:nth-of-type(4) .yatra-overview-icon { color:#ffb8c9;background:#302029; }
+@media(max-width:1080px) { .landing-features .yatra-overview-card { grid-column:span 6; } }
+@media(max-width:650px) {
+  .landing-copy,.landing-hero-visual { grid-column:1/-1; }
+  .landing-hero-image { aspect-ratio:1.65; }
+  .landing-features .yatra-overview-card { grid-column:span 12; }
+}
+.app-layout .lede { margin-bottom:12px; }
+.app-layout .discover-section { padding-block:18px; }
+.app-layout .source-pill { color:var(--deep); }
+.app-layout .btn:not(.primary,.danger,.text-btn) { background:var(--glass-strong);border-color:var(--glass-border); }
+.app-layout .btn:not(.primary,.danger,.text-btn):hover { background:var(--mint);border-color:var(--accent); }
+.sidebar .brand-mark { background:var(--primary);color:white;border-color:var(--glass-border); }
+.app-layout :is(.trip-room,.journey-timeline,.journey-place-detail,.agent-source-answer,.agent-composer) {
+  background:var(--glass); border-color:var(--glass-border); backdrop-filter:blur(16px);
+}
+.app-layout :is(.world-search-form,.world-city,.world-search-head,.world-location,.world-message,.prompt,.conversation-prompt),
+.google-entry-card,.onboarding-chat-city .destination-search-input {
+  background:var(--glass);color:var(--ink);border-color:var(--glass-border);
+}
+.app-layout .empty { padding-block:24px; }
+.app-layout :is(.result-scroll-anchor,.trip-overview-subheader,.trip-room-body,.world-results) { scroll-margin-top:18px; }
+.app-layout .trip-overview-room .trip-room-body { padding:clamp(10px,1.5vw,16px); }
+.app-layout .trip-overview-budget .trip-overview-over-budget { color:#ffb4a9; }
+.app-layout .agent-grid { align-content:stretch; }
+.app-layout .journey-chat .agent-welcome { min-height:0; padding-block:clamp(20px,7vh,72px); }
+.app-layout .journey-chat .agent-thread { gap:12px; }
+.app-layout .agent-send,.app-layout .yatra-prompt button { background:var(--primary);color:white; }
+.app-layout .agent-round:not(.agent-send) { color:var(--ink); }
+.app-layout .agent-error,.app-layout .form-error { color:#ffb9b5; }
+.app-layout .trip-room-weather-alert { color:#ffe1ae;background:#3c2b1b;border-color:#745233; }
+.app-layout :is(.agent-user-message,.agent-reply):last-of-type { animation:page-arrive 200ms var(--ease-ui) both; }
+.agent-markdown[data-pending] > :last-of-type::after {
+  content:"";display:inline-block;width:2px;height:1em;margin-inline-start:4px;vertical-align:-.12em;
+  border-radius:2px;background:var(--accent);animation:stream-cursor 820ms step-end infinite;
+}
+.app-layout :is(.journey-itinerary-day,.trip-room-day)[open] > ol { animation:page-arrive 180ms var(--ease-ui) both; }
+@keyframes stream-cursor { 50% { opacity:0; } }
+.buddy-launch { box-shadow: 0 12px 28px rgb(30 54 65 / 20%); transition: transform 180ms var(--ease-ui), box-shadow 180ms var(--ease-ui); }
+.buddy-launch:hover { transform: translateY(-2px); box-shadow: 0 16px 34px rgb(30 54 65 / 25%); }
+#toast { box-shadow: 0 16px 36px rgb(19 46 59 / 22%); }
+
+@keyframes page-arrive {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes dialog-arrive {
+  from { opacity: 0; transform: translateY(8px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes profile-arrive {
+  from { opacity: 0; transform: translateX(5px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (hover: hover) {
+  .destination-card:hover,
+  .trip-card:hover,
+  .yatra-overview-card:hover,
+  .world-result:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 38px rgb(31 65 79 / 13%);
+  }
+  .destination-card,
+  .trip-card,
+  .yatra-overview-card,
+  .world-result { transition: transform 200ms var(--ease-ui), box-shadow 200ms var(--ease-ui); }
+}
+
+@media (max-width: 850px) {
+  .workspace-menu-anchor { display:block; }
+  .shell > main { padding-top:45px;padding-bottom:72px; }
+  .chat-shell > main { padding-top:0; }
+  .chat-shell .agent-header { padding-left:42px; }
+  .mobile-workspace-dock {
+    position:fixed; z-index:3; left:50%; bottom:max(10px,env(safe-area-inset-bottom));
+    transform:translateX(-50%); display:flex; align-items:center; gap:4px; padding:5px;
+    border:1px solid var(--glass-border); border-radius:999px; box-shadow:var(--shadow);
+  }
+  .mobile-workspace-dock > :is(a,button) { display:grid;place-items:center;width:45px;height:43px;border-radius:50%;color:var(--muted); }
+  .mobile-workspace-dock [aria-current=page] { color:white;background:var(--primary); }
+  .chat-shell .journey-chat.agent-workspace { height:calc(100dvh - 72px); }
+  .chat-shell:has(>.sync-notice) .journey-chat.agent-workspace { height:calc(100dvh - 112px); }
+  .topbar { gap: 8px; }
+  .breadcrumb { flex: 1; min-width: 0; gap: 6px; }
+  .breadcrumb strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .top-actions { flex: none; gap: 7px; }
+}
+
+@media (max-width: 780px) {
+  .destination-grid,
+  .trip-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .trip-overview-layout { grid-template-columns:minmax(0,1fr); }
+  .trip-overview-main { order: 0; width: 100%; }
+  .trip-overview-side { display: grid; order: 1; position: static; width: 100%; }
+  .trip-overview-shortcuts { grid-row: auto; }
+  .trip-overview-map-frame { grid-row: auto; height: clamp(230px, 62vw, 330px); }
+  .trip-overview-place { grid-row: auto; }
+  .trip-overview-room .trip-room-tabs { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-inline: contain; }
+  .trip-overview-room .trip-room-tabs button { flex: none; }
+}
+
+@media (max-width: 480px) {
+  .topbar { padding-inline: 9px; }
+  .top-actions .currency { display: none; }
+  .top-actions .btn { min-height: 40px; padding-inline: 10px; }
+  .breadcrumb strong { font-size: 14px; }
+  .google-entry-card { border-radius: 22px; }
+  .onboarding-chat-footnote { max-width: 34ch; }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .sidebar,
+  .topbar,
+  .panel,
+  .empty,
+  .research-form,
+  .world-result,
+  .destination-card,
+  .trip-card,
+  .destination-popover,
+  .onboarding-chat-panel,
+  dialog { background: var(--glass-strong); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-markdown[data-pending] > :last-of-type::after { display:none; }
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

@@ -1,32 +1,27 @@
-@import '@fontsource/nunito/latin-500.css';
-@import '@fontsource/nunito/latin-600.css';
-@import '@fontsource/nunito/latin-700.css';
-@import '@fontsource/nunito/latin-800.css';
-
 .yt-desktop,.yt-sheet {
   --yt-sky:#bbd9ec;
-  --yt-base:#f7fafc;
-  --yt-card:#d3e5ee;
-  --yt-tile:#e2eef4;
+  --yt-base:var(--paper);
+  --yt-card:var(--glass);
+  --yt-tile:var(--mint);
   --yt-slate:#6f9bae;
-  --yt-white:#fff;
+  --yt-white:var(--white);
   --yt-coral:#ff6b5a;
   --yt-amber:#ffb347;
   --yt-warning:#f0645a;
-  --yt-ink:#1b2a33;
-  --yt-muted:#5f7683;
-  --yt-action:#426c7f;
-  --yt-border:rgb(255 255 255 / 60%);
-  --yt-halo:rgb(255 255 255 / 85%);
-  --yt-shade:rgb(72 111 131 / 16%);
+  --yt-ink:var(--ink);
+  --yt-muted:var(--muted);
+  --yt-action:var(--primary);
+  --yt-border:var(--glass-border);
+  --yt-halo:rgb(255 255 255 / 5%);
+  --yt-shade:rgb(0 0 0 / 26%);
   --yt-deep-shadow:rgb(35 77 102 / 28%);
   --yt-card-radius:28px;
   --yt-tile-radius:20px;
   --yt-pill:999px;
   --yt-shadow:-4px -4px 12px var(--yt-halo), 6px 7px 14px var(--yt-shade);
-  --yt-font:Nunito,"Segoe UI",sans-serif;
+  --yt-font:var(--sans);
   color:var(--yt-ink);
-  font:600 15px/1.45 var(--yt-font);
+  font:400 13px/1.5 var(--yt-font);
 }
 .yt-desktop *, .yt-sheet * {box-sizing:border-box}
 .yt-desktop :focus-visible,.yt-sheet :focus-visible {outline:2px solid var(--yt-action);outline-offset:3px}

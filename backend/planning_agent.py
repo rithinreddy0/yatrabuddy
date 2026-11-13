@@ -7,10 +7,11 @@ import logging
 import os
 import re
 import secrets
-from datetime import date
+from datetime import date, timedelta
 from math import floor
-from time import monotonic
+from time import monotonic, time
 from typing import Literal
+from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
@@ -24,7 +25,7 @@ from .catalog import DESTINATIONS
 from .db import Base, transaction
 from .destination_images import destination_images
 from .models import Brief, MealPreference, Pace, SourcedStay, Style, Transport, Trip, WorldwideDraft
-from .nearby import distance_metres, nearby_report
+from .nearby import add_meal_results, distance_metres, nearby_report, transit_passes
 from .locations import compact, destination_guide, find_destinations, is_settlement, lookup
 from .place_search import lookup_places, public_url
 from .public_answers import contextual_query, factual_answer, research_intent, venue_subject, video_answer
@@ -73,10 +74,13 @@ class AgentSession(Base):
 
 
 class PlanningPreferences(BaseModel):
-    interests: list[str] = Field(default_factory=list, max_length=8)
+    interests: list[Literal["Nature", "Culture", "Food", "Adventure", "Relaxation", "Shopping", "Arts & design", "Nightlife"]] | None = Field(default=None, max_length=8)
     style: Style | None = None
     diet: MealPreference | Literal["No restrictions"] | None = None
     pace: Pace | None = None
+    travelers: int | None = Field(default=None, ge=1, le=8)
+    tripDays: int | None = Field(default=None, ge=1, le=5)
+    budget: int | None = Field(default=None, ge=1000, le=10_000_000)
     transport: Transport | None = None
     mobility: Literal["No preference", "Less walking", "Step-free when possible"] | None = None
     homeCity: str | None = Field(default=None, max_length=110)
@@ -95,6 +99,7 @@ class Turn(BaseModel):
     offline: bool = False
     replace: bool = False
     live_only: bool = False
+    replace_interests: bool = False
     preferences: PlanningPreferences | None = None
     live_context: WorldwideDraft | None = None
 
@@ -260,7 +265,7 @@ def destination_in(text):
 
 def city_phrase(value):
     return bool(value.strip() and not re.search(
-        r"\b(?:plan|trip|itinerary|suggest|hello|thanks|show|tell|where|what|please|want|help|days|travellers)\b",
+        r"\b(?:plan|trip|itinerary|suggest|change|switch|hello|thanks|show|tell|where|what|please|want|help|days|travellers)\b",
         value, re.I))
 
 
@@ -292,19 +297,19 @@ async def verify_origin(value, offline):
     return match["name"]
 
 
-def extract(text, brief=None):
+def extract(text, brief=None, *, live=False):
     brief = brief or {}
     clean = text.casefold().strip()
     missing = next((field for field in fields if not brief.get(field)), None)
-    if missing == "origin" and re.fullmatch(r"[a-z][a-z .'-]{1,59}", clean):
+    if not live and missing == "origin" and re.fullmatch(r"[a-z][a-z .'-]{1,59}", clean):
         if not re.match(r"(?:plan|show|go|find|change|surprise|from|what|weather)\b", clean) and " to " not in clean:
             return {"origin": text.strip().title()}
-    if missing in {"days", "people", "budget"} and re.fullmatch(r"[\d,]+", clean):
+    if not live and missing in {"days", "people", "budget"} and re.fullmatch(r"[\d,]+", clean):
         return {missing: int(clean.replace(",", ""))}
-    if missing in {"days", "people"} and clean in count_words:
+    if not live and missing in {"days", "people"} and clean in count_words:
         return {missing: count_words.index(clean)}
     values = {}
-    origin = re.search(r"\bfrom\s+([^\W\d_][\w .’'-]{1,55}?)(?=\s+(?:to|for|with|under|in|and (?:a |the )?budget)\b|[,.!?]|$)", clean)
+    origin = re.search(r"\bfrom\s+([^\W\d_][\w .’'-]{1,55}?)(?=\s+(?:to|for|with|under|in|on|budget|and (?:a |the )?budget)\b|[,.!?]|$)", clean)
     destination_text = clean
     if origin:
         values["origin"] = origin[1].strip().title()
@@ -312,27 +317,43 @@ def extract(text, brief=None):
     elif (pair := re.match(r"^([a-z][a-z .'-]{1,39}?)\s+to\s+(?=[a-z])", clean)) and city_phrase(pair[1]):
         values["origin"] = pair[1].strip().title()
         destination_text = clean[pair.end():]
+        if live:
+            values["destination_name"] = re.split(r"\s+(?:for|with|under|on|budget)\b", text[pair.end():], maxsplit=1, flags=re.I)[0].strip(" .!?")
     destination = "kerala" if "surprise me" in clean else destination_in(destination_text)
     if destination:
         values["destination"] = destination
-    for field, pattern in (("days", r"(\d+)\s*[- ]?days?\b"),
-                           ("people", r"(\d+)\s+(?:travellers?|travelers?|people|members?|adults|friends)\b")):
+    counts = r"-?\d+|" + "|".join(count_words) if live else r"\d+"
+    for field, pattern in (("days", rf"(?<!\w)({counts})\s*[- ]?days?\b"),
+                           ("people", rf"(?<!\w)({counts})\s+(?:travellers?|travelers?|people|members?|adults?|friends?)\b")):
         match = re.search(pattern, clean)
         if match:
-            values[field] = int(match[1]) + (1 if "friend" in match[0] else 0)
-    amount = re.search(r"(?:₹|\brs\.?|\binr|\bbudget(?: of)?|\bunder|\bmake it)\s*([\d,]+)\s*(k)?", clean)
-    if not amount:
-        amount = re.search(r"\b([\d,]+)\s*(k)\b", clean)
+            count = count_words.index(match[1]) if match[1] in count_words else int(match[1])
+            with_friends = "friend" in match[0] and (not live or re.search(r"\b(?:me and|my|with)\s+$", clean[:match.start()]))
+            values[field] = count + bool(with_friends)
+    if live and "people" not in values:
+        if re.search(r"\b(?:solo|just me|on my own)\b", clean):
+            values["people"] = 1
+        elif re.search(r"\b(?:a couple|my partner and i|the two of us)\b", clean):
+            values["people"] = 2
+    amount = re.search(r"(?:₹|\brs\.?|\binr|\bbudget(?: of)?|\bunder|\bmake it)\s*(-?\d+(?:,\d+)*)(?:\s*(k)\b|(?!\d|,\d|\.\d|\s*(?:days?|nights?|people|travell?ers?)\b))", clean)
+    if live and (reduction := re.search(r"(?:₹|\binr\s*|\brs\.?\s*)?\s*(\d+(?:,\d+)*)\s*(k\b)?\s+(?:cheaper|less)\b", clean)):
+        values["budgetReduction"] = int(reduction[1].replace(",", "")) * (1000 if reduction[2] else 1)
+        amount = None
+    elif not amount:
+        amount = re.search(r"(?<![\w.])(-?\d+(?:,\d+)*)\s*(k)\b", clean)
     if amount:
         values["budget"] = int(amount[1].replace(",", "")) * (1000 if amount[2] else 1)
-        if re.search(r"\beach\b|per person", clean):
-            people = values.get("people") or brief.get("people")
-            if not people:
-                raise ValueError("How many travellers should the per-person budget cover?")
+        if re.search(r"\beach\b|per[- ]person", clean[amount.end():]) and not re.search(r"\btotal\b", clean[amount.end():].split(',')[0]):
             values["_per_person"] = values["budget"]
-            values["budget"] *= people
+            people = values.get("people") or brief.get("people")
+            if not people and not live:
+                raise ValueError("How many travellers should the per-person budget cover?")
+            if live:
+                values.pop("budget")
+            else:
+                values["budget"] *= people
     match = re.search(r"\b\d{4}-\d{2}-\d{2}\b", clean)
-    if match:
+    if match and not live:
         values["date"] = date.fromisoformat(match[0]).isoformat()
     for diet in ("No restrictions", "Vegetarian", "Vegan", "Jain", "Halal"):
         if re.search(r"\b" + diet.casefold() + r"\b", clean):
@@ -710,7 +731,7 @@ async def region_cities(client, region):
     return choices
 
 
-async def live_itinerary(intake, turn_started):
+async def live_place_research(intake, turn_started):
     from .place_photos import attach_place_photos
 
     async with httpx.AsyncClient(timeout=5, headers={"User-Agent": agents.USER_AGENT}) as client:
@@ -721,22 +742,64 @@ async def live_itinerary(intake, turn_started):
             name = intake["destination"].split(",", 1)[0].strip().casefold()
             exact = [item for item in matches if item["name"].casefold() == name]
             if not exact:
-                return None, [], [item for item in matches if item.get("kind") == "city"][:5]
+                return None, [], [item for item in matches if item.get("kind") == "city"][:5], "empty"
             location = exact[0]
         intake["location"] = location
         if location.get("kind") == "region":
-            return None, [], await region_cities(client, location)
+            return location, [], await region_cities(client, location), "ready"
         async with asyncio.timeout(max(1, min(13, 17 - (monotonic() - turn_started)))):
             report = await nearby_report(location["id"])
         places = [item.copy() for item in report["places"]]
+        if sum(item["category"] in {"Sight", "Nature", "Activity"} for item in places) < (intake.get("days") or 1):
+            try:
+                async with asyncio.timeout(max(0.1, min(7, 18 - (monotonic() - turn_started)))):
+                    attractions = await lookup_places(location["name"], "attractions", location_id=location["id"],
+                                                      public_only=True, include_photos=False)
+                known = {item["url"] for item in places}
+                for item in attractions.get("places", []):
+                    if (item.get("url") not in known and item.get("category") in {"Sight", "Nature", "Activity"}
+                            and all(isinstance(item.get(axis), (int, float)) for axis in ("lat", "lon"))):
+                        places.append({**item, "distanceMetres": distance_metres(location, item)})
+                        known.add(item["url"])
+            except (TimeoutError, httpx.HTTPError, HTTPException, KeyError, ValueError, TypeError):
+                pass
+        diet = intake.get("diet")
+        if diet and diet not in {"No preference", "No restrictions", "Non-vegetarian"}:
+            try:
+                async with asyncio.timeout(max(0.1, min(3, 17 - (monotonic() - turn_started)))):
+                    places = await add_meal_results({"location": location}, places, diet)
+            except TimeoutError:
+                pass
         try:
-            async with asyncio.timeout(4):
+            async with asyncio.timeout(max(0.1, min(4, 18 - (monotonic() - turn_started)))):
                 await attach_place_photos(client, places, location["name"])
         except (TimeoutError, httpx.HTTPError, ValueError, TypeError):
             pass
-        async with asyncio.timeout(max(1, 23 - (monotonic() - turn_started))):
-            draft = await draft_from_sources(location, places, intake)
-        return draft, places, []
+        return location, places, [], report.get("status", "unavailable")
+
+
+async def date_weather(location, intake):
+    """Return only date-specific forecast data that the provider actually supplied."""
+    if not intake.get("date"):
+        return [], "not_requested", None
+    departure = date.fromisoformat(intake["date"])
+    days = intake.get("days") or 2
+    if departure > date.today() + timedelta(days=15):
+        return [], "unavailable", "Date-specific forecasts are not available that far ahead."
+    try:
+        async with asyncio.timeout(5), httpx.AsyncClient(timeout=4, headers={"User-Agent": agents.USER_AGENT}) as client:
+            result = await agents.weather_agent(client, {"places": [location]}, departure, days)
+    except (TimeoutError, httpx.HTTPError, HTTPException, KeyError, ValueError, TypeError):
+        result = None
+    forecast = result.get("forecast", []) if isinstance(result, dict) else []
+    expected = [(departure + timedelta(days=index)).isoformat() for index in range(days)]
+    by_date = {item.get("date"): item for item in forecast if isinstance(item, dict) and item.get("date")}
+    weather = [by_date[key] for key in expected if key in by_date]
+    if len(weather) == len(expected):
+        return weather, "ready", None
+    if weather:
+        return weather, "partial", f"Forecast available for {len(weather)} of {len(expected)} trip days."
+    return [], "unavailable", "A date-specific forecast could not be verified; weather is unconfirmed."
 
 
 def live_cursor(events):
@@ -744,7 +807,13 @@ def live_cursor(events):
     cursor = 0
     for event in visible_events(events):
         if event.get("itineraryRequest"):
-            history = history[:cursor + 1] + [{"request": event["itineraryRequest"], "draft": event.get("liveDraft")}]
+            request = event["itineraryRequest"]
+            history = history[:cursor + 1] + [{"request": request,
+                                             "draft": event.get("liveDraft") or event.get("previousDraft"),
+                                             "needsBuild": bool(event.get("needsBuild") or event.get("buildConfirmation")),
+                                             "awaitingDestination": bool(event.get("awaitingDestination")),
+                                             "destinationChoices": event.get("destinationChoices", []),
+                                             "question": next_intake_question(request) if request.get("collectTripDetails") else None}]
             cursor += 1
         elif event["kind"] == "undo":
             cursor = max(0, cursor - 1)
@@ -760,12 +829,60 @@ async def guide_answer(query, sections=None):
         return {"query": query, "sections": [], "error": "I couldn’t match that destination. Try adding its country or region."}
     name = query.split(",", 1)[0].strip().casefold()
     location = next((item for item in matches if item["name"].casefold() == name), matches[0])
-    guide = await destination_guide(location)
+    if sections:
+        guide = await destination_guide(location)
+    else:
+        async def guide_photos():
+            try:
+                async with asyncio.timeout(5):
+                    return (await destination_images(location["name"])).get("places", [])[:5]
+            except (TimeoutError, httpx.HTTPError, HTTPException, ValueError, KeyError, TypeError):
+                return []
+
+        guide, photos = await asyncio.gather(destination_guide(location), guide_photos())
+        guide = {**guide, "photos": photos}
     if sections:
         guide["sections"] = [item for item in guide["sections"] if item["title"] in sections]
     if not guide["sections"]:
         guide["error"] = "I couldn’t find a guide for that topic. Try the nearest city or region."
     return {**guide, "query": location["name"]}
+
+
+async def enrich_transport(result, origin, destination, local, known=None):
+    async with httpx.AsyncClient(timeout=5, headers={"User-Agent": agents.USER_AGENT}) as client:
+        async def resolve(name):
+            if not name:
+                return None
+            if known and known["name"].casefold() == name.split(",")[0].casefold():
+                return known
+            matches = await find_destinations(client, name)
+            return next((item for item in matches if item["name"].casefold() == name.split(",")[0].strip().casefold()), None)
+
+        start, end = await asyncio.gather(resolve(origin if not local else None), resolve(destination), return_exceptions=True)
+    if not isinstance(end, dict):
+        return
+
+    async def driving():
+        if not isinstance(start, dict) or start["id"] == end["id"]:
+            return None
+        route = await agents.route_points([start, end])
+        if route:
+            return {"kilometres": route["kilometres"], "minutes": sum(route["legMinutes"]), "estimated": "Road estimate without live traffic"}
+        return {"kilometres": round(distance_metres(start, end) / 1000, 1), "estimated": "Straight-line distance"}
+
+    guide, road, passes = await asyncio.gather(
+        destination_guide(end), driving(),
+        transit_passes(end["id"]) if local else asyncio.sleep(0, result={}),
+        return_exceptions=True,
+    )
+    if isinstance(guide, dict):
+        result["guide"] = {**guide, "sections": [item for item in guide.get("sections", [])
+                                                if item["title"] in {"Getting there", "Getting around"}]}
+    if isinstance(road, dict):
+        result["road"] = road
+    if isinstance(passes, dict):
+        result["passes"] = passes.get("passes", [])
+    result["local"] = local
 
 
 async def model_tool(name, args, state, message):
@@ -884,6 +1001,20 @@ def planning_message(text, brief):
             return True
     return bool(re.search(r"\b(?:days?|travellers?|travelers?|members?|adults?|friends?|budget)\b", clean) and
                 re.search(r"\d|\bbudget\b", clean))
+
+
+def live_plan_request(text):
+    return planning_message(text, {}) or bool(re.match(
+        r"^\s*(?:i|we)(?:['’]d like|\s+(?:want|hope|need|would like))\s+to\s+(?:go|visit|travel|take a trip)\b",
+        text, re.I,
+    ))
+
+
+def explicit_build_request(text):
+    clean = re.sub(r"\s+", " ", text.casefold()).strip()
+    return bool(re.fullmatch(
+        r"(?:(?:build|create|make) (?:(?:my|the|this) )?(?:trip|itinerary)(?: now)?(?:[, ]+(?:and )?save(?: it)?)?|yes[, ]+(?:build|create|make) it)[.! ]*", clean
+    ))
 
 
 def apply_turn(state, turn, values=None, sourced_stay=None):
@@ -1027,7 +1158,6 @@ async def turn_stream(token: str, turn: Turn, request: Request):
         use_gemini = os.getenv("TRAVEL_CHAT_PROVIDER", "groq").strip().lower() == "gemini"
         providers = []
         current, _, _ = live_cursor(active_events)
-        last_event = next(iter(reversed(visible_events(active_events))), {})
         context = turn.live_context if turn.live_only else None
         context_intake = ({"destination": context.name, "origin": context.origin, "days": len(context.days),
                            "people": context.travelers, "date": context.departure, "budget": context.budget,
@@ -1055,17 +1185,20 @@ async def turn_stream(token: str, turn: Turn, request: Request):
             except ImportError:
                 pass
             else:
-                if not direct_lookup or direct_lookup[0] not in {"Images", "Videos", "Weather", "More places"}:
+                if not direct_lookup or direct_lookup[0] not in {"Images", "Videos", "Weather", "More places", "Place search"}:
                     provider_intent = source_intent(turn.text)
             if not provider_intent and re.match(r"^(?:(?:show|find|give)\s+(?:me\s+)?)?(?:(?:a|the)\s+)?(?:local\s+)?(?:travel guide|destination guide|travel tips)\b", message):
                 guide_match = re.search(r"\b(?:in|of|for|to)\s+([^?!.]+)", turn.text, re.I)
                 guide_query = guide_match[1].strip() if guide_match else active_destination
                 if not guide_query:
                     direct_lookup = ("Notice", "Which destination would you like a guide for?")
-        asks_for_plan = planning_message(turn.text, {}) if turn.live_only and message else False
+        asks_for_plan = bool(turn.live_only and message and live_plan_request(turn.text))
+        build_now = turn.live_only and explicit_build_request(turn.text)
         public_research = (research_intent(turn.text, active_destination)
                            if turn.live_only and message and not (provider_intent or guide_query or direct_lookup or asks_for_plan) else None)
-        current_draft = (current or {}).get("draft") or (context.model_dump(mode="json") if context else None)
+        current_draft = (current or {}).get("draft")
+        if context and (not current or current_draft and str(context.id) == current_draft["id"] and context.updated > current_draft["updated"]):
+            current_draft = context.model_dump(mode="json")
         if (turn.live_only and current_draft and not (direct_lookup or provider_intent or guide_query)
                 and re.search(r"\b(?:(?:our|my|the|trip|remaining|left in the) budget|budget(?:[?!. ]*$)|total (?:cost|spent)|how much (?:is left|have we spent)|what (?:does|will) (?:my |this |the )trip cost)\b", message)
                 and re.match(r"^(?:what|how much|show|check|where|is|are|do)\b", message)):
@@ -1084,50 +1217,54 @@ async def turn_stream(token: str, turn: Turn, request: Request):
         intake = None
         if turn.live_only and message and public_research is None and not (direct_lookup or provider_intent or guide_query):
             try:
-                details = extract(turn.text, {"people": previous.get("people")})
-            except ValueError as error:
-                if "per-person" in str(error):
-                    yield event_line({"type": "error", "message": str(error)})
-                    return
+                details = extract(turn.text, live=True)
+            except ValueError:
                 details = {}
             pending_question = next_intake_question(previous) if previous.get("collectTripDetails") else None
             awaiting_field = (pending_question or {}).get("field")
-            waiting_for_destination = bool(last_event.get("awaitingDestination") or awaiting_field == "destination" or (
-                not pending_question and last_event.get("itineraryRequest") and not last_event.get("liveDraft")
-                and not (last_event.get("itineraryRequest") or {}).get("location")
-            ))
+            waiting_for_destination = awaiting_field == "destination" or (current or {}).get("awaitingDestination")
             bare_destination = turn.text.strip(" .?!")
             if (waiting_for_destination and not (direct_lookup or provider_intent or guide_query)
                     and re.fullmatch(r"[^\W\d_][\w .,\-'’]{1,95}", bare_destination)
-                    and not any(field in details for field in ("days", "people", "budget", "date", "origin", "diet", "pace"))
-                    and not re.match(r"^(?:hi|hello|thanks?|what|where|when|why|which|how|no|yes|help|trip preferences|travel on|flexible dates)\b", message)):
+                    and not details.keys() & {"days", "people", "budget", "_per_person", "budgetReduction", "origin", "diet", "pace"}
+                    and not build_now and city_phrase(bare_destination)
+                    and not re.match(r"^(?:hi|hey|thanks?|what|where|when|why|which|how|no|yes|help|trip preferences|travel on|flexible dates|budget|start at|already there)\b", message)):
                 details["replace_destination"] = bare_destination
                 asks_for_plan = True
-            if awaiting_field == "origin" and not details.get("origin") and city_phrase(bare_destination):
-                if not re.match(r"^(?:start at|already there|local itinerary|hello|thanks?|no|yes|budget)\b", message):
+            if (awaiting_field == "origin" and not details.get("origin") and city_phrase(bare_destination)
+                    and re.fullmatch(r"[^\W\d_][\w .,\-'’]{1,95}", bare_destination)
+                    and not details.keys() & {"days", "people", "budget", "_per_person", "budgetReduction", "diet", "pace"}):
+                if not re.match(r"^(?:start at|already there|local itinerary|hello|thanks?|no|yes|budget|flexible dates|travel on|hi|hey)\b", message):
                     details["origin"] = bare_destination
                     details["bare_origin"] = True
-            if awaiting_field in {"days", "people", "budget"} and bare_destination.isdecimal():
-                details[awaiting_field] = int(bare_destination[:10])
+            if awaiting_field in {"days", "people", "budget"} and re.fullmatch(r"-?\d[\d,]{0,10}", bare_destination):
+                details[awaiting_field] = int(bare_destination.replace(",", ""))
             elif awaiting_field in {"days", "people"} and message.strip(" .!?") in count_words:
                 details[awaiting_field] = count_words.index(message.strip(" .!?"))
-            if asks_for_plan and (destination := details.get("destination")):
+            if (asks_for_plan or awaiting_field == "destination") and not details.get("destination_name") and (destination := details.get("destination")):
                 details["destination_name"] = DESTINATIONS[destination]["name"]
             preferences = turn.preferences.model_dump(exclude_none=True) if turn.preferences else {}
             try:
-                intake = update_intake(turn.text, previous, preferences, details)
+                if turn.replace_interests and (not turn.preferences or turn.preferences.interests is None):
+                    yield event_line({"type": "error", "message": "Choose interests before saving your preference changes."})
+                    return
+                intake = update_intake(turn.text, previous, preferences, details,
+                                       replace_interests=turn.replace_interests)
             except ValueError as error:
-                yield event_line({"type": "error", "message": str(error) if "Choose" in str(error) else "Enter a valid calendar date."})
+                reason = str(error)
+                yield event_line({"type": "error", "message": reason if reason.startswith(("Choose", "Tell me")) else "Enter a valid calendar date."})
                 return
             informational = re.match(r"^(?:what|where|when|why|which|who|how|is|are|will|does|do|any|tell me|show|find|recommend|suggest)\b", message)
-            is_trip_update = bool(not informational and (asks_for_plan or pending_question or intake.get("destination") and intake != previous))
+            changed = intake != previous
+            is_trip_update = bool(not informational and (build_now or asks_for_plan or
+                                  changed and (pending_question or current_draft or intake.get("destination"))))
             if is_trip_update:
                 intake["collectTripDetails"] = True
                 observations = []
                 event = {"kind": "message", "text": turn.text, "itineraryRequest": intake}
                 if replaces is not None:
                     event.update(replaces=replaces, original=events[replaces].get("original", replaces))
-                draft, choices = None, []
+                draft, choices, source_status = None, [], "empty"
                 prompt = next_intake_question(intake)
                 if prompt:
                     event.update(answer=prompt["prompt"], intakeQuestion=prompt, answerKind="sourced", tools=[])
@@ -1136,22 +1273,95 @@ async def turn_stream(token: str, turn: Turn, request: Request):
                         return
                     yield event_line({"type": "done", **view([*events, event])})
                     return
-                if not turn.offline:
-                    yield event_line({"type": "tool", "name": "Finding places and photos", "status": "running"})
+                if not intake.get("date"):
+                    intake["flexibleDates"] = True
+                same_destination = current_draft and intake["destination"].casefold() == previous.get("destination", "").casefold()
+                if same_destination:
+                    event["previousDraft"] = current_draft
+                changed_fields = {key for key in intake.keys() | previous.keys() if intake.get(key) != previous.get(key)}
+                if (same_destination and not build_now and not (current or {}).get("needsBuild") and changed_fields
+                        and changed_fields <= {"budget", "budgetOpen", "budgetPerPerson", "collectTripDetails"}):
+                    revised = {**current_draft, "budget": intake.get("budget"), "updated": max(int(time() * 1000), current_draft["updated"] + 1)}
+                    draft = WorldwideDraft.model_validate(revised)
+                elif not turn.offline:
+                    observations = []
+
+                    def start_stage(name, key):
+                        stage = {"id": f"{turn.version}:{key}", "name": name, "status": "running"}
+                        observations.append(stage)
+                        return stage
+
+                    def finish_stage(stage, status, detail=None):
+                        stage["status"] = status
+                        if detail:
+                            stage["detail"] = detail
+                        return event_line({"type": "tool", **stage})
+
+                    research_stage = start_stage("Researching verified places", "research")
+                    yield event_line({"type": "tool", **research_stage})
                     try:
-                        draft, places, choices = await live_itinerary(intake, turn_started)
+                        location, places, choices, source_status = await live_place_research(intake, turn_started)
                     except (TimeoutError, httpx.HTTPError, HTTPException, ValidationError, ValueError, KeyError, TypeError):
-                        places = []
-                    observation = {"name": "Finding places and photos", "status": "done" if places or choices else "fallback"}
-                    observations.append(observation)
-                    yield event_line({"type": "tool", **observation})
+                        location, places, choices, source_status = None, [], [], "unavailable"
+                    research_status = "done" if places or choices else "fallback"
+                    research_detail = None if research_status == "done" else "No verified place results are available right now."
+                    yield finish_stage(research_stage, research_status, research_detail)
+                    draft = None
+                    weather, weather_status, weather_note = [], "not_requested", None
+                    if location and places:
+                        if intake.get("date"):
+                            weather_stage = start_stage("Checking date weather", "weather")
+                            yield event_line({"type": "tool", **weather_stage})
+                            weather, weather_status, weather_note = await date_weather(location, intake)
+                            weather_tool_status = "done" if weather_status == "ready" else "fallback"
+                            yield finish_stage(weather_stage, weather_tool_status, weather_note)
+                        ranking_stage = start_stage("Ranking for fit", "ranking")
+                        yield event_line({"type": "tool", **ranking_stage})
+                        try:
+                            from .trip_intake import ranked_places
+                            ranked = ranked_places(places, intake, location["name"], weather)
+                            yield finish_stage(ranking_stage, "done" if ranked else "fallback",
+                                               None if ranked else "There are no eligible stops for those preferences.")
+                        except (ValueError, KeyError, TypeError):
+                            ranked = []
+                            yield finish_stage(ranking_stage, "fallback", "Could not rank the available places.")
+                        if ranked:
+                            grouping_stage = start_stage("Grouping and timing days", "grouping")
+                            yield event_line({"type": "tool", **grouping_stage})
+                            try:
+                                async with asyncio.timeout(max(1, 23 - (monotonic() - turn_started))):
+                                    draft = await draft_from_sources(location, places, intake, ranked=ranked,
+                                                                     weather=weather, weather_status=weather_status,
+                                                                     weather_note=weather_note)
+                                yield finish_stage(grouping_stage, "done" if draft else "fallback",
+                                                   None if draft else "Could not build a day plan from the verified stops.")
+                            except (TimeoutError, HTTPException, ValidationError, ValueError, KeyError, TypeError):
+                                yield finish_stage(grouping_stage, "fallback", "Could not build a day plan from the verified stops.")
                 if draft:
-                    if context and draft.cityId == context.cityId:
-                        draft = draft.model_copy(update={"id": context.id})
+                    if same_destination and draft.cityId == current_draft["cityId"]:
+                        retained_costs = {str(stop.url): current_draft.get("stopCosts", {})[str(stop.url)]
+                                          for day in draft.days for stop in day if str(stop.url) in current_draft.get("stopCosts", {})}
+                        if draft.travelers != current_draft["travelers"]:
+                            retained_costs = {}
+                        draft = draft.model_copy(update={"id": UUID(current_draft["id"]),
+                                                         "updated": max(draft.updated, current_draft["updated"] + 1),
+                                                         "stopCosts": retained_costs})
+                    event.pop("previousDraft", None)
                     event["liveDraft"] = draft.model_dump(mode="json")
-                    event["answer"] = f"Here’s a {len(draft.days)}-day plan for {draft.name}. I grouped nearby stops and added travel times where available. Choose any stop for photos and details."
-                    if not intake.get("days"):
-                        event["answer"] += " I started with two days; you can change the dates or duration."
+                    if build_now and re.search(r"\bsave\b", message):
+                        event["saveRequested"] = True
+                    if same_destination and changed_fields <= {"budget", "budgetOpen", "budgetPerPerson", "collectTripDetails"} and not observations:
+                        event["answer"] = "I updated the budget target and kept your itinerary and entered costs. Check the budget summary for items that still need a price."
+                    else:
+                        event["answer"] = f"Here’s a {len(draft.days)}-day plan for {draft.name}. I grouped nearby stops and added travel times where available."
+                        if intake.get("flexibleDates"):
+                            event["answer"] += " I used flexible dates. Add your travel dates to check the forecast."
+                        if intake.get("mobility") not in {None, "No preference"}:
+                            event["answer"] += " Check walking and step-free access with each venue before visiting."
+                        open_days = sum(not any(stop.category in {"Sight", "Nature", "Activity", "Shopping"} for stop in day)
+                                        for day in draft.days)
+                        if open_days:
+                            event["answer"] += f" Sightseeing is still open on {open_days} {'day' if open_days == 1 else 'days'}. Use Edit stops to add more places."
                 elif choices:
                     event["destinationChoices"] = choices
                     event["awaitingDestination"] = True
@@ -1165,12 +1375,15 @@ async def turn_stream(token: str, turn: Turn, request: Request):
                 elif (location := intake.get("location")) and location.get("kind") == "region":
                     event["answer"] = f"I found {location['name']}. Which city or town would you like to start from? I’ll keep your trip details and plan nearby stops from there."
                     event["awaitingDestination"] = True
-                elif intake.get("location"):
-                    event["answer"] = "I found the destination, but couldn’t build a route from the available place results. Try again or open the trip builder to choose stops."
-                    event["awaitingDestination"] = True
+                elif intake.get("location") or source_status == "unavailable":
+                    event["answer"] = "I couldn’t build a route from the available place results. Try again or open the trip builder to choose stops."
                 else:
                     event["answer"] = "I couldn’t match that destination. Try adding the country or region, such as the name shown on the map."
                     event["awaitingDestination"] = True
+                if not draft:
+                    event["needsBuild"] = True
+                    if same_destination:
+                        event["answer"] += " Your previous itinerary is still available."
                 event.update(answerKind="sourced", tools=observations)
                 if not save_log(token, raw, [*events, event]):
                     yield event_line({"type": "error", "message": "The trip changed in another tab. Reload to continue."})
@@ -1202,6 +1415,8 @@ async def turn_stream(token: str, turn: Turn, request: Request):
                 if turn.live_only:
                     trip_context = {
                         "preferences": trip_context.get("preferences", {}),
+                        "trip_requirements": previous,
+                        "scheduled_stops": [[place["name"] for place in day] for day in current_draft.get("days", [])] if current_draft else [],
                         "workflow": "Use public lookup tools and suggest selecting real stops in Build itinerary. "
                                     "Group by neighbourhood and opening windows, fit meals to diet, compare door-to-door "
                                     "public transport and ride-hail tradeoffs, and identify costs that require provider quotes.",
@@ -1350,12 +1565,13 @@ async def turn_stream(token: str, turn: Turn, request: Request):
             event.update(answer=fallback, answerKind="fallback")
             yield event_line({"type": "answer", "text": fallback, "answerKind": "fallback"})
         if question and question[0] == "Notice":
-            event["notice"] = question[1]
+            if not (model_answer or providers) or not question[1].startswith("I couldn’t answer that from the available tools."):
+                event["notice"] = question[1]
+                yield event_line({"type": "notice", "message": question[1]})
             if turn.live_only and question[1].startswith("Where would you like to go?"):
                 event["awaitingDestination"] = True
                 if intake and not intake.get("destination"):
                     event["itineraryRequest"] = intake
-            yield event_line({"type": "notice", "message": question[1]})
         if not missing and not turn.live_only:
             options = cards_for(Brief.model_validate({**draft_defaults, **state["brief"]}), step)
         if ((not turn.live_only and not missing and not question and turn.kind not in {"save", "save_draft", "review_draft"})
@@ -1407,13 +1623,18 @@ async def turn_stream(token: str, turn: Turn, request: Request):
                             dates = {"date": intent.get("date") or previous.get("date"), "days": previous.get("days"), "travelers": intent.get("travelers") or previous.get("people")}
                             if intent["kind"] == "stay":
                                 result = stay_sources(destination, hotel=intent.get("hotel"), checkout=intent.get("checkout"), nights=intent.get("nights"), **dates)
+                                if destination and not turn.offline:
+                                    lookup_query = f"{intent['hotel']} in {destination}" if intent.get("hotel") else destination
+                                    result["places"] = await place_answer(lookup_query, "stays", False)
                             else:
                                 location = previous.get("location") if destination == previous.get("destination") else None
-                                result = transport_sources(origin, destination, mode=intent.get("modes") or intent.get("mode"), destination_location=location, local=intent.get("local", False), **dates)
+                                is_local = intent.get("local", False)
+                                result = transport_sources(origin, destination, mode=intent.get("modes") or intent.get("mode"), destination_location=location, local=is_local, **dates)
+                                result["local"] = is_local
                                 if not turn.offline:
                                     try:
-                                        async with asyncio.timeout(7):
-                                            result["guide"] = await guide_answer(destination, {"Getting there", "Getting around"})
+                                        async with asyncio.timeout(14):
+                                            await enrich_transport(result, origin, destination, is_local, location)
                                     except (TimeoutError, httpx.HTTPError, HTTPException, ValueError, KeyError):
                                         pass
                     elif tool_name == "Destination guide":

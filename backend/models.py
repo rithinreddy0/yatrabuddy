@@ -160,6 +160,19 @@ class WorldwidePlace(BaseModel):
     website: HttpUrl | None = None
     openingHours: str | None = Field(default=None, max_length=400)
     publishedPrice: str | None = Field(default=None, max_length=280)
+    rating: float | None = Field(default=None, ge=0, le=5)
+    reviewCount: int | None = Field(default=None, ge=0)
+    priceLevel: int | None = Field(default=None, ge=0, le=4)
+    fitScore: int | None = Field(default=None, ge=0, le=100)
+    fitReasons: list[str] = Field(default_factory=list, max_length=5)
+
+
+class WorldwideWeatherDay(BaseModel):
+    date: CalendarDate
+    low: float
+    high: float
+    code: int = Field(ge=0, le=99)
+    rainProbability: int | None = Field(default=None, ge=0, le=100)
 
 
 LocalMode = Literal["Walk", "Bus", "Metro", "Auto", "Cab"]
@@ -206,6 +219,9 @@ class WorldwideDraft(BaseModel):
     routeGeometry: list[list[tuple[float, float]]] = Field(default_factory=list, max_length=5)
     routeAdvice: str | None = Field(default=None, max_length=600)
     stopCosts: dict[str, int] = Field(default_factory=dict, max_length=25)
+    weather: list[WorldwideWeatherDay] = Field(default_factory=list, max_length=5)
+    weatherStatus: Literal["not_requested", "ready", "partial", "unavailable"] = "not_requested"
+    weatherNote: str | None = Field(default=None, max_length=240)
 
     @model_validator(mode="after")
     def validate_draft(self):

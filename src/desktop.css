@@ -1,13 +1,12 @@
-@import '@fontsource/nunito/latin-500.css';
-@import '@fontsource/nunito/latin-600.css';
-@import '@fontsource/nunito/latin-700.css';
-@import '@fontsource/nunito/latin-800.css';
+@import '@fontsource/poppins/latin-400.css';
+@import '@fontsource/poppins/latin-500.css';
+@import '@fontsource/poppins/latin-600.css';
 
 :root {
   --paper:#f1f7fa;--side:#f7fafc;--white:#fff;--ink:#1b2a33;--muted:#496571;
   --line:#d6e6ee;--forest:#426c7f;--deep:#34586a;--mint:#e2eef4;--lime:#d3e5ee;
   --shadow:-4px -4px 14px rgb(255 255 255 / 78%),7px 10px 22px rgb(52 88 106 / 9%);
-  --sans:Nunito,"Segoe UI",sans-serif;--serif:var(--sans);--sidebar:236px;
+  --sans:Poppins,"Segoe UI",sans-serif;--serif:var(--sans);--sidebar:216px;
   --accent:#6f9bae;--sunset-coral:#ff6b5a;--sunset-amber:#ffb347;
 }
 body {font-family:var(--sans)}

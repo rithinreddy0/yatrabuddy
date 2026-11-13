@@ -7,6 +7,7 @@ import './refine.css'
 import './desktop.css'
 import './dynamics.css'
 import './result-scroll.css'
+import './design-system.css'
 
 createRoot(document.getElementById('app')).render(<App/>)
 

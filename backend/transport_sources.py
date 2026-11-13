@@ -112,6 +112,8 @@ def source_intent(message):
     text = " ".join(message.split()).strip()
     if not text or re.match(r"^(?:please\s+)?(?:plan|build|create|make|draft|change|add|remove|replace)\b", text, re.I):
         return None
+    if re.search(r"\b(?:things to do|places to (?:see|visit)|what to (?:see|do))\b", text, re.I):
+        return None
     requested = [
         mode for mode, words in MODE_WORDS.items()
         if re.search(rf"(?<![\w-])(?:{words})(?![\w-])", text, re.I)
@@ -121,7 +123,7 @@ def source_intent(message):
         r"|(?:getting|travel) (?:there|from|to)|(?:get|go) from|getting around|get around)\b", text, re.I
     ))
     local = bool(re.search(
-        r"\b(?:getting around|get around|local transport(?:ation)?|public transport(?:ation)?|public transit|metro|commut\w+)\b",
+        r"\b(?:getting around|get around|local transport(?:ation)?|public transport(?:ation)?|public transit|metro|commut\w+|(?:one[- ]day|day|transit|travel|bus|metro) pass(?:es)?)\b",
         text, re.I,
     ))
     stay = bool(

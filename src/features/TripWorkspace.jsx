@@ -28,6 +28,35 @@ function dayLabel(departure, index) {
   return formatDate.format(date)
 }
 
+function dateForDay(departure, index) {
+  if (!departure) return null
+  const date = new Date(departure + 'T12:00:00Z')
+  date.setUTCDate(date.getUTCDate() + index)
+  return date.toISOString().slice(0, 10)
+}
+
+function weatherCondition(code) {
+  if (code === 0) return 'Clear'
+  if (code <= 3) return 'Cloudy'
+  if (code <= 48) return 'Fog'
+  if (code <= 57) return 'Drizzle'
+  if (code <= 67) return 'Rain'
+  if (code <= 77) return 'Snow'
+  if (code <= 86) return 'Showers'
+  return 'Thunderstorms'
+}
+
+const rainCodes = new Set([51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99])
+
+function readPinnedDays() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('yatra.trip-day-pins') || '{}')
+    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return {}
+    return Object.fromEntries(Object.entries(saved).map(([id, days]) => [id,
+      Array.isArray(days) ? days.filter(day => Number.isInteger(day) && day >= 0 && day < 5) : []]))
+  } catch { return {} }
+}
+
 function mediaUrl(url) {
   if (!url) return null
   let parsed
@@ -126,11 +155,10 @@ const categoryIcons = {Food:'food', Stay:'bed', Nature:'compass', Activity:'spar
 const itinerarySources = new Set(['Wikipedia', 'Wikivoyage', 'OpenStreetMap'])
 
 function StopThumbnail({place}) {
-  return <div className="trip-room-stop-thumb">{place.photo ? <PlacePhoto place={place}/>
-    : <span className="trip-room-stop-icon"><Icon name={categoryIcons[place.category] || 'pin'} size={23}/></span>}</div>
+  return <div className="trip-room-stop-thumb"><PlacePhoto place={place} fallback/></div>
 }
 
-function PlacePicker({draft, used, title, onClose, onPick, busy, errorText}) {
+function PlacePicker({draft, used, title, onClose, onPick, busy, errorText, excludeUrl}) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)
   const [error, setError] = useState('')
@@ -192,7 +220,8 @@ function PlacePicker({draft, used, title, onClose, onPick, busy, errorText}) {
   const localMatches = (results || []).filter(place => !needle || [place.name, place.category, place.address]
     .some(value => value?.toLocaleLowerCase().includes(needle)))
   const matches = new Map([...localMatches, ...(onlineResults || [])].filter(place => place.category !== 'Stay' &&
-    itinerarySources.has(place.source) && Number.isFinite(place.lat) && Number.isFinite(place.lon) && !used.has(place.url))
+    itinerarySources.has(place.source) && Number.isFinite(place.lat) && Number.isFinite(place.lon) &&
+    place.url !== excludeUrl && !used.has(place.url))
     .map(place => [place.url, place]))
   const candidates = [...matches.values()]
   return <Dialog label={title} className="trip-room-picker" onClose={onClose}>
@@ -213,16 +242,17 @@ function PlacePicker({draft, used, title, onClose, onPick, busy, errorText}) {
     <ul className="trip-room-picker-results">{candidates.slice(0, 30).map(place => <li key={place.url}>
       <StopThumbnail place={place}/>
       <span><strong>{place.name}</strong><small>{place.category} · {place.source}</small></span>
-      <Button disabled={busy} onClick={() => onPick(place)} icon="plus">{busy ? 'Saving…' : 'Add'}</Button>
+      <Button disabled={busy} onClick={() => onPick(place)} icon={excludeUrl ? 'check' : 'plus'}>{busy ? 'Saving…' : excludeUrl ? 'Replace' : 'Add'}</Button>
     </li>)}</ul>
   </Dialog>
 }
 
-function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, busy, ideas, onIdeas}) {
+function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, onReplaceStop, busy, ideas, onIdeas, pinnedDays=[], onTogglePinDay}) {
   const [showDistances, setShowDistances] = useState(true)
-  const [addDay, setAddDay] = useState(null)
+  const [picker, setPicker] = useState(null)
   const [mapDay, setMapDay] = useState(null)
   const [pickerError, setPickerError] = useState('')
+  const [replacing, setReplacing] = useState(false)
   const map = draftMapData(draft)
   const used = new Set(draft.days.flat().map(place => place.url))
   return <div className="trip-room-itinerary">
@@ -230,7 +260,7 @@ function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, busy,
       <h3>Itinerary <small>{draft.days.length} {draft.days.length === 1 ? 'day' : 'days'}</small></h3>
       <div className="trip-room-actions">
         <Button aria-pressed={showDistances} onClick={() => setShowDistances(value => !value)}>{showDistances ? 'Hide distances' : 'Show distances'}</Button>
-        {onEdit && <Button icon="edit" onClick={onEdit}>Edit plan</Button>}
+        {onEdit && <Button icon="edit" disabled={busy} onClick={onEdit}>Edit plan</Button>}
       </div>
     </div>
     <p className="trip-room-muted">Visit times are suggested. Confirm opening hours and prices before you go.</p>
@@ -238,22 +268,49 @@ function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, busy,
       <Icon name="heart" size={20}/><span><strong>Ideas</strong><small>{ideas.length ? `${ideas.length} saved for later` : 'Save places you’re considering'}</small></span>
       <Icon name="chevron" size={16}/>
     </button>
-    {draft.days.map((stops, index) => <details key={index} className="trip-room-day" open>
-      <summary><strong>Day {index + 1}</strong>{draft.departure && <span>{dayLabel(draft.departure, index)}</span>}
-        <small>{stops.length ? stops.slice(0, 2).map(place => place.name).join(' · ') : 'Free time'}</small></summary>
+    {draft.days.map((stops, index) => {
+      const pinned = pinnedDays.includes(index)
+      const schedule = draftSchedule(draft, index)
+      const legs = draft.routes?.[index] || []
+      const travelMinutes = legs.reduce((total, leg) => total + leg.minutes, 0)
+      const travelDistance = legs.reduce((total, leg) => total + leg.kilometres, 0)
+      const enteredCost = stops.reduce((total, place) => total + (draft.stopCosts?.[place.url] ?? 0), 0)
+      const unpricedStops = stops.filter(place => draft.stopCosts?.[place.url] == null).length
+      const timing = schedule.length ? `${visitTime(schedule[0].start)} – ${visitTime(schedule.at(-1).end)}` : 'No visits scheduled'
+      const forecast = draft.weather?.find(item => item.date === dateForDay(draft.departure, index))
+      const weatherText = forecast
+        ? `${weatherCondition(forecast.code)} · ${Math.round(forecast.low)}–${Math.round(forecast.high)}°C${forecast.rainProbability == null ? '' : ` · ${forecast.rainProbability}% rain`}`
+        : draft.weatherStatus === 'not_requested' ? 'Weather not checked' : draft.weatherNote || 'Forecast unavailable for this day'
+      const rainLikely = Boolean(forecast && (rainCodes.has(forecast.code) || forecast.rainProbability >= 60))
+      const outdoorStops = rainLikely ? stops.filter(place => place.category === 'Nature') : []
+      return <details key={index} className="trip-room-day" open={index === 0 || pinned || undefined} data-pinned={pinned || undefined}>
+      <summary><strong>Day {index + 1}</strong><span>{draft.departure ? dayLabel(draft.departure, index) : 'Date flexible'}</span>
+        <small>{stops.length ? stops.slice(0, 2).map(place => place.name).join(' · ') : 'Free time'}</small>
+        {pinned && <small className="trip-room-pinned-badge">Pinned on this device</small>}</summary>
+      <div className="trip-room-day-summary" aria-label={`Day ${index + 1} timing and totals`}>
+        <span><small>Visit window</small><strong>{timing}</strong></span>
+        <span><small>Local travel</small><strong>{legs.length ? `${travelDistance.toFixed(1)} km · ${travelMinutes} min` : 'No route estimate'}</strong></span>
+        <span><small>Entered costs</small><strong>{money(enteredCost)}{unpricedStops ? ` · ${unpricedStops} unpriced` : ''}</strong></span>
+        <span><small>Weather</small><strong>{weatherText}</strong></span>
+      </div>
+      {outdoorStops.length > 0 && <div className="trip-room-weather-alert" role="note">
+        <p>Rain is forecast and may affect {outdoorStops.map(place => place.name).join(', ')}.</p>
+        <Button onClick={onIdeas} icon="heart">Review alternatives</Button>
+      </div>}
       <div className="trip-room-day-tools">
-        {draft.stay && <div className="trip-room-stay"><Icon name="bed" size={16}/>
-          <span><strong>Staying at {draft.stay.name}</strong></span>
-          {draft.stay.website && <SourcePill label="Check availability" url={draft.stay.website}/>}
-        </div>}
-        {stops.length > 0 && <IconButton icon="map" label={`${mapDay === index ? 'Hide' : 'Show'} day ${index + 1} map`}
-          aria-expanded={mapDay === index} onClick={() => setMapDay(mapDay === index ? null : index)}/>}
+        <div className="trip-room-day-controls">
+          {onTogglePinDay && <Button className="trip-room-pin-day" icon="pin" variant={pinned ? 'primary' : 'secondary'}
+            aria-pressed={pinned} disabled={busy} title="This pin is saved in this browser only; it does not lock shared trip changes."
+            onClick={() => onTogglePinDay(index)}>{pinned ? 'Pinned' : 'Pin day'}</Button>}
+          {stops.length > 0 && <IconButton icon="map" label={`${mapDay === index ? 'Hide' : 'Show'} day ${index + 1} map`}
+            aria-expanded={mapDay === index} onClick={() => setMapDay(mapDay === index ? null : index)}/>}
+        </div>
       </div>
       {mapDay === index && <div className="trip-room-day-map"><JourneyMap
         places={map.places.filter(place => place.day === index + 1 || place.category === 'Stay')}
         routes={map.routes.filter(route => route.day === index + 1)}
         onSelect={onPlaceSelect} onClose={() => setMapDay(null)}/></div>}
-      <ol>{draftSchedule(draft, index).map(({place, from, leg, start, end, duration}) => <li key={place.url}>
+      <ol>{schedule.map(({place, from, leg, start, end, duration}) => <li key={place.url}>
         {showDistances && leg && <div className="trip-room-leg">
           <span>{leg.kilometres} km · {leg.minutes} min {leg.method === 'road' ? 'driving estimate' : 'estimated, straight line'}</span>
           {from && <SourcePill label="Directions" url={`https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lon}&destination=${place.lat},${place.lon}`}/>}
@@ -263,33 +320,41 @@ function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, busy,
           <div className="trip-room-stop-copy">
             <div className="trip-room-stop-title"><Icon name={categoryIcons[place.category] || 'pin'} size={15}/>
               {onPlaceSelect ? <button type="button" className="trip-room-place-button" onClick={() => onPlaceSelect(place)}>{place.name}</button> : <strong>{place.name}</strong>}
+              <span className="trip-room-category-badge">{place.category}</span>
+              {Number.isFinite(place.rating) && <span className="trip-room-rating">★ {place.rating.toFixed(1)} / 5{place.reviewCount ? ` · ${place.reviewCount} reviews` : ''}</span>}
             </div>
             <small><Icon name="clock" size={13}/> {visitTime(start)} – {visitTime(end)} · {duration} min suggested</small>
             <small>{draft.stopCosts?.[place.url] != null ? `${money(draft.stopCosts[place.url])} entered group cost`
               : place.publishedPrice ? `Published price: ${place.publishedPrice}` : 'Price to confirm'}</small>
-            {(place.description || place.openingHours) && <details className="trip-room-stop-facts"><summary>What to expect</summary>
-              {place.description && <p>{place.description}</p>}
-              {place.openingHours && <small>Published hours: {place.openingHours}</small>}
-            </details>}
+            {place.address && <small>{place.address}</small>}
+            {place.openingHours && <small>Published hours · {place.openingHours}</small>}
+            {place.description && <p>{place.description}</p>}
           </div>
           <div className="trip-room-stop-actions">
             <SourcePill label={place.source} url={place.url}/>
+            {onReplaceStop && <IconButton icon="edit" label={`Swap ${place.name} on day ${index + 1}`}
+              disabled={busy || replacing} onClick={() => {setPickerError('');setPicker({day:index, replace:place})}}/>}
             {onRemoveStop && used.size > 1 && <IconButton icon="minus" label={`Remove ${place.name} from day ${index + 1}`}
-              disabled={busy} onClick={() => onRemoveStop(index, place)}/>}
+              disabled={busy || replacing} onClick={() => onRemoveStop(index, place)}/>}
           </div>
         </div>
       </li>)}</ol>
       {!draft.days[index].length && <p className="trip-room-muted">Free time</p>}
-      {onAddStop && <Button icon="plus" aria-label={`Add stop to day ${index + 1}`} disabled={busy || stops.length >= 5}
-        onClick={() => {setPickerError('');setAddDay(index)}}>Add stop</Button>}
-    </details>)}
-    {addDay !== null && <PlacePicker draft={draft} used={used} title={`Add a stop to day ${addDay + 1}`} busy={busy}
-      errorText={pickerError} onClose={() => setAddDay(null)} onPick={async place => {
+        {onAddStop && <Button icon="plus" aria-label={`Add stop to day ${index + 1}`} disabled={busy || replacing || stops.length >= 5}
+        onClick={() => {setPickerError('');setPicker({day:index})}}>Add stop</Button>}
+    </details>})}
+    {picker && <PlacePicker key={`${picker.day}:${picker.replace?.url || 'add'}`} draft={draft} used={used} excludeUrl={picker.replace?.url}
+      title={picker.replace ? `Swap ${picker.replace.name} on day ${picker.day + 1}` : `Add a stop to day ${picker.day + 1}`} busy={busy || replacing}
+      errorText={pickerError} onClose={() => setPicker(null)} onPick={async place => {
         try {
           setPickerError('')
-          await onAddStop(addDay, place)
-          setAddDay(null)
+          if (picker.replace) {
+            setReplacing(true)
+            await onReplaceStop(picker.day, picker.replace, place)
+          } else await onAddStop(picker.day, place)
+          setPicker(null)
         } catch (error) {setPickerError(error.message)}
+        finally {setReplacing(false)}
       }}/>}
   </div>
 }
@@ -472,7 +537,7 @@ function InviteDialog({workspace, onClose, onRefresh}) {
 }
 
 export function TripWorkspace({draft, workspaceId, inviteCode, ideas=[], media=[], initialTab='itinerary', initialInvite=false,
-  onPlaceSelect, onShowMap, onEdit, onClose, onJoined, onDraftUpdate}) {
+  onPlaceSelect, onShowMap, onEdit, onClose, onJoined, onDraftUpdate, embedded=false, onTabChange}) {
   const [workspace, setWorkspace] = useState(null)
   const [preview, setPreview] = useState(null)
   const [tab, setTab] = useState(() => tabs.some(([id]) => id === initialTab) ? initialTab : 'itinerary')
@@ -482,10 +547,28 @@ export function TripWorkspace({draft, workspaceId, inviteCode, ideas=[], media=[
   const [inviteOpen, setInviteOpen] = useState(initialInvite)
   const [retry, setRetry] = useState(0)
   const [joinName, setJoinName] = useState('')
+  const [pinnedDaysByTrip, setPinnedDaysByTrip] = useState(readPinnedDays)
   const mutation = useRef(0)
   const reportedDraft = useRef(null)
   const panelId = useId()
   const tabStrip = useRef(null)
+  const currentTripId = workspace?.draft?.id || draft?.id
+  const pinnedDays = currentTripId ? pinnedDaysByTrip[currentTripId] || [] : []
+
+  useEffect(() => {
+    try { localStorage.setItem('yatra.trip-day-pins', JSON.stringify(pinnedDaysByTrip)) }
+    catch { /* Pins still show for this open workspace. */ }
+  }, [pinnedDaysByTrip])
+
+  function togglePinDay(index) {
+    if (!currentTripId) return
+    setPinnedDaysByTrip(previous => {
+      const days = new Set(previous[currentTripId] || [])
+      if (days.has(index)) days.delete(index)
+      else days.add(index)
+      return {...previous, [currentTripId]: [...days].sort((a, b) => a - b)}
+    })
+  }
 
   useEffect(() => {
     const controller = new AbortController()
@@ -589,6 +672,18 @@ export function TripWorkspace({draft, workspaceId, inviteCode, ideas=[], media=[
     }))
   }
 
+  async function replaceStop(index, current, next) {
+    const removed = await removeStop(index, current)
+    if (!removed) throw new Error('The current stop could not be removed. Try again.')
+    try {
+      await addStop(index, next)
+    } catch (failure) {
+      try { await addStop(index, current) }
+      catch { throw new Error(`${failure.message} The original stop could not be restored; refresh the itinerary to check its current state.`) }
+      throw failure
+    }
+  }
+
   const shownDraft = workspace?.draft || draft
   if (!shownDraft && inviteCode) return <section className="trip-room trip-room-join">
     <Icon name="users" size={28}/>
@@ -612,7 +707,7 @@ export function TripWorkspace({draft, workspaceId, inviteCode, ideas=[], media=[
   const active = tabs.findIndex(([value]) => value === tab)
   const group = workspace?.entries || []
   return <section className="trip-room" aria-label={'Trip to ' + shownDraft.name}>
-    <header className="trip-room-header">
+    {!embedded && <header className="trip-room-header">
       <div>
         <h2>Trip to {shownDraft.name}</h2>
         <div className="trip-room-facts">
@@ -627,8 +722,8 @@ export function TripWorkspace({draft, workspaceId, inviteCode, ideas=[], media=[
         {onShowMap && <IconButton icon="map" label="Show trip map" onClick={onShowMap}/>}
         {onClose && <IconButton icon="close" label="Close trip workspace" onClick={onClose}/>}
       </div>
-    </header>
-    <div className="trip-room-tabs" role="tablist" aria-label="Trip workspace sections" ref={tabStrip} onKeyDown={event => {
+    </header>}
+    {!embedded && <div className="trip-room-tabs" role="tablist" aria-label="Trip workspace sections" ref={tabStrip} onKeyDown={event => {
       const next = event.key === 'ArrowRight' ? (active + 1) % tabs.length
         : event.key === 'ArrowLeft' ? (active + tabs.length - 1) % tabs.length
         : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : null
@@ -640,13 +735,20 @@ export function TripWorkspace({draft, workspaceId, inviteCode, ideas=[], media=[
       {tabs.map(([id, label, icon]) => <button key={id} id={panelId + '-' + id} type="button"
         role="tab" aria-selected={id === tab} aria-controls={panelId} tabIndex={id === tab ? 0 : -1}
         onClick={() => {setTab(id); setError(''); revealResult(()=>document.getElementById(panelId))}}><Icon name={icon} size={15}/>{label}</button>)}
-    </div>
-    <div className="trip-room-body" role="tabpanel" id={panelId} aria-labelledby={panelId + '-' + tab} tabIndex={0}>
+    </div>}
+    <div className="trip-room-body" role={embedded ? undefined : 'tabpanel'} id={panelId} aria-labelledby={embedded ? undefined : panelId + '-' + tab} tabIndex={0}>
       {error && <p className="form-error" role="alert">{error} {!workspace && <Button onClick={() => setRetry(value => value + 1)}>Retry</Button>}</p>}
       {connectionError && <p className="form-error" role="status">Can’t refresh the workspace. {connectionError}</p>}
-      {tab === 'itinerary' && <Itinerary draft={shownDraft} onPlaceSelect={onPlaceSelect} onEdit={onEdit} busy={busy}
-        ideas={group.filter(entry => entry.kind === 'idea')} onIdeas={() => {setTab('ideas'); setError(''); revealResult(()=>document.getElementById(panelId))}}
-        onAddStop={workspace?.isOwner ? addStop : undefined} onRemoveStop={workspace?.isOwner ? removeStop : undefined}/>}
+      {tab === 'itinerary' && <Itinerary draft={shownDraft} onPlaceSelect={onPlaceSelect}
+        onEdit={onEdit} busy={busy} pinnedDays={pinnedDays}
+        ideas={group.filter(entry => entry.kind === 'idea')} onIdeas={() => {
+          if (onTabChange) onTabChange('ideas')
+          else {setTab('ideas'); setError(''); revealResult(()=>document.getElementById(panelId))}
+        }}
+        onAddStop={workspace?.isOwner ? addStop : undefined}
+        onRemoveStop={workspace?.isOwner ? removeStop : undefined}
+        onReplaceStop={workspace?.isOwner ? replaceStop : undefined}
+        onTogglePinDay={workspace?.isOwner ? togglePinDay : undefined}/>}
       {tab === 'calendar' && <Calendar draft={shownDraft} onPlaceSelect={onPlaceSelect}/>}
       {!workspace && !['itinerary', 'calendar'].includes(tab) && !error && <p role="status">Opening the trip workspace…</p>}
       {workspace && tab === 'chat' && <GroupChat workspace={workspace} busy={busy} onSave={save} onRemove={remove}

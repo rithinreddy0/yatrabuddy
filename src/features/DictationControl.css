@@ -1,0 +1,9 @@
+.dictation-active,.dictation-active>span,.dictation-button{display:inline-flex;align-items:center;gap:6px}
+.dictation-active{color:var(--deep);font-size:.78rem;font-weight:750;white-space:nowrap}
+.dictation-button{justify-content:center;min-height:38px;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:var(--mint);color:var(--deep)}
+.dictation-wave{display:inline-flex;align-items:center;gap:2px;height:16px}
+.dictation-wave i{width:3px;height:12px;border-radius:3px;background:currentColor;animation:dictation-wave .75s ease-in-out infinite alternate}
+.dictation-wave i:nth-child(2){animation-delay:-.4s}
+.dictation-wave i:nth-child(3){animation-delay:-.2s}
+@keyframes dictation-wave{from{transform:scaleY(.4)}to{transform:scaleY(1)}}
+@media(prefers-reduced-motion:reduce){.dictation-wave i{animation:none}.dictation-wave i:nth-child(2){height:7px}}

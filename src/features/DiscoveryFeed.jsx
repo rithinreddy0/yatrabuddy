@@ -273,6 +273,8 @@ export function SavedDiscoveryPlaces({onPlan, profile}) {
     <DiscoveryRail collection={{title: 'Saved from Explore', icon: Compass}}
       places={places.filter(place => place.photo?.url && !brokenPhotos.has(place.photo.url))}
       matches={places.filter(place => !place.photo?.url || brokenPhotos.has(place.photo.url))} renderCard={renderCard}/>
+    {summary.location && <ReferencePhotos key={summary.location.id || summary.location.name} location={summary.location} grid
+      description="See the area around your saved places. Each photo includes its source and credit."/>}
     {active && <Dialog label={active.name} className="discovery-details-dialog" onClose={() => setKey('')}>
       <PlaceDetails place={active}/>
       <div className="discovery-details-actions">

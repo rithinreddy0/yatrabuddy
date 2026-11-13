@@ -66,8 +66,8 @@ export function TravelNews({catalog,initialDestination,compact=false}) {
       <label>Coverage<select value={days} onChange={event=>{setDays(Number(event.target.value));showResults()}}>{[7,14,30].map(day=><option value={day} key={day}>Last {day} days</option>)}</select></label>
     </div>
     <div ref={results} className="result-scroll-anchor"/>
-    {!compact&&<DestinationBrief location={place} compact><NewsHighlights data={data}/></DestinationBrief>}
-    {!compact&&<ReferencePhotos location={place} description="Destination photos for context. Publisher photos appear with their stories when supplied."/>}
+    {!compact&&<DestinationBrief location={place} topic={{highlights:'overview',transport:'routes',events:'events',conditions:'overview'}[topic]} compact><NewsHighlights data={data}/></DestinationBrief>}
+    {!compact&&<ReferencePhotos key={destination} location={place} grid description="Photos of the destination and surrounding area. Publisher photos appear with their stories."/>}
     {error?<Empty icon="info" title="Travel updates unavailable" description={error} action={<Button onClick={()=>setRefresh(value=>value+1)}>Try again</Button>}/>:!data?<AgentProgress label={'Checking travel coverage for '+place.name} steps={['Travel news','Publishers']}/>:<>
       <p className="research-meta">Coverage via {data.provider} · Retrieved {new Date(data.retrievedAt).toLocaleString()}</p>
       {!!withImages.length&&<PhotoRail title="Stories with photos" count={withImages.length} className="news-photo-rail">{withImages.map(article=><NewsCard article={article} images={article.images} key={article.url}/>)}</PhotoRail>}

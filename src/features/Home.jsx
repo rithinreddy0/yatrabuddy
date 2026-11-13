@@ -5,6 +5,8 @@ import {DestinationSearch} from '../components/DestinationSearch.jsx'
 import {request} from '../api.mjs'
 import {DiscoveryFeed,DiscoveryLoading,DiscoveryWeather,SavedDiscoveryPlaces} from './DiscoveryFeed.jsx'
 import {useDiscoveryShortlist,useSavedDiscoveryPlaces} from './discoveryPlaces.mjs'
+import {ReferencePhotos} from '../components/PhotoRail.jsx'
+import {PlacePhoto} from '../components/PlacePhoto.jsx'
 import {ArrowRight, CalendarDays, ChevronRight, Globe, LocateFixed, Map, Sparkles, Wallet} from 'lucide-react'
 
 export function DestinationCard({place,saved,onSave,onOpen}) {
@@ -32,7 +34,7 @@ function asCity(item) {
   return {...item,id:`geo:${item.id}`,region:[...new Set([item.region,item.country].filter(Boolean))].join(', ')}
 }
 
-export function Home({library,user,onAsk,onResearch,onPlan,destination,onDestination,catalog = []}) {
+export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onDestination,catalog = []}) {
   const [prompt,setPrompt]=useState('')
   const [suggested,setSuggested]=useState(null)
   const [localCity,setLocalCity]=useState(storedCity)
@@ -99,15 +101,43 @@ export function Home({library,user,onAsk,onResearch,onPlan,destination,onDestina
   }
 
   const actions=[
-    ['itinerary',CalendarDays,'Itinerary','See your plans day by day'],
-    ['budget',Wallet,'Budget','Review spending and split costs'],
-    ['sources',Globe,'Travel sources','Check providers and current quotes'],
-    ['discover',Map,'Explore','Find stays, restaurants and places'],
+    ['itinerary',CalendarDays,'Itinerary','See your plans day by day','trip-calendar'],
+    ['budget',Wallet,'Budget','Review your planned and entered costs','travel-journal'],
+    ['sources',Globe,'Travel sources','Find transport and booking providers','rail-transport'],
+    ['discover',Map,'Explore','Find stays, restaurants and places','goa'],
   ]
   return <div className="page yatra-overview discovery-home">
+    <section className="landing-grid landing-hero" aria-labelledby="landing-title">
+      <div className="landing-copy">
+        <h1 id="landing-title">Where do you want to go?</h1>
+        <p>Start with a destination and a budget. Get a day-by-day plan with places to visit, travel times, and a map.</p>
+        <form className="yatra-prompt landing-prompt" onSubmit={event=>{event.preventDefault();if(prompt.trim())onAsk(prompt.trim())}}>
+          <label className="yatra-sr-only" htmlFor="yatra-home-prompt">Ask YatraBuddy</label>
+          <Sparkles size={18} aria-hidden="true"/>
+          <input id="yatra-home-prompt" value={prompt} onChange={event=>setPrompt(event.target.value)} maxLength={260}
+            placeholder="Plan 3 days in Goa for two under ₹25,000"/>
+          <button type="submit" aria-label="Send to AI Assistant" disabled={!prompt.trim()}><ArrowRight size={19}/></button>
+        </form>
+        <div className="landing-actions">
+          <Button variant="primary" icon="chat" onClick={()=>onNavigate('chat')}>Start planning</Button>
+          <a className="btn secondary" href="#trips">Open My Trips <ChevronRight size={16}/></a>
+        </div>
+      </div>
+      <div className="landing-hero-visual">
+        <img className="landing-hero-image" src="/images/kerala.jpg" alt="" fetchPriority="high" width="640" height="420"/>
+        <a className="landing-hero-link" href="#discover"><Map size={17}/> Explore destinations <ChevronRight size={16}/></a>
+      </div>
+    </section>
+    <section className="landing-grid landing-features" aria-labelledby="landing-tools">
+      <h2 id="landing-tools">Plan, explore, and get around</h2>
+      {actions.map(([route,ActionIcon,title,description,photo])=><a href={'#'+route} className="yatra-overview-card" key={route}>
+        <img src={`/images/${photo}.jpg`} alt="" width="768" height="512" loading="lazy" decoding="async"/>
+        <div><span className="yatra-overview-icon"><ActionIcon size={18}/></span><span><strong>{title}</strong><small>{description}</small></span><ChevronRight size={16}/></div></a>)}
+    </section>
+    <section className="landing-discovery" aria-label="Destination discovery">
     <header className="discovery-home-intro">
       <div className="discovery-home-heading">
-        <h1>{city ? <>For {user ? user.name.split(' ')[0] : 'you'} <span>near {city.name}</span></> : 'Explore near you'}</h1>
+        <h2>{city ? <>Explore <span>{city.name}</span></> : 'Explore near you'}</h2>
         <p>{chosen || !city ? 'Find places to go, eat and stay.' : library.profile?.homeCity ? 'Near your profile city' : 'Suggested city · search to explore somewhere else'}</p>
       </div>
       <div className="discovery-home-search">
@@ -125,22 +155,14 @@ export function Home({library,user,onAsk,onResearch,onPlan,destination,onDestina
       <Button icon="plus" variant="primary" onClick={()=>city?onPlan('',city.id,city,false,{selected:shortlist}):onPlan()}>Plan a trip</Button>
       <Button variant="text-btn" icon="arrow" onClick={()=>onResearch('overview')}>Destination research and weather</Button>
     </div>
-    <section className="yatra-overview-actions" aria-label="Travel workspace">
-      {actions.map(([route,ActionIcon,title,description])=><a href={'#'+route} className="yatra-overview-card" key={route}><span className="yatra-overview-icon"><ActionIcon size={21}/></span><span><strong>{title}</strong><small>{description}</small></span><ChevronRight size={17}/></a>)}
     </section>
-    <form className="yatra-prompt discovery-home-prompt" onSubmit={event=>{event.preventDefault();if(prompt.trim())onAsk(prompt.trim())}}>
-      <label className="yatra-sr-only" htmlFor="yatra-home-prompt">Ask YatraBuddy</label>
-      <Sparkles size={21} aria-hidden="true"/>
-      <input id="yatra-home-prompt" value={prompt} onChange={event=>setPrompt(event.target.value)} maxLength={260}
-        placeholder={city ? `Ask YatraBuddy about ${city.name}…` : 'Ask YatraBuddy about your next trip…'}/>
-      <button type="submit" aria-label="Send to AI Assistant" disabled={!prompt.trim()}><ArrowRight size={19}/></button>
-    </form>
   </div>
 }
 export function Discover({catalog,library,onSave,onOpen,onPlan,savedOnly}) {
   const [filter,setFilter]=useState('All places')
   const [query,setQuery]=useState('')
   const savedPlaces=useSavedDiscoveryPlaces()
+  const [photoCity,setPhotoCity]=useState('')
   const found=catalog.filter(place=>(!savedOnly||library.saved.includes(place.id))&&(filter==='All places'||place.theme===filter)&&
     (place.name+' '+place.region+' '+place.tagline).toLowerCase().includes(query.toLowerCase()))
   return <div className="page inner-page"><div className="eyebrow"><span/> {savedOnly?'YOUR SHORTLIST':'DESTINATION GUIDE'}</div><h1>{savedOnly?'Saved places':'Explore destinations'}</h1>
@@ -148,6 +170,12 @@ export function Discover({catalog,library,onSave,onOpen,onPlan,savedOnly}) {
     {!savedOnly&&<><div className="search"><Icon name="search"/><input aria-label="Search destinations" placeholder="Search destinations" value={query} onChange={event=>setQuery(event.target.value)}/></div><div className="filters">{themes.map(theme=><Pill key={theme} active={filter===theme} onClick={()=>setFilter(theme)}>{theme}</Pill>)}</div></>}
     {savedOnly && <SavedDiscoveryPlaces onPlan={onPlan} profile={library.profile}/>}
     {found.length?<DestinationGrid places={found} saved={library.saved} onSave={onSave} onOpen={onOpen}/>:(!savedOnly||!savedPlaces.length)&&<Empty icon={savedOnly?'heart':'search'} title={savedOnly?'No saved places yet':'No destinations found'} description={savedOnly?'Use the heart on a place card to save it here.':'Try another search or theme.'}/>}
+    {savedOnly && found.length > 0 && <section className="discover-section">
+      <label>Photos for saved destinations<select value={found.some(place=>place.id===photoCity)?photoCity:found[0].id} onChange={event=>setPhotoCity(event.target.value)}>
+        {found.map(place=><option key={place.id} value={place.id}>{place.name}</option>)}
+      </select></label>
+      <ReferencePhotos key={photoCity||found[0].id} location={found.find(place=>place.id===photoCity)||found[0]} grid/>
+    </section>}
   </div>
 }
 export function Trips({library,catalog,onPlan,onOpen,onDelete,onOpenDraft,onDeleteDraft}) {
@@ -158,7 +186,9 @@ export function Trips({library,catalog,onPlan,onOpen,onDelete,onOpenDraft,onDele
     return <article className="trip-card" key={trip.id}><button className="trip-photo" aria-label={'Open '+place.name} onClick={()=>onOpen(trip.id)}><img src={'/images/'+place.image+'.jpg'} alt=""/></button><div className="trip-card-text"><div><h3>{place.name}</h3><p>{trip.brief.days} days · {trip.brief.people} travelers · {money(trip.brief.budget)} budget</p></div><IconButton icon="trash" label={'Delete '+place.name+' trip'} onClick={()=>onDelete(trip)}/></div><Button variant="text-btn" icon="arrow" onClick={()=>onOpen(trip.id)}>Open itinerary</Button></article>
   })}</div>:!library.drafts?.length&&<Empty icon="trip" title="A trip starts with an idea" description="Build an itinerary and it will be ready here." action={<Button variant="primary" onClick={()=>onPlan()}>Plan your first trip</Button>}/>}
   {!!library.drafts?.length&&<section className="discover-section"><div className="section-heading"><h2>Worldwide drafts</h2></div><div className="trip-grid">{[...library.drafts].sort((a,b)=>b.updated-a.updated).map(draft=><article className="panel trip-choice" key={draft.id}>
-    <div className="eyebrow"><Icon name="globe" size={16}/> {draft.country}</div><h3>{draft.name}</h3><p>{draft.days.length} {draft.days.length===1?'day':'days'} · {draft.days.flat().length} stops</p>
+    <div className="trip-list-photos">{[draft.stay,...draft.days.flat()].filter(Boolean).sort((a,b)=>Number(Boolean(b.photo?.url))-Number(Boolean(a.photo?.url))).slice(0,3).map(place=><PlacePhoto key={place.url} place={place} compact fallback/>)}</div>
+    <div className="eyebrow"><Icon name="globe" size={16}/> {[draft.region!==draft.name&&draft.region,draft.country].filter(Boolean).join(' · ')}</div><h3>{draft.name}</h3><p>{draft.days.length} {draft.days.length===1?'day':'days'} · {draft.days.flat().length} stops · {draft.travelers} {draft.travelers===1?'traveler':'travelers'}</p>
+    <p>{draft.departure||'Flexible dates'}{draft.budget!=null&&` · ${money(draft.budget)} group budget`}{draft.stay&&` · ${draft.stay.name}`}</p>
     <div className="trip-choice-actions"><Button icon="arrow" onClick={()=>onOpenDraft(draft.id)}>Open draft</Button><IconButton icon="trash" label={'Delete '+draft.name+' draft'} onClick={()=>onDeleteDraft(draft)}/></div>
   </article>)}</div></section>}</div>
 }
