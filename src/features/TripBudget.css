@@ -1,0 +1,64 @@
+:root { --budget-over: #ff9b8c; --budget-over-bg: rgb(255 155 140 / 12%); }
+:root[data-theme="light"] { --budget-over: #b3261e; --budget-over-bg: rgb(179 38 30 / 8%); }
+.trip-budget { gap: 14px; }
+.trip-budget h3 { margin: 6px 0 0; font-size: 17px; }
+.trip-budget h3 small { color: var(--muted); font-weight: 600; }
+.trip-budget-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.trip-budget-tile {
+  display: grid; gap: 2px; min-width: 0; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--glass-strong);
+}
+.trip-budget-tile small { color: var(--muted); font-weight: 700; }
+.trip-budget-tile strong { font-size: clamp(18px, 2.2vw, 24px); line-height: 1.2; overflow-wrap: anywhere; }
+.trip-budget-tile span { color: var(--muted); font-size: 12.5px; }
+.trip-budget-tile[data-tone="over"] strong, .trip-budget-over { color: var(--budget-over); }
+.trip-budget-tile[data-tone="good"] strong { color: var(--forest); }
+.trip-budget-progress { width: 100%; height: 8px; accent-color: var(--forest); }
+.trip-budget-warnings { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.trip-budget-warnings li {
+  display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px;
+  border-radius: 10px; background: var(--budget-over-bg); color: var(--ink);
+}
+.trip-budget-note { margin: 0; font-size: 13.5px; }
+.trip-budget-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+.trip-budget-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.trip-budget-table caption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.trip-budget-table :is(th, td) { padding: 8px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+.trip-budget-table :is(thead th, tbody th) { text-align: left; }
+.trip-budget-table thead th { color: var(--muted); font-size: 12.5px; font-weight: 700; }
+.trip-budget-table tbody tr:last-child :is(th, td) { border-bottom: 0; }
+.trip-budget-table tr[data-over] { background: var(--budget-over-bg); }
+.trip-budget-table small { color: var(--muted); }
+.trip-budget-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.trip-budget-form {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+  padding: 12px; border: 1px solid var(--line); border-radius: 12px;
+}
+.trip-budget-form label { display: grid; gap: 5px; min-width: 0; font-weight: 700; }
+.trip-budget-form label small { color: var(--muted); font-weight: 500; }
+.trip-budget-form :is(input, select) { min-width: 0; min-height: 42px; }
+.trip-budget-form fieldset { min-width: 0; margin: 0; border: 1px solid var(--line); border-radius: 10px; }
+.trip-budget-form > .btn { justify-self: start; }
+.trip-budget-wide, .trip-budget-kind, .trip-budget-form > .trip-budget-actions { grid-column: 1 / -1; }
+.trip-budget-kind, .trip-budget-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.trip-budget-category-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.trip-budget-category-inputs label { font-weight: 600; font-size: 13.5px; }
+.trip-budget-list-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px; }
+.trip-budget-list-head label { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+.trip-budget-expenses { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.trip-budget-expenses li {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px;
+}
+.trip-budget-expenses li > div { display: grid; gap: 2px; min-width: 0; }
+.trip-budget-expenses li strong { overflow-wrap: anywhere; }
+.trip-budget-expenses small { color: var(--muted); overflow-wrap: anywhere; }
+.trip-budget-amount { font-weight: 800; white-space: nowrap; }
+.trip-budget-expenses li[data-kind="refund"] .trip-budget-amount { color: var(--forest); }
+.trip-budget-settle { display: grid; gap: 6px; }
+.trip-budget-settle ul { margin: 0; padding-left: 18px; }
+@media (max-width: 560px) {
+  .trip-budget-form { grid-template-columns: minmax(0, 1fr); padding: 10px; }
+  .trip-budget-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .trip-budget-table :is(th, td) { padding: 7px 8px; }
+}

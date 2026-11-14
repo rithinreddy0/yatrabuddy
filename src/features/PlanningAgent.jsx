@@ -242,7 +242,8 @@ function PlannerTimeline({draft, catalog, onPlace, onSave, onEdit, saved, onAdd,
             <div className="journey-stop-meta"><span>{place.category}</span>{Number.isFinite(place.rating) && <span className="trip-room-rating">★ {place.rating.toFixed(1)} / 5{place.reviewCount ? ` · ${place.reviewCount} reviews` : ''}</span>}{place.publishedPrice && <strong className="travel-price">{place.publishedPrice}</strong>}<SourceLink url={place.url}>{place.source || 'Source'}</SourceLink></div>
             <GoogleMapsLink place={place} region={draft.name}/>
             {place.openingHours && <small>Published hours · {place.openingHours}</small>}
-            {stopReasons(place).length > 0 && <small className="journey-stop-why">Why this stop: {stopReasons(place).join(' · ')}</small>}
+            {stopReasons(place).length > 0 && <small className="journey-stop-why">Why this stop: {stopReasons(place).join(' · ')}
+              {Number.isFinite(place.fitScore) && <span title="YatraBuddy's own fit for your trip, from your interests, distance and source quality. Not a public rating."> · YatraBuddy match {Math.round(place.fitScore)}/100</span>}</small>}
           </div>
           <JourneyPlacePhoto place={place} onPlace={onPlace}/>
         </li>)}</ol>}

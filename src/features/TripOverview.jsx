@@ -12,6 +12,7 @@ import {draftMapData, JourneyMap, mapPlaceId} from './JourneyMap.jsx'
 import {PlaceDetails} from './PlaceDetails.jsx'
 import {TripTransport} from './TripTransport.jsx'
 import {TripWorkspace} from './TripWorkspace.jsx'
+import {TripBudget} from './TripBudget.jsx'
 import {draftBudget, draftPreferences, tripCalendar} from './tripOverview.mjs'
 import './TripOverview.css'
 import {DictationControl} from './DictationControl.jsx'
@@ -30,7 +31,7 @@ const shortcuts = [
   ['ideas', 'Ideas', 'heart'],
   ['calendar', 'Calendar', 'calendar'],
   ['transport', 'Transport', 'plane'],
-  ['budget', 'Costs', 'wallet'],
+  ['budget', 'Budget & expenses', 'wallet'],
   ['stays', 'Find a stay', 'bed'],
   ['packing', 'Packing list', ClipboardList],
   ['journal', 'Journal & notes', NotebookPen],
@@ -58,9 +59,9 @@ function TravelBudget({draft}) {
   const [selected, setSelected] = useState(0)
   const active = Math.min(selected, dayCosts.length - 1)
   const balance = draft.budget == null ? null : draft.budget - entered
-  return <section className="trip-overview-glass trip-overview-budget" aria-label="Trip budget">
+  return <section className="trip-overview-glass trip-overview-budget" aria-label="Stop entry costs by day">
     <div className="trip-overview-section-head">
-      <div><h2>Trip budget</h2><p>Entered costs for the group</p></div>
+      <div><h2>Stop entry costs by day</h2><p>Costs entered on itinerary stops</p></div>
       <Icon name="wallet" size={23}/>
     </div>
     <div className="trip-overview-budget-total">
@@ -240,7 +241,7 @@ function PrintItinerary({draft}) {
   </section>
 }
 
-export function TripOverview({draft, initialSection, onEdit, onAsk, onPreferences, onBack}) {
+export function TripOverview({draft, initialSection, onEdit, onAsk, onPreferences, onSaveDraft, onBack}) {
   const modeKey = `yatra.travel-active.${draft.id}`
   const [section, setSection] = useState(() => {
     if (initialSection === 'invite') return 'chat'
@@ -411,7 +412,7 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
         </header>}
         {section === 'media' && <TripPhotoReferences key={active.id} draft={active} stops={stops} onSelect={select}/>}
         {section === 'ideas' && <DestinationBrief location={active} compact/>}
-        {section === 'budget' && <TravelBudget draft={active}/>}
+        {section === 'budget' && <><TripBudget draft={active} onSave={onSaveDraft} onOpenBookings={() => open('bookings')}/><TravelBudget draft={active}/></>}
         {section === 'preferences' && <PreferencesEditor key={active.id + ':' + active.updated} draft={active} save={updatePreferences} onClose={() => open('itinerary')}/>}
         {section === 'transport' && <div className="trip-overview-glass trip-overview-section"><TripTransport draft={active} onAsk={onAsk && (text => onAsk(text, active.id))}/></div>}
         {section === 'stays' && <StayOptions draft={active} nearby={nearby} onSelect={select} onEdit={onEdit} retry={() => setAttempt(value => value + 1)}/>}

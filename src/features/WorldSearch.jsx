@@ -15,15 +15,13 @@ import {summarizePlaces} from './travelSummary.mjs'
 
 const categories=[
   {id:'all',label:'Explore',icon:'map',title:'Find anywhere'},
-  {id:'hotels',label:'Hotels',icon:'bed',title:'Find hotels worldwide'},
-  {id:'stays',label:'Stays',icon:'trip',title:'Find a place to stay'},
+  {id:'stays',label:'Stays & hotels',icon:'bed',title:'Find a place to stay'},
   {id:'attractions',label:'Places to visit',icon:'pin',title:'Find places to visit'},
   {id:'food',label:'Food',icon:'fork',title:'Find places to eat'},
 ]
 const examples={
   all:['Kyoto, Japan','Barcelona, Spain','Cape Town, South Africa'],
-  hotels:['Hotels in Lisbon','Hotels in Tokyo'],
-  stays:['Resorts in Bali','Guesthouses in Rome'],
+  stays:['Hotels in Lisbon','Guesthouses in Rome','Resorts in Bali'],
   attractions:['Museums in Paris','Places to visit in Cape Town'],
   food:['Restaurants in Singapore','Cafés in Melbourne'],
 }
@@ -174,7 +172,8 @@ function searchParams(criteria,pageToken){
 }
 
 export function WorldSearch({initialCategory='all',initialQuery='',initialDestination,profile,onPlan}){
-  const category=categories.find(item=>item.id===initialCategory)||categories[0]
+  // Hotels and stays were two filters that ran the same search; old #/hotels links open the merged one.
+  const category=categories.find(item=>item.id===(initialCategory==='hotels'?'stays':initialCategory))||categories[0]
   const [draft,setDraft]=useState(initialQuery||initialDestination?.name||'')
   const [criteria,setCriteria]=useState(()=>({query:draft,category:category.id,sort:'relevance',minRating:'',
     location:initialDestination?{...initialDestination,id:Number(initialDestination.id.slice(4))}:null,revision:0}))

@@ -12,8 +12,24 @@ const dateFormat = new Intl.DateTimeFormat(undefined, {dateStyle: 'medium', time
 const passSource = 'https://www.tgsrtc.telangana.gov.in/reservation-marketing-schemes'
 const intercityModes = [['Flights', 'Flights'], ['Rail', 'Trains'], ['Intercity bus', 'Buses'], ['Driving','Driving'], ['Ride-hail','Private rides']]
 
+const bookingTypes = {Flights:'Flight', Rail:'Train', 'Intercity bus':'Bus', Driving:'Car or cab', 'Ride-hail':'Car or cab'}
+
 function RouteSearch({draft, result, onSearch, onAsk, quotes, searching}) {
   const [mode, setMode] = useState('All')
+  const [tracked, setTracked] = useState({})
+  async function track(option) {
+    setTracked(current => ({...current, [option.url]:'saving'}))
+    try {
+      const room = await request('trip-workspaces', {method:'POST', body:draft})
+      const route = [draft.origin, draft.name].filter(Boolean).join(' → ')
+      await request(`trip-workspaces/${room.id}/entries`, {method:'POST', body:{kind:'booking', status:'suggested',
+        title:`${option.name} · ${route}`.slice(0, 220), url:option.url, bookingType:bookingTypes[option.mode] || 'Other',
+        notes:'Saved from transport options. Not booked.'}})
+      setTracked(current => ({...current, [option.url]:'saved'}))
+    } catch (error) {
+      setTracked(current => ({...current, [option.url]:error.message || 'Could not save'}))
+    }
+  }
   const [pinned, setPinned] = useState([])
   const providers = result?.data?.arrival?.providers || []
   const picks = providers.filter(provider => pinned.includes(provider.url))
@@ -54,6 +70,9 @@ function RouteSearch({draft, result, onSearch, onAsk, quotes, searching}) {
             setPinned(previous => previous.includes(option.url) ? previous.filter(url => url !== option.url) : [...previous, option.url])}>
             {pinned.includes(option.url) ? 'Unpin' : 'Pin to compare'}
           </Button>
+          <Button variant="text-btn" icon={tracked[option.url] === 'saved' ? 'check' : 'trip'} disabled={['saving', 'saved'].includes(tracked[option.url])}
+            onClick={() => track(option)}>{tracked[option.url] === 'saved' ? 'Saved to bookings as an option' : 'Save to bookings'}</Button>
+          {tracked[option.url] && !['saving', 'saved'].includes(tracked[option.url]) && <small role="status">{tracked[option.url]}</small>}
         </div>) : <p>No provider found for this route.</p>}
       </article>
     })}</div>}

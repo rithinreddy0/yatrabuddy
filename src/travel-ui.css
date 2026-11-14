@@ -262,6 +262,14 @@
 }
 .trip-room-booking-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin:0; }
 .trip-room-booking-fields [data-wide] { grid-column:1/-1; }
+.trip-room-booking-status { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:0; }
+.trip-room-booking-status span { padding:3px 9px; border-radius:999px; font-size:12.5px; font-weight:800; background:var(--mint); color:var(--deep); }
+.trip-room-booking-status small { color:var(--muted); }
+.trip-room-booking-status[data-status="confirmed"] span { background:rgb(84 196 140 / 22%); color:#9ff0c6; }
+.trip-room-booking-status[data-status="cancelled"] span, .trip-room-booking-status[data-status="refunded"] span { background:rgb(255 155 140 / 16%); color:#ffb3a8; }
+:root[data-theme="light"] .trip-room-booking-status[data-status="confirmed"] span { color:#1d6b45; }
+:root[data-theme="light"] .trip-room-booking-status[data-status="cancelled"] span, :root[data-theme="light"] .trip-room-booking-status[data-status="refunded"] span { color:#9b2c22; }
+.trip-room-booking-status[data-status="unset"] span { background:transparent; border:1px dashed var(--line); color:var(--muted); }
 .trip-room-booking-fields dt { color:var(--muted); font-size:.8em; }
 .trip-room-booking-fields dd { margin:2px 0 0; padding:5px 7px; border-radius:6px; background:var(--white); white-space:pre-wrap; overflow-wrap:anywhere; }
 .trip-room-booking-search { padding:5px 9px; min-height:34px; max-width:100%; }
@@ -599,3 +607,30 @@ main h1[tabindex="-1"]:focus { outline: none; box-shadow: none; }
   .wiki-source-arrow { width: 40px; height: 40px; }
   .journey-stop-title { min-height: 36px; padding-block: 6px; text-align: left; }
 }
+
+/* Destination guide: trip essentials */
+.guide-essentials { display:grid; gap:12px; }
+.guide-essentials h2 { margin:0; }
+.guide-essentials-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr)); gap:10px; }
+.guide-essentials article { display:grid; align-content:start; gap:6px; min-width:0; padding:12px; border:1px solid var(--line); border-radius:12px; background:var(--glass-strong); }
+.guide-essentials h3 { display:flex; gap:7px; align-items:center; margin:0; font-size:15.5px; }
+.guide-essentials p { margin:0; }
+.guide-essentials small { color:var(--muted); }
+.guide-essentials article > .btn { justify-self:start; }
+.guide-climate { display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:3px; margin:4px 0 0; padding:0; list-style:none; }
+.guide-climate li { display:grid; justify-items:center; gap:2px; min-width:0; padding:3px 0; border-radius:6px; }
+.guide-climate li[data-best] { background:var(--mint); }
+.guide-climate-bar { width:60%; height:34px; border-radius:3px; background:linear-gradient(to top, #3d8fe0 var(--rain), transparent var(--rain)); outline:1px solid var(--line); }
+.guide-climate strong { font-size:11px; }
+.guide-climate small { font-size:10px; }
+.guide-from { display:flex; flex-wrap:wrap; gap:8px; align-items:end; }
+.guide-from label { display:grid; gap:4px; flex:1 1 140px; min-width:0; font-weight:700; }
+.guide-from input { min-height:42px; min-width:0; }
+
+/* Transport comparison */
+.transport-compare ol { display:grid; gap:6px; margin:0; padding-left:20px; }
+.transport-compare li { display:grid; gap:2px; }
+.transport-compare li small { color:var(--muted); }
+.transport-compare .filters { margin:2px 0 6px; }
+.news-impact { margin:4px 0; font-size:13.5px; color:var(--ink); }
+.news-impact strong { color:var(--forest); }

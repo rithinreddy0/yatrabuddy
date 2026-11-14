@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from . import agents, auth, conversation, locations, nearby, news, partners, place_search, planning_agent, transport_quotes, trip_workspace, voice, yatra
 from .catalog import CATALOG
 from .city_briefing import router as city_briefing_router
+from .climate import router as climate_router
 from .transport_sources import router as transport_router
 from .db import Base, Library, engine, transaction
 from .source_cache import SourceCache, source_result
@@ -39,12 +40,13 @@ app = FastAPI(title="Wayfarer API", version="1.0.0", lifespan=lifespan)
 road_cache = SourceCache()
 PUBLIC_API_PATHS = {"/api/health", "/api/session", "/api/auth/config", "/api/auth/firebase", "/api/logout"}
 PUBLIC_BROWSE_GET = {"/api/destinations", "/api/locations", "/api/locations/reverse", "/api/city-briefing",
-                     "/api/news", "/api/places/search", "/api/places/media"}
+                     "/api/news", "/api/places/search", "/api/places/media", "/api/climate"}
 PUBLIC_LOCATION = re.compile(r"/api/locations/[0-9]+(?:/(?:nearby|weather|briefing|guide))?")
 app.include_router(auth.router)
 app.include_router(partners.router)
 app.include_router(locations.router)
 app.include_router(city_briefing_router)
+app.include_router(climate_router)
 app.include_router(nearby.router)
 app.include_router(place_search.router)
 app.include_router(conversation.router)

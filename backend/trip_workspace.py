@@ -27,6 +27,10 @@ WORKSPACE_FILE_LIMIT = 48 * 1024 * 1024
 TextValue = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=220)]
 Notes = Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)]
 Kind = Literal["idea", "booking", "message", "media"]
+# Opening a provider page never confirms anything: travellers move a booking forward themselves.
+BookingStatus = Literal["suggested", "link_opened", "pending", "confirmed", "cancelled", "refunded"]
+BookingType = Literal["Flight", "Train", "Bus", "Stay", "Activity", "Car or cab", "Other"]
+Reference = Annotated[str, StringConstraints(strip_whitespace=True, max_length=60)]
 
 
 class Workspace(Base):
@@ -116,6 +120,10 @@ class EntryInput(BaseModel):
     license: TextValue | None = None
     licenseUrl: HttpUrl | None = None
     credit: Notes = ""
+    status: BookingStatus | None = None
+    bookingType: BookingType | None = None
+    reference: Reference = ""
+    refundAmount: int | None = Field(default=None, ge=0, le=10_000_000)
 
 
 def principal(request: Request, response: Response | None = None):
@@ -413,6 +421,12 @@ def validate_entry(data: EntryInput, uploading=False):
         raise HTTPException(422, "Set a booking date and enter the time at the booking location.")
     if data.kind == "message" and not data.notes:
         raise HTTPException(422, "Enter a message.")
+    if data.kind != "booking" and (data.status or data.bookingType or data.reference or data.refundAmount is not None):
+        raise HTTPException(422, "Only bookings have a status, type, reference or refund.")
+    if data.refundAmount is not None and data.status not in ("cancelled", "refunded"):
+        raise HTTPException(422, "Record a refund on a cancelled or refunded booking.")
+    if data.refundAmount is not None and data.amount is not None and data.refundAmount > data.amount:
+        raise HTTPException(422, "A refund cannot be larger than the amount paid.")
     if data.kind != "message" and not data.title:
         raise HTTPException(422, "Give this item a title.")
     if data.kind == "media" and not data.url and not uploading:
