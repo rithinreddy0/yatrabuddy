@@ -1,5 +1,5 @@
 import React, {useEffect,useState} from 'react'
-import {AgentProgress,Brand,Button,Dialog,Pill} from '../components/UI.jsx'
+import {AgentProgress,Brand,Button,Dialog,Icon,Pill} from '../components/UI.jsx'
 import {request} from '../api.mjs'
 import {money} from '../planner.mjs'
 
@@ -28,7 +28,7 @@ const googleErrors={
   'auth/account-exists-with-different-credential':'Sign in with the method originally used for this email address.',
 }
 
-export function Account({user,onClose,onLogin,onLogout,required=false}) {
+export function Account({user,onClose,onLogin,onLogout,required=false,page=false}) {
   const [register,setRegister]=useState(false)
   const [pending,setPending]=useState(null)
   const [error,setError]=useState('')
@@ -106,22 +106,80 @@ export function Account({user,onClose,onLogin,onLogout,required=false}) {
       <Button variant="text-btn" disabled={Boolean(pending)} onClick={()=>{setRegister(value=>!value);setError('')}}>{register?'Sign in instead':'Create an account'}</Button></>}
     </>}
   </div>
-  if(required)return <main className="google-entry"><section className="panel google-entry-card" aria-label="Sign in to YatraBuddy">{panel}</section></main>
+  if(required||page)return <main className="google-entry"><section className="panel google-entry-card" aria-label="Sign in to YatraBuddy">
+    <Button variant="text-btn" icon="back" onClick={onClose}>Back to Home</Button>{panel}</section></main>
   return <Dialog onClose={onClose} label="YatraBuddy account">{panel}</Dialog>
 }
-export function Preferences({style,onChange,user,onAccount,profile,onEditProfile,onResetProfile}) {
+function AccountDetails({user,onIdentity,onSignOut}) {
+  const [details,setDetails]=useState(null)
+  const [error,setError]=useState('')
+  const [notice,setNotice]=useState('')
+  const [busy,setBusy]=useState(false)
+  const [retry,setRetry]=useState(0)
+  useEffect(()=>{
+    const controller=new AbortController()
+    setDetails(null)
+    setError('')
+    request('account',{signal:controller.signal}).then(setDetails).catch(error=>{
+      if(!controller.signal.aborted)setError(error.message)
+    })
+    return ()=>controller.abort()
+  },[user.id,retry])
+  async function save(event){
+    event.preventDefault()
+    const body=Object.fromEntries(new FormData(event.currentTarget))
+    setBusy(true);setError('');setNotice('')
+    try{
+      const next=await request('account',{method:'PUT',body})
+      setDetails(next)
+      onIdentity(next)
+      setNotice('Account details saved.')
+    }catch(error){setError(error.message)}
+    finally{setBusy(false)}
+  }
+  return <section className="panel settings-card"><div className="settings-card-heading"><Icon name="users"/><div>
+    <h2>Account information</h2><p>Manage your display name and private contact details.</p></div></div>
+    {!details&&!error&&<AgentProgress label="Loading account information"/>}
+    {details&&<form className="settings-fields" onSubmit={save}>
+      <label>Display name<input name="name" autoComplete="name" value={details.name} maxLength={70} required onChange={e=>setDetails({...details,name:e.target.value})}/></label>
+      <label>Username<input name="username" autoComplete="username" value={details.username} maxLength={40} pattern={'[A-Za-z0-9_.\\-]*'} onChange={e=>setDetails({...details,username:e.target.value})}/></label>
+      <label>Email address<input value={details.email} type="email" readOnly/></label>
+      <label>Phone number <small>Optional</small><input name="phone" type="tel" autoComplete="tel" value={details.phone} maxLength={32} onChange={e=>setDetails({...details,phone:e.target.value})}/></label>
+      <div className="travel-actions"><Button type="submit" variant="primary" icon="check" disabled={busy}>{busy?'Saving…':'Save details'}</Button>
+        <Button icon="logout" disabled={busy} onClick={()=>onSignOut().catch(error=>setError(error.message))}>Sign out</Button></div>
+    </form>}
+    {notice&&<p role="status">{notice}</p>}
+    {error&&<p className="form-error" role="alert">{error}</p>}
+    {!details&&error&&<Button onClick={()=>setRetry(value=>value+1)}>Retry</Button>}
+  </section>
+}
+
+export function Preferences({style,onChange,user,onAccount,profile,onEditProfile,onResetProfile,theme,onThemeChange,initialTab,onIdentity,onSignOut}) {
   const details=profile?[
     ['Preferred name',profile.preferredName],['Departure city',profile.homeCity],
     ['Travel group',profile.travelGroup==='Any'?'It varies':profile.travelGroup],['Group size',profile.travelers],
     ['Trip length',profile.tripDays===1?'1 day':profile.tripDays+' days'],['Typical group budget',money(profile.budget)],
     ['Accommodation',profile.stayPreferences?.join(', ')],['Food',profile.diet],
     ['Pace',profile.pace],['Transport',profile.transport],['Mobility',profile.mobility],
-    ['Interests',profile.interests.join(', ')],['Trip notes',profile.notes],
+    ['Interests',profile.interests?.join(', ')],['Trip notes',profile.notes],
   ].filter(([,value])=>value):[]
-  return <div className="page inner-page"><h1>Preferences</h1><p className="lede">YatraBuddy uses your preferences to tailor trip ideas and activities.</p>
-    <section className="panel preference-panel"><h2>Travel profile</h2>
+  const account=initialTab==='account'
+  return <div className="page inner-page settings-page"><header className="settings-header">
+    <h1>{account?'Account':'Preferences'}</h1><p>{account?'Your YatraBuddy profile and contact details.':'Set up YatraBuddy for the way you travel.'}</p>
+    <nav aria-label="Settings"><a className="btn secondary" href="#preferences" aria-current={!account?'page':undefined}><Icon name="settings"/> Preferences</a>
+      <a className="btn secondary" href="#account" aria-current={account?'page':undefined}><Icon name="users"/> Account</a></nav>
+  </header>
+    {account&&user?<AccountDetails key={user.id} user={user} onIdentity={onIdentity} onSignOut={onSignOut}/>:<>
+    <section className="panel settings-card"><div className="settings-card-heading"><Icon name="settings"/><div><h2>Appearance</h2><p>Choose a color theme for this device.</p></div></div><div className="filters" aria-label="Color theme">
+      {['system','light','dark'].map(value=><Pill key={value} active={theme===value} onClick={()=>onThemeChange(value)}>
+        {value[0].toUpperCase()+value.slice(1)}
+      </Pill>)}
+    </div></section>
+    <section className="panel settings-card"><div className="settings-card-heading"><Icon name="trip"/><div><h2>Travel profile</h2><p>Defaults for new itineraries.</p></div></div>
       {profile?<dl className="profile-preview">{details.map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>:<p className="lede">Save the preferences you usually plan around, including your departure city, budget, and interests.</p>}
       <div className="dialog-buttons"><Button variant="primary" icon="edit" onClick={onEditProfile}>{profile?'Edit travel profile':'Set up my profile'}</Button>{profile&&<Button onClick={onResetProfile}>Clear profile</Button>}</div>
     </section>
-    <section className="panel preference-panel"><h2>Travel style</h2><div className="filters">{styles.map(item=><Pill key={item} active={(style||'Balanced')===item} onClick={()=>onChange(item)}>{item}</Pill>)}</div></section><Button onClick={onAccount}>{user?'Manage account':'Sign in to sync'}</Button></div>
+    <section className="panel settings-card"><h2>Travel style</h2><div className="filters">{styles.map(item=><Pill key={item} active={(style||'Balanced')===item} onClick={()=>onChange(item)}>{item}</Pill>)}</div></section>
+    {user?<a className="btn secondary" href="#account">Manage account</a>:<Button onClick={onAccount}>Sign in to sync</Button>}
+    </>}</div>
 }

@@ -66,6 +66,9 @@
 .journey-map-title strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .journey-map-title small { display: block; margin-top: 1px; color: var(--map-muted); font-size: 11px; }
 .journey-map-title .icon { color: #91e2d1; }
+.journey-map[data-compact-controls] .journey-map-top { justify-content:flex-end; top:8px; right:8px; left:8px; }
+.journey-map[data-compact-controls] .journey-map-days { top:8px; left:8px; max-width:calc(100% - 135px); }
+.journey-map[data-compact-controls] .journey-map-days button { padding:4px 6px; font-size:11px; }
 
 .journey-map-controls {
   display: flex;

@@ -207,6 +207,18 @@ class ChatPublicTest(unittest.TestCase):
             self.assertEqual(result["road"]["minutes"], 680)
             self.assertEqual(result["guide"]["sections"][0]["title"], "Getting there")
 
+    def test_transport_chat_preserves_explicit_departure_and_returns_quotes(self):
+        future = (date.today() + timedelta(days=2)).isoformat()
+        quotes = {"transit": {"source": "Google Routes", "status": "ready", "options": []}}
+        with (patch("backend.planning_agent.enrich_transport", new=AsyncMock(side_effect=ValueError)),
+              patch("backend.transport_quotes.transport_quotes", new=AsyncMock(return_value=quotes)) as lookup):
+            _, event = self.turn(f"Compare local transport from Secunderabad Station to Charminar, Hyderabad on {future} at 10:30 am")
+        self.assertEqual(event["tools"][0]["result"]["quotes"], quotes)
+        args, kwargs = lookup.await_args
+        self.assertEqual(args, ("Secunderabad Station", "Charminar, Hyderabad"))
+        self.assertTrue(kwargs["local"])
+        self.assertEqual(kwargs["departure"].isoformat(), future + "T10:30:00+05:30")
+
     def test_more_like_these_excludes_previously_shown_places(self):
         second = {**PLACE, "name": "Golconda", "url": "https://en.wikipedia.org/wiki/Golconda"}
         with patch("backend.planning_agent.lookup_places", new=AsyncMock(side_effect=[LOOKUP_RESULT, {**LOOKUP_RESULT, "places": [PLACE, second]}])):

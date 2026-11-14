@@ -1,11 +1,10 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react'
-import {BedDouble, ChevronLeft, ChevronRight, CloudSun, Compass, Heart, Landmark, MapPin, Minus, Mountain, Plus, Utensils} from 'lucide-react'
+import {BedDouble, CloudSun, Compass, Heart, Landmark, MapPin, Minus, Mountain, Plus, Utensils} from 'lucide-react'
 import {AgentProgress, Button, Dialog, Pill} from '../components/UI.jsx'
 import {PlacePhoto} from '../components/PlacePhoto.jsx'
 import {request} from '../api.mjs'
 import {JourneyMap, mapPlaceId} from './JourneyMap.jsx'
 import {PlaceDetails} from './PlaceDetails.jsx'
-import {ReferencePhotos,rememberAreaPhotos} from '../components/PhotoRail.jsx'
 import {DestinationBrief} from '../components/CityBrief.jsx'
 import {PlaceSummary} from '../components/PlaceSummary.jsx'
 import {summarizePlaces} from './travelSummary.mjs'
@@ -23,14 +22,13 @@ const collections = [
   {key: 'stays', title: 'Hotels & stays', filter: 'Stays', icon: BedDouble, categories: ['Stay']},
 ]
 
-export function DiscoveryCard({place, saved, selected, onOpen, onSave, onSelect, onPhotoError}) {
+export function DiscoveryCard({place, saved, selected, onOpen, onSave, onSelect}) {
   const distance = Number.isFinite(place.distanceMetres)
     ? `${(place.distanceMetres / 1000).toLocaleString(undefined, {maximumFractionDigits: 1})} km from center` : ''
   const rating = Number.isFinite(place.rating) ? place.rating.toFixed(1) : null
   const [interest, score] = Object.entries(placeInterestScores(place)).sort((a, b) => b[1] - a[1])[0]
-  const withPhoto = Boolean(place.photo?.url)
-  return <article className={'discovery-card' + (!withPhoto ? ' discovery-card-compact' : '')}>
-    {withPhoto && <div className="discovery-card-media"><PlacePhoto place={place} hideUnavailable onUnavailable={onPhotoError}/></div>}
+  return <article className="discovery-card">
+    <div className="discovery-card-media"><PlacePhoto place={place} lookup hideUnavailable onOpen={onOpen}/></div>
     <div className="discovery-card-caption">
       <h4><button type="button" onClick={onOpen}>{place.name}</button></h4>
       {rating && <strong className="discovery-rating" aria-label={`${rating} out of 5 traveler rating`}>★ {rating}</strong>}
@@ -93,35 +91,15 @@ export function useNearbyDiscovery(locationId, attempt = 0, meal) {
 }
 
 function DiscoveryRail({collection, places, matches, renderCard}) {
-  const rail = useRef(null)
-  const [navigation, setNavigation] = useState({back: false, next: false})
   const Icon = collection.icon
-  useEffect(() => {
-    const node = rail.current
-    if (!node) return
-    const update = () => setNavigation({back: node.scrollLeft > 2, next: node.scrollLeft + node.clientWidth < node.scrollWidth - 2})
-    update()
-    const observer = new ResizeObserver(update)
-    observer.observe(node)
-    node.addEventListener('scroll', update, {passive: true})
-    return () => { observer.disconnect(); node.removeEventListener('scroll', update) }
-  }, [places.length])
-  function move(direction) {
-    const node = rail.current
-    node.scrollBy({left: direction * Math.max(180, node.clientWidth * 0.74), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'})
-  }
   return <section className="discovery-collection" aria-label={collection.title}>
     <header className="discovery-collection-head">
       <h3><Icon size={19}/>{collection.title}</h3>
-      {(navigation.back || navigation.next) && <div className="discovery-rail-navigation">
-        <button type="button" aria-label={`Previous ${collection.title.toLowerCase()}`} disabled={!navigation.back} onClick={() => move(-1)}><ChevronLeft size={18}/></button>
-        <button type="button" aria-label={`Next ${collection.title.toLowerCase()}`} disabled={!navigation.next} onClick={() => move(1)}><ChevronRight size={18}/></button>
-      </div>}
     </header>
-    {!!places.length && <div className="discovery-rail" ref={rail}>{places.map(place => renderCard(place, false))}</div>}
+    {!!places.length && <div className="discovery-rail">{places.map(renderCard)}</div>}
     {!!matches.length && <details className="discovery-more" open={places.length ? undefined : true}>
       <summary>{places.length ? 'More listings' : 'Place listings'} <span>{matches.length}</span></summary>
-      <div className="discovery-text-list">{matches.map(place => renderCard(place, true))}</div>
+      <div className="discovery-text-list">{matches.map(renderCard)}</div>
     </details>}
   </section>
 }
@@ -142,37 +120,30 @@ export function DiscoveryWeather({cityId}) {
   </a>
 }
 
-export function DiscoveryFeed({location, profile, onPlan, onAsk}) {
+export function DiscoveryFeed({location, profile, onPlan, onAsk, onRequireAccount}) {
   const [attempt, setAttempt] = useState(0)
   const [sort, setSort] = useState('For you')
   const [category, setCategory] = useState('all')
-  const [mapOpen, setMapOpen] = useState(false)
+  const [mapOpen, setMapOpen] = useState(true)
   const [mapFocus, setMapFocus] = useState(null)
   const [placeKey, setPlaceKey] = useState('')
   const [status, setStatus] = useState('')
-  const [brokenPhotos, setBrokenPhotos] = useState(() => new Set())
   const collectionStart=useRef(null)
+  const mapToggle=useRef(null)
   const cityId = String(location.id).replace(/^geo:/, '')
   const {report, error, photosPending} = useNearbyDiscovery(cityId, attempt)
   const saved = useSavedDiscoveryPlaces()
   const shortlist = useDiscoveryShortlist(cityId)
   const places = report?.places || []
-  useEffect(()=>{
-    if(!report?.places?.length)return
-    rememberAreaPhotos(location.name,report.places.filter(place=>place.photo?.url&&place.photo?.sourceUrl).map(place=>({...place.photo,title:place.name,nearby:place.photo.kind==='nearby'})),location.lat,location.lon)
-  },[report,location.name,location.lat,location.lon])
   const ranked = useMemo(() => rankDiscoveryPlaces(places, sort, profile?.interests || []), [places, sort, profile?.interests])
   const activePlace = ranked.find(place => discoveryPlaceKey(place) === placeKey)
   const activeCollection = collections.find(item => item.key === category)
   const visible = activeCollection ? ranked.filter(place => activeCollection.categories.includes(place.category)) : ranked
-  const hasIllustration = place => place.photo?.url && !brokenPhotos.has(place.photo.url)
-  const missingCategoryPhotos = report && !photosPending && visible.length > 0 && (activeCollection ? !visible.some(hasIllustration) : collections.some(collection => {
-    const group = visible.filter(place => collection.categories.includes(place.category))
-    return group.length > 0 && !group.some(hasIllustration)
-  }))
+  const hasPhoto = place => place.photo?.url && place.photo.kind !== 'nearby'
   const sorts = ['For you', 'Nearest', 'Nature', 'Culture', 'Adventure', 'Rating']
 
   function toggle(place) {
+    if(onRequireAccount){onRequireAccount();return}
     const added = toggleDiscoveryShortlist(cityId, place)
     setStatus(added ? `${place.name} added to trip shortlist.` : `${place.name} removed from trip shortlist.`)
   }
@@ -180,11 +151,10 @@ export function DiscoveryFeed({location, profile, onPlan, onAsk}) {
     setPlaceKey(discoveryPlaceKey(place))
     setMapFocus(place)
   }
-  function renderCard(place, textOnly) {
+  function renderCard(place) {
     const key = discoveryPlaceKey(place)
-    return <DiscoveryCard key={key} place={textOnly ? {...place, photo: null} : place} onOpen={() => selectPlace(place)}
-      onPhotoError={() => setBrokenPhotos(current => new Set([...current, place.photo?.url]))}
-      saved={saved.some(item => discoveryPlaceKey(item) === key)} onSave={() => toggleDiscoverySaved(place, location)}
+    return <DiscoveryCard key={key} place={place} onOpen={() => selectPlace(place)}
+      saved={!onRequireAccount&&saved.some(item => discoveryPlaceKey(item) === key)} onSave={() => onRequireAccount?onRequireAccount():toggleDiscoverySaved(place, location)}
       selected={shortlist.some(item => discoveryPlaceKey(item) === key)} onSelect={() => toggle(place)}/>
   }
   return <section className="discovery-feed" aria-label={`Places near ${location.name}`}>
@@ -197,10 +167,10 @@ export function DiscoveryFeed({location, profile, onPlan, onAsk}) {
         <label>Sort <select value={sort} onChange={event => setSort(event.target.value)}>
           {sorts.map(value => <option key={value} disabled={value === 'Rating' && !places.some(place => Number.isFinite(place.rating))}>{value}</option>)}
         </select></label>
-        <Button icon="map" aria-expanded={mapOpen} onClick={() => setMapOpen(value => !value)}>{mapOpen ? 'Close map' : 'Map'}</Button>
+        <Button ref={mapToggle} icon="map" aria-expanded={mapOpen} onClick={() => setMapOpen(value => !value)}>{mapOpen ? 'Hide map' : 'Show map'}</Button>
       </div>
     </div>
-    {shortlist.length > 0 && <div className="discovery-shortlist" role="region" aria-label="Trip shortlist">
+    {!onRequireAccount && shortlist.length > 0 && <div className="discovery-shortlist" role="region" aria-label="Trip shortlist">
       <details>
         <summary>{shortlist.length} {shortlist.length === 1 ? 'place' : 'places'} for this trip</summary>
         <ul>{shortlist.map(place => <li key={discoveryPlaceKey(place)}>{place.name}<Button icon="minus" variant="text-btn" onClick={() => toggle(place)} aria-label={`Remove ${place.name} from trip shortlist`}>Remove</Button></li>)}</ul>
@@ -216,13 +186,10 @@ export function DiscoveryFeed({location, profile, onPlan, onAsk}) {
           <p>{error || 'Nearby sources are temporarily unavailable.'}</p><Button onClick={() => setAttempt(value => value + 1)}>Retry search</Button>
         </div>}
         {photosPending && <DiscoveryLoading photos/>}
-        {missingCategoryPhotos && <ReferencePhotos location={report.location || location} loadingLabel={false}
-          description={`Photos from around ${location.name}. Individual listings below may have their own photos in the place details.`}/>}
         {!!visible.length && collections.filter(item => !activeCollection || item.key === category).map(item => {
           const matches = visible.filter(place => item.categories.includes(place.category))
-          const illustrated = place => place.photo?.url && !brokenPhotos.has(place.photo.url)
-          return matches.length ? <DiscoveryRail key={item.key} collection={item} places={matches.filter(illustrated)}
-            matches={matches.filter(place => !illustrated(place))} renderCard={renderCard}/> : null
+          return matches.length ? <DiscoveryRail key={item.key} collection={item} places={matches.filter(hasPhoto)}
+            matches={matches.filter(place => !hasPhoto(place))} renderCard={renderCard}/> : null
         })}
         {report && report.status !== 'unavailable' && !visible.length && <div className="discovery-message" role="status">
           <p>{category === 'all' ? `Public sources returned no listings near ${location.name}.` : 'Public sources returned no listings for this category.'}</p>
@@ -233,14 +200,14 @@ export function DiscoveryFeed({location, profile, onPlan, onAsk}) {
         </p>}
       </div>
       {mapOpen && <div className="discovery-map-panel"><JourneyMap center={report?.location || location} places={visible} selectedId={mapFocus && mapPlaceId(mapFocus)}
-        onSelect={place => place && selectPlace(place)} onClose={() => setMapOpen(false)}/></div>}
+        onSelect={place => place && selectPlace(place)} onClose={() => {setMapOpen(false); mapToggle.current?.focus()}}/></div>}
     </div>
     {category==='all'&&<DestinationBrief location={location} compact/>}
     {activePlace && <Dialog label={activePlace.name} className="discovery-details-dialog" onClose={() => setPlaceKey('')}>
-      <PlaceDetails place={activePlace} onAdd={toggle} added={shortlist.some(item => discoveryPlaceKey(item) === placeKey)}
+      <PlaceDetails key={placeKey} place={activePlace} initialTab="media" onAdd={toggle} added={shortlist.some(item => discoveryPlaceKey(item) === placeKey)}
         onShowMap={() => {setMapOpen(true);setMapFocus(activePlace);setPlaceKey('')}}/>
       <div className="discovery-details-actions">
-        <Button icon="heart" aria-pressed={saved.some(item => discoveryPlaceKey(item) === placeKey)} onClick={() => toggleDiscoverySaved(activePlace, location)}>
+        <Button icon="heart" aria-pressed={!onRequireAccount&&saved.some(item => discoveryPlaceKey(item) === placeKey)} onClick={() => onRequireAccount?onRequireAccount():toggleDiscoverySaved(activePlace, location)}>
           {saved.some(item => discoveryPlaceKey(item) === placeKey) ? 'Unsave place' : 'Save place'}
         </Button>
         <Button icon="sparkle" onClick={() => onAsk(`What should I know before visiting ${activePlace.name} in ${location.name}?`)}>Ask about this place</Button>
@@ -252,7 +219,6 @@ export function DiscoveryFeed({location, profile, onPlan, onAsk}) {
 export function SavedDiscoveryPlaces({onPlan, profile}) {
   const places = useSavedDiscoveryPlaces()
   const [key, setKey] = useState('')
-  const [brokenPhotos, setBrokenPhotos] = useState(() => new Set())
   const active = places.find(place => discoveryPlaceKey(place) === key)
   function plan(place) {
     const city = place.discoveryCity
@@ -260,9 +226,8 @@ export function SavedDiscoveryPlaces({onPlan, profile}) {
     onPlan('', id, {...city, id}, false, {selected: [place]})
   }
   if (!places.length) return null
-  function renderCard(place, textOnly) {
-    return <DiscoveryCard key={discoveryPlaceKey(place)} place={textOnly ? {...place, photo: null} : place} saved
-      onPhotoError={() => setBrokenPhotos(current => new Set([...current, place.photo?.url]))}
+  function renderCard(place) {
+    return <DiscoveryCard key={discoveryPlaceKey(place)} place={place} saved
       onOpen={() => setKey(discoveryPlaceKey(place))} onSave={() => toggleDiscoverySaved(place)}
       onSelect={onPlan && place.discoveryCity?.id ? () => plan(place) : undefined}/>
   }
@@ -271,10 +236,8 @@ export function SavedDiscoveryPlaces({onPlan, profile}) {
     <PlaceSummary summary={summary} title="Your shortlist at a glance" onSelect={place => setKey(discoveryPlaceKey(place))}/>
     {summary.location && <DestinationBrief location={summary.location} compact/>}
     <DiscoveryRail collection={{title: 'Saved from Explore', icon: Compass}}
-      places={places.filter(place => place.photo?.url && !brokenPhotos.has(place.photo.url))}
-      matches={places.filter(place => !place.photo?.url || brokenPhotos.has(place.photo.url))} renderCard={renderCard}/>
-    {summary.location && <ReferencePhotos key={summary.location.id || summary.location.name} location={summary.location} grid
-      description="See the area around your saved places. Each photo includes its source and credit."/>}
+      places={places.filter(place => place.photo?.url && place.photo.kind !== 'nearby')}
+      matches={places.filter(place => !place.photo?.url || place.photo.kind === 'nearby')} renderCard={renderCard}/>
     {active && <Dialog label={active.name} className="discovery-details-dialog" onClose={() => setKey('')}>
       <PlaceDetails place={active}/>
       <div className="discovery-details-actions">

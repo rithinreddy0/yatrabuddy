@@ -32,6 +32,13 @@ class LoginSession(Base):
     expires: Mapped[int] = mapped_column(Integer, index=True)
 
 
+class AccountProfile(Base):
+    __tablename__ = "account_profiles"
+    user_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), primary_key=True)
+    username: Mapped[str] = mapped_column(String(40), default="")
+    phone: Mapped[str] = mapped_column(String(32), default="")
+
+
 class FirebaseIdentity(Base):
     __tablename__ = "firebase_identities"
     uid: Mapped[str] = mapped_column(String(128), primary_key=True)

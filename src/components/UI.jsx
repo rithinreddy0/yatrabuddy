@@ -1,6 +1,6 @@
 import React, {useEffect,useRef} from 'react'
 import {icon} from '../icons.mjs'
-import {visibleSource} from './sourceUrl.mjs'
+import {isWikivoyage,visibleSource} from './sourceUrl.mjs'
 
 export function Icon({name,size=19}) {
   return <span className="icon" aria-hidden="true" dangerouslySetInnerHTML={{__html:icon(name,size)}}/>
@@ -34,7 +34,16 @@ export function Empty({title,description,icon='compass',action}) {
 export function SourcePill({url,label}) {
   const href = visibleSource(url)
   if (!href) return null
+  if (isWikivoyage(href)) return <WikivoyageSource url={href} label={label}/>
   return <a className="source-pill" href={href.href} target="_blank" rel="noreferrer"><Icon name="link" size={13}/> {label || href.hostname.replace(/^www\./,'')} <Icon name="corner" size={12}/></a>
+}
+export function WikivoyageSource({url,label}) {
+  const href = visibleSource(url)
+  if (!href) return null
+  const name = label && label !== 'Wikivoyage' ? `${label} · Wikivoyage` : 'Open Wikivoyage source'
+  return <a className="wiki-source-arrow" href={href.href} target="_blank" rel="noreferrer" aria-label={name} title={name}>
+    <Icon name="corner" size={13}/>
+  </a>
 }
 export function AgentProgress({label='Searching for travel sources',steps=[],activeStep=null,skippedSteps=[],className=''}) {
   return <div className={'agent-progress '+className} role="status">

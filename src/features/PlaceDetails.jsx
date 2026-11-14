@@ -2,13 +2,14 @@ import React, {useEffect, useRef, useState} from 'react'
 import {ArrowLeft, Camera, ExternalLink, MapPin, Minus, Plus} from 'lucide-react'
 import {PlacePhoto} from '../components/PlacePhoto.jsx'
 import {PhotoRail} from '../components/PhotoRail.jsx'
-import {AgentProgress, Button} from '../components/UI.jsx'
+import {AgentProgress, Button, WikivoyageSource} from '../components/UI.jsx'
 import {request} from '../api.mjs'
 import {placeInterestScores} from './discoveryPlaces.mjs'
 import {revealResult} from '../components/revealResult.mjs'
-import {visibleSource} from '../components/sourceUrl.mjs'
+import {isWikivoyage, visibleSource} from '../components/sourceUrl.mjs'
 
 export function PlaceSource({url, children}) {
+  if (isWikivoyage(url)) return <WikivoyageSource url={url} label={typeof children === 'string' ? children : undefined}/>
   const href = visibleSource(url)?.href
   if (!href) return null
   return <a className="journey-source" href={href} target="_blank" rel="noreferrer">{children}<ExternalLink size={13}/></a>
@@ -23,14 +24,11 @@ function MediaItem({item, onSave, saved}) {
   return <article className="journey-media-item">
     {item.type === 'video' ? <video controls preload="none" poster={item.thumbnail || undefined}>
       <source src={item.url} type={item.mime}/>
-    </video> : <PlacePhoto place={{name:item.title, photo:{
-      url:item.thumbnail || item.url, sourceUrl:item.sourceUrl, credit:item.author, license:item.license, licenseUrl:item.licenseUrl,
-    }}} hideUnavailable/>}
+    </video> : <PlacePhoto place={{name:item.title, photo:{...item, url:item.thumbnail || item.url, credit:item.author || item.credit}}} hideUnavailable/>}
     <strong>{item.title}</strong>
-    {item.nameMatchOnly && <small className="journey-detail-address">Name match · check source</small>}
     <div className="journey-links">
       {item.type === 'video' && <PlaceSource url={item.sourceUrl}>{[item.author, item.license].filter(Boolean).join(' · ') || 'Video source'}</PlaceSource>}
-      {onSave && <Button onClick={() => onSave(item)} disabled={saved}> {saved ? 'Saved to trip' : 'Save to trip'} </Button>}
+      {onSave && item.license && <Button onClick={() => onSave(item)} disabled={saved}> {saved ? 'Saved to trip' : 'Save to trip'} </Button>}
     </div>
   </article>
 }
@@ -68,25 +66,28 @@ function VisitConsiderations({place}) {
   </section>
 }
 
-export function PlaceDetails({place, onClose, onShowMap, onAdd, added, onSaveMedia, savedMedia = []}) {
+export function PlaceDetails({place, initialTab = 'overview', onClose, onShowMap, onAdd, added, onSaveMedia, savedMedia = []}) {
   const [media, setMedia] = useState(null)
-  const [tab, setTab] = useState('overview')
+  const map = placeMapUrl(place)
+  const [tab, setTab] = useState(map || place.source === 'Google Maps' ? initialTab : 'overview')
   const [attempt, setAttempt] = useState(0)
   const tabContent=useRef(null)
   const show=next=>{setTab(next);revealResult(tabContent.current)}
-  const map = placeMapUrl(place)
   useEffect(() => {
-    if (tab !== 'media' || !map) return
+    if (tab !== 'media' || (!map && place.source !== 'Google Maps')) return
     const controller = new AbortController()
-    const params = new URLSearchParams({lat: place.lat, lon: place.lon, q: place.name, radius: 1200})
-    request('places/media?' + params, {signal: controller.signal})
+    const venue = ['Food','Stay'].includes(place.category)
+    const params = new URLSearchParams({lat: place.lat, lon: place.lon, q: place.name.slice(0, 120), exact: 'true',
+      venue:String(venue), radius:venue ? '80' : '120'})
+    const path = place.source === 'Google Maps' && place.id ? 'places/google/' + encodeURIComponent(place.id) + '/photos' : 'places/media?' + params
+    request(path, {signal: controller.signal})
       .then(result => { if (!controller.signal.aborted) setMedia(result) })
       .catch(() => { if (!controller.signal.aborted) setMedia({status: 'unavailable', items: []}) })
     return () => controller.abort()
-  }, [tab, place.lat, place.lon, place.name, map, attempt])
-  const photos = (media?.items || []).filter(item=>item.type==='photo')
+  }, [tab, place.lat, place.lon, place.name, place.id, place.source, place.category, map, attempt])
+  const photos = (media?.items || []).filter(item=>item.type==='photo' && item.url !== place.photo?.url)
   const videos = (media?.items || []).filter(item=>item.type==='video')
-  const renderMedia = item => <MediaItem key={item.sourceUrl} item={item} onSave={onSaveMedia}
+  const renderMedia = (item, index) => <MediaItem key={item.url + ':' + index} item={{...item, title:item.title || place.name}} onSave={onSaveMedia}
     saved={savedMedia.some(savedItem => savedItem.sourceUrl === item.sourceUrl)}/>
   return <aside className="journey-place-detail" aria-label={place.name + ' details'}>
     <div className="journey-detail-bar">
@@ -94,12 +95,12 @@ export function PlaceDetails({place, onClose, onShowMap, onAdd, added, onSaveMed
       <span>{place.category || 'Destination'}</span>
       {onShowMap && <Button onClick={onShowMap} icon="map">Map</Button>}
     </div>
-    <PlacePhoto place={place} fallback/>
+    <PlacePhoto place={place} hideUnavailable/>
     <h2>{place.name}</h2>
     {place.address && <p className="journey-detail-address"><MapPin size={15}/>{place.address}</p>}
     <div className="journey-detail-tabs" aria-label="Place views">
       <Button aria-pressed={tab === 'overview'} onClick={() => show('overview')}>Overview</Button>
-      {map && <Button aria-pressed={tab === 'media'} onClick={() => show('media')}><Camera size={16}/> Photos & videos</Button>}
+      {(map || place.source === 'Google Maps') && <Button aria-pressed={tab === 'media'} onClick={() => show('media')}><Camera size={16}/> Photos & videos</Button>}
     </div>
     <div ref={tabContent} className="result-scroll-anchor"/>
     {tab === 'overview' ? <>
@@ -115,15 +116,14 @@ export function PlaceDetails({place, onClose, onShowMap, onAdd, added, onSaveMed
         <PlaceSource url={place.website}>Official site</PlaceSource>
         {map && <PlaceSource url={'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(`${place.name} ${place.lat},${place.lon}`)}>Check reviews</PlaceSource>}
       </div>
-    </> : !media ? <AgentProgress label="Finding photos and videos nearby"/> : <>
+    </> : !media ? <AgentProgress label={`Checking photos for ${place.name}`}/> : <>
       {photos.length || videos.length ? <>
-        <p className="journey-detail-address">Photos and videos from Wikimedia Commons. Nearby results may show the surrounding area.</p>
         <PhotoRail title="Place photos" count={photos.length} className="place-detail-rail">{photos.map(renderMedia)}</PhotoRail>
         <PhotoRail title="Place videos" count={videos.length} className="place-detail-rail">{videos.map(renderMedia)}</PhotoRail>
       </> : <div className="journey-links">
+        <p className="journey-detail-address">{place.photo?.url ? 'No additional verified photos found.' : 'No verified photos available for this listing.'}</p>
         {media.status === 'unavailable' && <Button onClick={() => {setMedia(null); setAttempt(value => value + 1)}}>Retry media lookup</Button>}
-        <PlaceSource url={'https://commons.wikimedia.org/w/index.php?title=Special:MediaSearch&type=image&search=' + encodeURIComponent(place.name)}>Browse Commons</PlaceSource>
-        <PlaceSource url={'https://www.youtube.com/results?search_query=' + encodeURIComponent(place.name + ' travel guide')}>Find travel videos</PlaceSource>
+        <PlaceSource url={place.url}>Open place listing</PlaceSource>
       </div>}
     </>}
     {onAdd && <Button className="journey-detail-add" variant="primary" onClick={() => onAdd(place)} aria-pressed={added}>

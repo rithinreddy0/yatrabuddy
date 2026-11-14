@@ -8,3 +8,7 @@ export function visibleSource(url) {
     return null
   }
 }
+
+export function isWikivoyage(url) {
+  return /(^|\.)wikivoyage\.org$/i.test(visibleSource(url)?.hostname || '')
+}

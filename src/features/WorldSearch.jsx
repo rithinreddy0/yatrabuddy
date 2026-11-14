@@ -1,10 +1,10 @@
 import React, {useEffect,useMemo,useRef,useState} from 'react'
 import {freshnessLabel, request, travelData} from '../api.mjs'
-import {AgentProgress,Button,Icon,IconButton,Pill,SourcePill} from '../components/UI.jsx'
+import {AgentProgress,Button,Dialog,Icon,IconButton,Pill,SourcePill} from '../components/UI.jsx'
 import {HotelSearch} from './TravelDesk.jsx'
 import './WorldSearch.css'
 import {PlacePhoto} from '../components/PlacePhoto.jsx'
-import {PhotoRail,ReferencePhotos} from '../components/PhotoRail.jsx'
+import {PlaceDetails} from './PlaceDetails.jsx'
 import {DestinationBrief} from '../components/CityBrief.jsx'
 import {PlaceSummary} from '../components/PlaceSummary.jsx'
 import {revealResult} from '../components/revealResult.mjs'
@@ -53,7 +53,7 @@ function fitMap(points,width,height){
   return {zoom,x:(bounds[0]+bounds[2])/2*2**zoom,y:(bounds[1]+bounds[3])/2*2**zoom}
 }
 
-function PlaceMap({places,active,onSelect}){
+function PlaceMap({places,active,onSelect,onClose}){
   const host=useRef(null)
   const drag=useRef(null)
   const dismissPreview=useRef(null)
@@ -133,11 +133,12 @@ function PlaceMap({places,active,onSelect}){
       {preview&&<aside key={preview.point.id} className="world-pin-preview" aria-label={preview.point.name+' preview'}
         onPointerEnter={()=>clearTimeout(dismissPreview.current)} onPointerLeave={clearHover}
         style={{left:clamp(preview.x+18,8,Math.max(8,width-242)),top:clamp(preview.y-70,8,Math.max(8,height-230))}}>
-        <PlacePhoto place={preview.point}/>
+        <PlacePhoto place={preview.point} hideUnavailable/>
         <strong>{preview.point.name}</strong>
         <button className="world-preview-action" onClick={()=>onSelect(preview.point.id)}>Show place details</button>
       </aside>}
       {points.length>0&&<div className="world-map-tools">
+        <IconButton icon="close" label="Close results map" onClick={onClose}/>
         <IconButton icon="plus" label="Zoom in" onClick={()=>zoom(1)}/>
         <IconButton icon="minus" label="Zoom out" onClick={()=>zoom(-1)}/>
         <IconButton icon="pin" label="Fit all places" onClick={()=>setOverride(null)}/>
@@ -230,9 +231,11 @@ function ResultCard({place,index,active,onMapSelect,mapAvailable}){
   const distance=Number.isFinite(place.distanceMetres)?(place.distanceMetres/1000).toLocaleString(undefined,{maximumFractionDigits:1})+' km from city center':null
   const rating=Number.isFinite(place.rating)?place.rating.toFixed(1):null
   const mapsLookup='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent([place.name,place.address].filter(Boolean).join(', '))
+  const [gallery,setGallery]=useState(false)
+  const description = place.description || place.overview || ''
+  const words = description.trim().split(/\s+/)
+  const preview = words.length > 25 ? words.slice(0, 25).join(' ') + '…' : description
   return <article id={'world-result-'+index} tabIndex={-1} className={'world-result '+(active?'world-result-active':'')}>
-    <div className="world-result-media">
-    <PlacePhoto place={place} hideUnavailable/>
     <div className="world-result-top">
       {mapAvailable&&<button className="world-result-number" type="button" aria-label={'Highlight '+place.name+' on map'} onClick={onMapSelect}>{index+1}</button>}
       <div className="world-result-title">
@@ -242,11 +245,11 @@ function ResultCard({place,index,active,onMapSelect,mapAvailable}){
       </div>
       {rating&&<div className="world-rating" aria-label={rating+' out of 5 stars'}><span aria-hidden="true">★</span> {rating}</div>}
     </div>
-    </div>
-    {(place.description||place.overview)&&<div className="world-about">
-      <p className="world-description">{place.description||place.overview}</p>
-      {place.overview&&place.description&&place.overview!==place.description&&<details>
-        <summary>More about {place.name}</summary><p>{place.overview}</p>
+    <PlacePhoto place={place} lookup hideUnavailable onOpen={()=>setGallery(true)}/>
+    {description&&<div className="world-about">
+      <p className="world-description">{preview}</p>
+      {(preview!==description || place.overview && place.overview!==description)&&<details>
+        <summary>More about {place.name}</summary><p>{preview!==description ? description : place.overview}</p>
         {safeSource(place.overviewUrl)&&<SourcePill label="Wikipedia overview" url={place.overviewUrl}/>}
       </details>}
     </div>}
@@ -265,6 +268,9 @@ function ResultCard({place,index,active,onMapSelect,mapAvailable}){
       })}
     </div>
     {google&&place.reviewCount>0&&<ReviewDetails place={place}/>}
+    {gallery&&<Dialog label={place.name} className="discovery-details-dialog" onClose={()=>setGallery(false)}>
+      <PlaceDetails place={place} initialTab="media"/>
+    </Dialog>}
   </article>
 }
 
@@ -286,13 +292,14 @@ export function WorldSearch({initialCategory='all',initialQuery='',initialDestin
   const [moreLoading,setMoreLoading]=useState(false)
   const [error,setError]=useState('')
   const [active,setActive]=useState('')
-  const [tab,setTab]=useState('list')
+  const [mapOpen,setMapOpen]=useState(true)
   const [photosOnly,setPhotosOnly]=useState(false)
   const moreRequest=useRef(null)
   const sequence=useRef(0)
   const resultsHeading=useRef(null)
   const resultsWorkspace=useRef(null)
   const searchError=useRef(null)
+  const mapToggle=useRef(null)
   const submitted=useRef(false)
   useEffect(()=>{
     if(!criteria.query&&!criteria.location)return
@@ -351,7 +358,7 @@ export function WorldSearch({initialCategory='all',initialQuery='',initialDestin
   const selectedCategory=categories.find(item=>item.id===criteria.category)||category
   const suggestedThemes=[...new Set([...(profile?.interests||[]),profile?.style].filter(Boolean))]
   const preferred=new Set(suggestedThemes.flatMap(theme=>interestCategories[theme]||[]))
-  const places=(result?.places||[]).filter(place=>!photosOnly||place.photo?.url)
+  const places=(result?.places||[]).filter(place=>!photosOnly||(place.photo?.url&&place.photo.kind!=='nearby'))
   const ranked=criteria.sort==='personalized'?[...places].sort((first,second)=>Number(preferred.has(second.category))-Number(preferred.has(first.category))):places
   const google=result?.provider==='Google Maps'||ranked.some(place=>place.source==='Google Maps')
   const verifiedRatings=google||['available','ready','empty','unavailable'].includes(result?.sources?.googleMaps?.status)
@@ -360,16 +367,14 @@ export function WorldSearch({initialCategory='all',initialQuery='',initialDestin
   const mapKey=result?.retrievedAt+'-'+ranked.length
   function selectMap(id){
     setActive(id)
-    setTab('list')
     const index=ranked.findIndex(item=>item.id===id)
     revealResult(()=>resultsWorkspace.current?.querySelector('#world-result-'+index),{focus:true})
   }
   function showMap(id){
     if(id)setActive(id)
-    setTab('map')
+    setMapOpen(true)
     revealResult(()=>resultsWorkspace.current?.querySelector('.world-map-frame'),{focus:true})
   }
-  const illustrated=ranked.filter(place=>place.photo?.url).slice(0,10)
   const referenceCity=result?.location||criteria.location
   const briefTopic={hotels:'stays',stays:'stays',food:'food',attractions:'experiences'}[criteria.category]||'overview'
   const summary=summarizePlaces(ranked,{profile})
@@ -424,30 +429,29 @@ export function WorldSearch({initialCategory='all',initialQuery='',initialDestin
           {onPlan&&<Button variant="text-btn" onClick={()=>onPlan('','geo:'+city.id,{...city,id:'geo:'+city.id})}>Plan trip</Button>}
         </div>)}
       </div>}
-      <PlaceSummary summary={summary} onSelect={place=>selectMap(place.id)}/>
-      {referenceCity&&<DestinationBrief location={referenceCity} topic={briefTopic} compact/>}
+      {ranked.length>0&&<div ref={resultsWorkspace} className={'world-workspace'+(hasMap&&mapOpen?' world-with-map':'')}>
+        <div className="world-result-list" tabIndex={-1}>
+          <div className="world-list-heading"><h2>Places</h2>
+            {hasMap&&<Button ref={mapToggle} icon="map" aria-expanded={mapOpen} onClick={()=>setMapOpen(value=>!value)}>{mapOpen?'Hide map':'Show map'}</Button>}
+            {google&&!hasMap&&<SourcePill label="Open Google Maps" url={ranked[0]?.url}/>}
+          </div>
+          <PlaceSummary summary={summary} onSelect={place=>selectMap(place.id)}/>
+          {ranked.map((place,index)=><ResultCard key={place.id} place={place} index={index} active={active===place.id} mapAvailable={hasMap&&Number.isFinite(place.lat)&&Number.isFinite(place.lon)} onMapSelect={()=>showMap(place.id)}/>)}
+          {error&&<p className="form-error" role="alert">{error}</p>}
+          {result.nextPageToken&&<Button icon="plus" disabled={moreLoading} onClick={loadMore}>{moreLoading?'Loading…':'More places'}</Button>}
+        </div>
+        {hasMap&&mapOpen&&<PlaceMap key={mapKey} places={ranked} active={active} onSelect={selectMap} onClose={()=>{setMapOpen(false);mapToggle.current?.focus()}}/>}
+      </div>}
+      {referenceCity&&<details className="world-city-brief"><summary>Destination notes for {referenceCity.name}</summary>
+        <DestinationBrief location={referenceCity} topic={briefTopic} compact/>
+      </details>}
       {hotelCity&&['hotels','stays'].includes(criteria.category)&&
         <HotelSearch key={hotelCity.id} place={{...hotelCity,id:'geo:'+hotelCity.id}} profile={profile}/>}
       {!ranked.length&&<div className="panel world-message" role="status">
         <h3>{result.status==='unavailable'?'Place sources are unavailable':'No places matched'}</h3>
         <p>{result.status==='unavailable'?'Try again shortly.':photosOnly?'Turn off With photos to see every result.':'Try a city and country, choose a matching city, or broaden the category.'}</p>
       </div>}
-      {illustrated.length>0?<PhotoRail title="Place photos" count={illustrated.length}>{illustrated.map(place=><article className="photo-rail-tile" key={place.id}>
-        <PlacePhoto place={place} hideUnavailable/><p>{place.name}</p>
-      </article>)}</PhotoRail>:referenceCity&&<ReferencePhotos location={referenceCity} loadingLabel={false} description="Licensed photos of the area for context."/>}
       {google&&<p className="world-coverage">Google Maps · Place price levels describe typical cost. Check the property for live room rates. <a href="https://support.google.com/contributionpolicy/answer/7400114" target="_blank" rel="noreferrer">Google Maps review policy</a></p>}
-      {hasMap&&<div className="world-view-switch" role="group" aria-label="Results view">
-        <Pill active={tab==='list'} icon="menu" onClick={()=>{setTab('list');revealResult(()=>resultsWorkspace.current?.querySelector('.world-result-list'),{focus:true})}}>List</Pill>
-        <Pill active={tab==='map'} icon="map" onClick={()=>showMap()}>Map</Pill>
-      </div>}
-      {ranked.length>0&&<div ref={resultsWorkspace} className={'world-workspace '+(hasMap?'world-with-map ':'')+'world-view-'+tab}>
-        <div className="world-result-list" tabIndex={-1}>
-          {ranked.map((place,index)=><ResultCard key={place.id} place={place} index={index} active={active===place.id} mapAvailable={hasMap} onMapSelect={()=>showMap(place.id)}/>)}
-          {error&&<p className="form-error" role="alert">{error}</p>}
-        </div>
-        {hasMap&&<PlaceMap key={mapKey} places={ranked} active={active} onSelect={selectMap}/>}
-      </div>}
-      {result.nextPageToken&&<Button icon="plus" disabled={moreLoading} onClick={loadMore}>{moreLoading?'Loading…':'More places'}</Button>}
     </section>}
   </div>
 }

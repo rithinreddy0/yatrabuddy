@@ -1,14 +1,16 @@
 """Public transport and hotel searches, with booking on the provider's site."""
 
 import re
-from datetime import date as Date, timedelta
+from datetime import date as Date, datetime, time, timedelta, timezone
 from math import ceil
 from urllib.parse import quote, urlencode
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from .catalog import CATALOG
 from .place_search import public_url
+from .auth import limit
+from .transport_quotes import transport_quotes
 
 
 router = APIRouter(prefix="/api")
@@ -68,6 +70,26 @@ def _place(value):
     return CATALOG_NAMES.get(name, name)
 
 
+def requested_departure(message, travel_date, india=False):
+    stamp = re.search(r"\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2})", message, re.I)
+    if stamp:
+        try:
+            return datetime.fromisoformat(stamp[0].upper().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    clock = re.search(r"\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", message, re.I)
+    if not (clock and travel_date and india and (clock[2] or clock[3])):
+        return None
+    hour, minute = int(clock[1]), int(clock[2] or 0)
+    if clock[3]:
+        if not 1 <= hour <= 12:
+            return None
+        hour = hour % 12 + (12 if clock[3].lower() == "pm" else 0)
+    if hour > 23 or minute > 59:
+        return None
+    return datetime.combine(travel_date, time(hour, minute), timezone(timedelta(hours=5, minutes=30)))
+
+
 def _matching_location(place, location):
     return location and _base(place) == _base(location.get("name"))
 
@@ -96,7 +118,7 @@ def _india(place, country=None):
     if country:
         return country.casefold() in {"in", "india"}
     if comma:
-        return bool({part.strip() for part in qualifier.split(",")} & INDIA_REGIONS)
+        return bool({part.strip() for part in qualifier.split(",")} & (INDIA_REGIONS | INDIA_NAMES))
     return first in INDIA_NAMES
 
 
@@ -385,15 +407,23 @@ def transport_sources(origin, destination, *, date=None, travelers=None, days=No
 
 @router.get("/travel-providers")
 async def trip_transport_providers(
+    request: Request,
     destination: str = Query(min_length=1, max_length=120),
     origin: str | None = Query(default=None, max_length=120),
     country: str | None = Query(default=None, max_length=80),
     departure: Date | None = None,
     travelers: int | None = Query(default=None, ge=1, le=99),
+    timetable: bool = False,
+    local: bool = False,
+    depart_at: datetime | None = None,
 ):
     """Return public provider links for the intercity journey and for local travel."""
-    if not _place(destination) or (origin is not None and not _place(origin)):
+    if not timetable and (not _place(destination) or (origin is not None and not _place(origin))):
         raise HTTPException(422, "Enter a destination and a valid departure city if known.")
+    limit(request, "transport-providers", 20, 60)
+    if timetable:
+        return {"quotes": await transport_quotes(origin, destination, travel_date=departure, departure=depart_at,
+                                                  travelers=travelers, local=local, country=country)}
     return {
         "arrival": transport_sources(origin, destination, date=departure, travelers=travelers, country_code=country),
         "local": transport_sources(None, destination, country_code=country, local=True),

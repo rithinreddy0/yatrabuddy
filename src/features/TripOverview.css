@@ -8,7 +8,6 @@
 
 .trip-overview-header,
 .trip-overview-layout,
-.trip-overview-meta,
 .trip-overview-actions,
 .trip-overview-section-head,
 .trip-overview-pills {
@@ -23,10 +22,9 @@
 .trip-overview-header h1 { font: 620 clamp(25px, 3.2vw, 42px)/1.12 var(--sans); margin: 1px 0 3px; letter-spacing: -.035em; }
 .trip-overview-header p, .trip-overview-section-head p { color: var(--muted); }
 .trip-overview-header .text-btn { min-height: 36px; }
-.trip-overview-actions, .trip-overview-pills, .trip-overview-meta { flex-wrap: wrap; }
+.trip-overview-actions, .trip-overview-pills { flex-wrap: wrap; }
 .trip-overview-header .trip-overview-actions { justify-content: flex-end; }
-.trip-overview-meta { margin: 9px 0 var(--trip-space); }
-.trip-overview-meta button, .trip-overview-shortcuts button {
+.trip-overview-shortcuts button {
   display: inline-flex;
   min-width: 0;
   min-height: 36px;
@@ -40,8 +38,8 @@
   font-weight: 550;
   transition: background var(--trip-motion), border-color var(--trip-motion), transform var(--trip-motion);
 }
-.trip-overview-meta button:hover, .trip-overview-shortcuts button:hover { background: var(--mint); transform: translateY(-1px); }
-.trip-overview-meta .icon, .trip-overview-shortcuts .icon { color: var(--forest); }
+.trip-overview-shortcuts button:hover { background: var(--mint); transform: translateY(-1px); }
+.trip-overview-shortcuts .icon { color: var(--forest); }
 .trip-overview-layout {
   display: grid;
   grid-template-columns: clamp(170px, 20%, 250px) minmax(0, 1fr);
@@ -63,11 +61,6 @@
 .trip-section-cover h2 { margin:2px 0 0;color:white;font:500 clamp(18px,2.1vw,25px)/1.2 var(--sans); }
 .trip-section-cover p { color:#e2deeb;font-size:.8rem; }
 .trip-section-cover .btn { color:white; }
-@media(min-width:1300px) {
-  .trip-overview[data-section="itinerary"] .trip-overview-content[data-with-map="true"] { grid-template-columns:minmax(0,1.6fr) minmax(235px,1fr); }
-  .trip-overview[data-section="itinerary"] .trip-overview-context { grid-column:2;grid-row:1;position:sticky;top:14px; }
-  .trip-overview[data-section="itinerary"] .trip-overview-room { grid-column:1;grid-row:1; }
-}
 .trip-overview-glass, .trip-overview-composer {
   min-width: 0;
   border: 1px solid var(--line);
@@ -242,8 +235,6 @@
   .trip-overview-shortcuts { position: static; display: flex; overflow-x: auto; padding-block: 4px; }
   .trip-overview-shortcuts button { flex: none; }
   .trip-overview-map-frame { height: clamp(230px, 62vw, 330px); }
-  .trip-overview[data-section="itinerary"] .trip-overview-room { grid-row:1; }
-  .trip-overview[data-section="itinerary"] .trip-overview-context { grid-row:2; }
   .page.workspace .legacy-trip-grid { grid-template-columns: minmax(0, 1fr); }
   .legacy-trip-map { grid-row: 1; position: static; }
 }

@@ -9,12 +9,12 @@ import time
 from threading import Lock
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 
-from .db import FirebaseIdentity, LoginSession, User, transaction
+from .db import AccountProfile, FirebaseIdentity, LoginSession, User, transaction
 from . import account_mail
 
 router = APIRouter(prefix="/api")
@@ -95,6 +95,42 @@ def require_user(request: Request):
     if not user:
         raise HTTPException(401, "Sign in to sync your library.")
     return user
+
+
+class AccountEdit(BaseModel):
+    model_config = {"extra": "forbid", "str_strip_whitespace": True}
+    name: str = Field(min_length=1, max_length=70)
+    username: str = Field(max_length=40, pattern=r"^[A-Za-z0-9_.-]*$")
+    phone: str = Field(max_length=32, pattern=r"^\+?[0-9 ()-]*$")
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value):
+        if value and not 7 <= sum(char.isdigit() for char in value) <= 15:
+            raise ValueError("Enter a phone number with 7 to 15 digits.")
+        return value
+
+
+def private_account(user, profile):
+    return {**account_details(user), "username": profile.username if profile else "", "phone": profile.phone if profile else ""}
+
+
+@router.get("/account")
+def get_account(identity=Depends(require_user)):
+    with transaction() as db:
+        return private_account(db.get(User, identity["id"]), db.get(AccountProfile, identity["id"]))
+
+
+@router.put("/account")
+def update_account(data: AccountEdit, request: Request, identity=Depends(require_user)):
+    limit(request, "account-profile", 30, 60)
+    with transaction() as db:
+        user = db.scalar(select(User).where(User.id == identity["id"]).with_for_update())
+        user.name = data.name
+        profile = db.get(AccountProfile, user.id) or AccountProfile(user_id=user.id)
+        profile.username, profile.phone = data.username, data.phone
+        db.add(profile)
+        return private_account(user, profile)
 
 
 def session_cookie(request, response, db, user_id):

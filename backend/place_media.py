@@ -8,8 +8,9 @@ import httpx
 
 from .place_photos import (
     COMMONS_API, COMMONS_METADATA, IMAGE_HOSTS, VIDEO_TYPES,
-    WIKIPEDIA_API, licensed_media, parse_photo, title_key, validated_url, wiki_pages,
+    WIKIPEDIA_API, licensed_media, parse_photo, place_file_match, title_key, validated_url, wiki_pages,
 )
+from .nearby import distance_metres
 from .source_cache import SourceCache
 
 
@@ -60,6 +61,57 @@ async def media_pages(client, **params):
     async with asyncio.timeout(5):
         data = await wiki_pages(client, COMMONS_API, (), **COMMONS_FIELDS, **params)
     return data.get("pages", [])
+
+
+async def exact_place_media(client, lat, lon, name, radius, kind):
+    valid_name = name and not any(character in name for character in ":|/[]{}")
+    if not valid_name:
+        return {"status": "empty", "items": []}
+    point = {"name": name, "lat": lat, "lon": lon}
+    distance = min(radius, 120)
+    key = ("exact", lat, lon, title_key(name), distance, kind)
+    cached = cache.get(key, 900)
+    if cached is not None:
+        return cached
+
+    async def candidates(**params):
+        async with asyncio.timeout(5):
+            data = await wiki_pages(client, COMMONS_API, (), **params, **{**COMMONS_FIELDS, "prop": "imageinfo|coordinates"})
+            return data.get("pages", [])
+    categories = []
+    if kind != "video":
+        categories.append(f"Category:{name}")
+    if kind != "photo":
+        categories.append(f"Category:Videos of {name}")
+    tasks = [candidates(generator="categorymembers", gcmtitle=category, gcmtype="file", gcmlimit=30) for category in categories]
+    phrase = title_phrase(name)
+    if phrase:
+        file_type = " filetype:bitmap" if kind == "photo" else " filetype:video" if kind == "video" else ""
+        tasks.append(candidates(generator="search", gsrnamespace=6, gsrlimit=18,
+                                gsrsearch=f'intitle:"{phrase}" nearcoord:{distance}m,{lat},{lon}{file_type}'))
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    items = {}
+    for pages in results:
+        if isinstance(pages, SOURCE_ERRORS):
+            continue
+        if isinstance(pages, BaseException):
+            raise pages
+        for page in pages:
+            coordinates = (page.get("coordinates") or [{}])[0]
+            if not all(isinstance(coordinates.get(axis), (int, float)) for axis in ("lat", "lon")):
+                continue
+            if distance_metres(point, coordinates) > distance:
+                continue
+            if not (place_file_match(point, page) or (len(name_words(name)) == 1 and named_file(page["title"], name)
+                    and not re.search(r"\b(?:near(?:by)?|opposite|behind|view from)\b", page["title"], re.IGNORECASE))):
+                continue
+            item = media_item(page, name, nearby=False)
+            if item and (kind == "all" or item["type"] == kind):
+                item.pop("fileTitle", None)
+                items[item["sourceUrl"]] = item
+    status = "live" if items else "empty" if any(isinstance(result, list) for result in results) else "unavailable"
+    result = {"status": status, "source": "Wikimedia Commons", "items": list(items.values())[:18]}
+    return cache.put(key, result) if status != "unavailable" else result
 
 
 def title_phrase(name):
@@ -127,7 +179,9 @@ async def article_videos(client, name, lat, lon, radius):
     return []
 
 
-async def nearby_media(client, lat, lon, name="", radius=800, kind="all"):
+async def nearby_media(client, lat, lon, name="", radius=800, kind="all", *, exact=False):
+    if exact:
+        return await exact_place_media(client, lat, lon, name, radius, kind)
     key = (round(lat, 4), round(lon, 4), title_key(name), radius, kind)
     cached = cache.get(key, 3600)
     if cached:

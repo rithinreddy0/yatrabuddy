@@ -29,6 +29,8 @@ Import the GitHub repository into a personal Hobby project and use its root dire
 
 ## Verify the live app
 
+To enable timed transport lookups in Chat and Trip → Transport, set `GOOGLE_ROUTES_API_KEY` on Render with Google Maps Routes API enabled, and set `AMADEUS_CLIENT_ID` and `AMADEUS_CLIENT_SECRET` for Amadeus production Flight Offers access. Flight searches accept airport codes such as HYD and GOI. Google Routes provides published transit options where available. Confirm Indian Railways reservation fares, private coach seats, boarding point changes, and flight fares with the operator before booking. [Google Routes transit](https://developers.google.com/maps/documentation/routes/transit-route) · [Amadeus API documentation](https://admin.developers.amadeus.com/self-service/apis-docs/guides/developer-guides/faq/)
+
 1. Open `/api/health` through the Vercel URL and confirm that it returns the same JSON as Render. Check `/api/auth/config` for the configured Firebase project and `googleRequired: true`.
 2. Open the frontend in a fresh browser profile. Confirm that Google is required. Sign in with a Google test account, complete the chat onboarding, and refresh. Confirm that the session and preferences remain available.
 3. Start a trip chat, answer its follow-up questions, and save the itinerary. Open the map, place photos, and the destination summary. Reload the page and confirm the saved trip remains available.

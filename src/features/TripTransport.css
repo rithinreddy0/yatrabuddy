@@ -94,3 +94,10 @@
 .trip-transport-action {
   justify-self: start;
 }
+.transport-quote-list { display:grid; gap:8px; }
+.transport-quote-list:empty { display:none; }
+.transport-quote { display:grid; gap:6px; padding:10px; border:1px solid var(--line); border-radius:12px; }
+.transport-quote-summary { display:flex; align-items:baseline; flex-wrap:wrap; gap:6px 12px; }
+.transport-quote small { color:var(--muted); }
+.transport-quote ol { display:grid; gap:7px; margin:0; padding-inline-start:18px; }
+.transport-quote li > small { display:block; }

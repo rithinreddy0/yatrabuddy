@@ -4,10 +4,38 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from .place_search import free_search, google_search
+from .place_search import free_search, google_search, matched_venue_photo
 
 
 class PlaceSearchTest(unittest.TestCase):
+    def test_venue_photo_requires_unique_matching_name_and_coordinates(self):
+        def candidate(identifier, name, lat):
+            return {"id": identifier, "displayName": {"text": name}, "location": {"latitude": lat, "longitude": 78.0},
+                    "photos": [{"name": f"places/{identifier}/photos/photo"}]}
+
+        async def run():
+            nearby = candidate("branch-one", "Example Cafe", 17.0)
+            distant = candidate("branch-two", "Example Cafe", 17.008)
+            unrelated = candidate("other-cafe", "Another Cafe", 17.0)
+            hits = []
+
+            def reply(request):
+                if request.method == "POST":
+                    return httpx.Response(200, json={"places": [nearby, distant, unrelated]})
+                hits.append(request.url.path)
+                return httpx.Response(200, json={"photoUri": "https://lh3.googleusercontent.com/example"})
+
+            async with httpx.AsyncClient(transport=httpx.MockTransport(reply)) as client:
+                first = await matched_venue_photo(client, "mock-key", "Example Cafe", 17.0, 78.0)
+                distant["location"]["latitude"] = 17.0001
+                ambiguous = await matched_venue_photo(client, "mock-key", "Example Cafe", 17.0, 78.0)
+            return first, ambiguous, hits
+
+        photo, ambiguous, hits = asyncio.run(run())
+        self.assertEqual(photo["url"], "https://lh3.googleusercontent.com/example")
+        self.assertIsNone(ambiguous)
+        self.assertEqual(hits, ["/v1/places/branch-one/photos/photo/media"])
+
     def test_google_text_search_uses_verified_response_fields_and_hides_key_from_url(self):
         requests = []
 

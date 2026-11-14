@@ -1,5 +1,5 @@
-import React from 'react'
-import {Check, CircleAlert, LoaderCircle} from 'lucide-react'
+import React, {useEffect, useState} from 'react'
+import {Check, CircleAlert, Copy, LoaderCircle} from 'lucide-react'
 import './AgentMessage.css'
 
 const inlinePattern = /(!?\[([^\]\n]+)\]\(([^()\s]+)\))|(\*\*([^*\n]+)\*\*)|(`([^`\n]+)`)|(\*([^*\n]+)\*)/g
@@ -24,6 +24,22 @@ function inline(line) {
   return parts
 }
 
+function CodeBlock({code, language, pending}) {
+  const [status, setStatus] = useState('')
+  useEffect(() => {
+    if (!status) return
+    const timeout = setTimeout(() => setStatus(''), 2200)
+    return () => clearTimeout(timeout)
+  }, [status])
+  return <div className="agent-code-block">
+    <div><span>{language || 'Code'}</span><button type="button" disabled={pending} onClick={async () => {
+      try {await navigator.clipboard.writeText(code);setStatus('Copied')}
+      catch {setStatus('Copy unavailable')}
+    }}>{status === 'Copied' ? <Check size={14}/> : <Copy size={14}/>} {status || 'Copy code'}</button></div>
+    <pre><code>{code}</code></pre>
+  </div>
+}
+
 export function AgentMessage({text, kind, pending = false}) {
   const lines = text.trim().split(/\r?\n/)
   const content = []
@@ -31,6 +47,15 @@ export function AgentMessage({text, kind, pending = false}) {
     const key = index
     const line = lines[index++]
     if (!line.trim()) continue
+    const fence = line.match(/^\s*```([\w+-]*)\s*$/)
+    if (fence) {
+      const block = []
+      while (index < lines.length && !/^\s*```\s*$/.test(lines[index])) block.push(lines[index++])
+      const complete = index < lines.length
+      if (complete) index++
+      content.push(<CodeBlock key={key} code={block.join('\n')} language={fence[1]} pending={pending && !complete}/>)
+      continue
+    }
     const item = line.match(listLine)
     const heading = line.match(/^#{1,6}\s+(.+)$/)
     if (item) {
@@ -49,6 +74,7 @@ export function AgentMessage({text, kind, pending = false}) {
   }
   return <div className="agent-markdown" data-pending={pending || undefined}>
     {content}
+    {pending && <span className="streaming-caret" />}
     {kind === 'general' && <small className="agent-answer-label">General knowledge · verify before relying</small>}
   </div>
 }

@@ -5,9 +5,10 @@ import {DestinationSearch} from '../components/DestinationSearch.jsx'
 import {request} from '../api.mjs'
 import {DiscoveryFeed,DiscoveryLoading,DiscoveryWeather,SavedDiscoveryPlaces} from './DiscoveryFeed.jsx'
 import {useDiscoveryShortlist,useSavedDiscoveryPlaces} from './discoveryPlaces.mjs'
-import {ReferencePhotos} from '../components/PhotoRail.jsx'
 import {PlacePhoto} from '../components/PlacePhoto.jsx'
-import {ArrowRight, ChevronRight, Globe, LocateFixed, Map, Sparkles} from 'lucide-react'
+import {ArrowRight, ChevronRight, Globe, LocateFixed, Map, MapPin, Sparkles, Utensils} from 'lucide-react'
+import {MarqueeTicker} from '../components/MarqueeTicker.jsx'
+import {BentoExploreSection} from '../components/BentoGrid.jsx'
 
 export function DestinationCard({place,saved,onSave,onOpen}) {
   return <article className="destination-card" style={{'--place-color':place.color}}>
@@ -34,7 +35,7 @@ function asCity(item) {
   return {...item,id:`geo:${item.id}`,region:[...new Set([item.region,item.country].filter(Boolean))].join(', ')}
 }
 
-export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onDestination,catalog = []}) {
+export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onDestination,onRequireAccount,catalog = []}) {
   const [prompt,setPrompt]=useState('')
   const [suggested,setSuggested]=useState(null)
   const [localCity,setLocalCity]=useState(storedCity)
@@ -101,8 +102,9 @@ export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onD
   }
 
   const actions=[
-    ['guide',Globe,'Destination guide','Local highlights and recent updates','rail-transport'],
-    ['discover',Map,'Explore places','Find stays, restaurants and things to do','goa'],
+    ['guide',Globe,'Destination guide','Local highlights and travel updates','kerala'],
+    ['attractions',Map,'Things to do','Landmarks, parks, and day trips','hyderabad'],
+    ['food',Utensils,'Where to eat','Cafés, restaurants, and local food','singapore'],
   ]
   const lastDraft = [...library.drafts].sort((a,b)=>b.updated-a.updated)[0]
   const lastTrip = [...library.trips].sort((a,b)=>b.updated-a.updated)[0]
@@ -111,6 +113,19 @@ export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onD
   const tripHref = featuredDraft ? '#draft/'+featuredDraft.id : featuredPlace ? '#trip/'+lastTrip.id : ''
   const tripPhoto = featuredDraft && [featuredDraft.stay, ...featuredDraft.days.flat()].find(place=>place?.photo?.url)
   return <div className="page yatra-overview discovery-home">
+    <div className="home-location-bar">
+      <div className="home-location-label">
+        <MapPin size={16}/>
+        <span>{city ? <>Exploring <strong>{city.name}</strong>{city.region ? <small>, {city.region}</small> : null}</> : 'Set your location'}</span>
+      </div>
+      <div className="home-location-controls">
+        <DestinationSearch catalog={[]} selected={city} onSelect={choose} global label="Location" placeholder="Search city or destination"/>
+        <button className="home-locate-btn" onClick={locate} disabled={locator.busy} title="Use my location">
+          <LocateFixed size={16}/>{locator.busy ? 'Locating…' : 'Locate me'}
+        </button>
+      </div>
+      {locator.message && <p className="home-location-status" role="status">{locator.message}</p>}
+    </div>
     {tripHref && <section className="home-active-trip" aria-labelledby="home-active-title">
       {tripPhoto ? <PlacePhoto place={tripPhoto} compact fallback/> : featuredPlace
         ? <img src={`/images/${featuredPlace.image}.jpg`} alt=""/> : <Icon name="trip" size={36}/>}
@@ -135,36 +150,38 @@ export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onD
             placeholder="Plan 3 days in Goa for two under ₹25,000"/>
           <button type="submit" aria-label="Send to AI Assistant" disabled={!prompt.trim()}><ArrowRight size={19}/></button>
         </form>
+        <div className="home-prompt-examples" aria-label="Example trip prompts">
+          {['A weekend in Goa','A food trip to Hyderabad','Three days in Singapore'].map(example=>
+            <Pill key={example} onClick={()=>setPrompt(example)}>{example}</Pill>)}
+        </div>
         <div className="landing-actions">
           <Button variant="primary" icon="chat" onClick={()=>onNavigate('chat')}>Start planning</Button>
           <a className="btn secondary" href="#trips">Open My Trips <ChevronRight size={16}/></a>
         </div>
       </div>
-      {!tripHref && <div className="landing-hero-visual">
+      <div className="landing-hero-visual">
         <img className="landing-hero-image" src="/images/kerala.jpg" alt="" fetchPriority="high" width="640" height="420"/>
         <a className="landing-hero-link" href="#discover"><Map size={17}/> Explore destinations <ChevronRight size={16}/></a>
-      </div>}
+      </div>
     </section>
-    <section className="landing-grid landing-features" aria-labelledby="landing-tools">
-      <h2 id="landing-tools">Plan, explore, and get around</h2>
-      {actions.map(([route,ActionIcon,title,description,photo])=><a href={'#'+route} className="yatra-overview-card" key={route}>
+    <MarqueeTicker/>
+    <BentoExploreSection catalog={catalog} onPlan={id => onPlan('', id)}/>
+    <section className="landing-features home-explore" aria-labelledby="landing-tools">
+      <h2 id="landing-tools">Explore your way</h2>
+      <div className="home-explore-grid">{actions.map(([route,ActionIcon,title,description,photo])=><a href={'#'+route} className="home-explore-card" key={route}>
         <img src={`/images/${photo}.jpg`} alt="" width="768" height="512" loading="lazy" decoding="async"/>
-        <div><span className="yatra-overview-icon"><ActionIcon size={18}/></span><span><strong>{title}</strong><small>{description}</small></span><ChevronRight size={16}/></div></a>)}
+        <span className="home-explore-caption"><ActionIcon size={18}/><span><strong>{title}</strong><small>{description}</small></span><ArrowRight size={17}/></span>
+      </a>)}</div>
     </section>
     <section className="landing-discovery" aria-label="Destination discovery">
     <header className="discovery-home-intro">
       <div className="discovery-home-heading">
         <h2>{city ? <>Explore <span>{city.name}</span></> : 'Explore near you'}</h2>
-        <p>{chosen || !city ? 'Find places to go, eat and stay.' : library.profile?.homeCity ? 'Near your profile city' : 'Suggested city · search to explore somewhere else'}</p>
-      </div>
-      <div className="discovery-home-search">
-        <DestinationSearch catalog={[]} selected={city} onSelect={choose} global label="Explore a city" placeholder="Search by city"/>
-        <Button onClick={locate} disabled={locator.busy}><LocateFixed size={17}/>{locator.busy ? 'Locating…' : 'Use my location'}</Button>
+        <p>{chosen || !city ? 'Find places to go, eat and stay.' : library.profile?.homeCity ? 'Near your profile city' : 'Suggested city · change location above'}</p>
       </div>
       {cityId && <DiscoveryWeather key={cityId} cityId={cityId}/>}
-      {locator.message && <p className="discovery-location-status" role="status">{locator.message}</p>}
     </header>
-    {city ? <DiscoveryFeed key={city.id} location={city} profile={library.profile} onPlan={onPlan} onAsk={onAsk}/>
+    {city ? <DiscoveryFeed key={city.id} location={city} profile={library.profile} onPlan={onPlan} onAsk={onAsk} onRequireAccount={onRequireAccount}/>
       : name && !suggestionFailure ? <DiscoveryLoading city={name}/>
       : suggestionFailure ? <div className="discovery-message" role="status"><p>Search for a city to show nearby places.</p><Button onClick={()=>{setSuggestionFailure(false);setAttempt(value=>value+1)}}>Retry suggestion</Button></div>
       : null}
@@ -179,7 +196,6 @@ export function Discover({catalog,library,onSave,onOpen,onPlan,savedOnly}) {
   const [filter,setFilter]=useState('All places')
   const [query,setQuery]=useState('')
   const savedPlaces=useSavedDiscoveryPlaces()
-  const [photoCity,setPhotoCity]=useState('')
   const found=catalog.filter(place=>(!savedOnly||library.saved.includes(place.id))&&(filter==='All places'||place.theme===filter)&&
     (place.name+' '+place.region+' '+place.tagline).toLowerCase().includes(query.toLowerCase()))
   return <div className="page inner-page"><div className="eyebrow"><span/> {savedOnly?'YOUR SHORTLIST':'DESTINATION GUIDE'}</div><h1>{savedOnly?'Saved places':'Explore destinations'}</h1>
@@ -187,12 +203,6 @@ export function Discover({catalog,library,onSave,onOpen,onPlan,savedOnly}) {
     {!savedOnly&&<><div className="search"><Icon name="search"/><input aria-label="Search destinations" placeholder="Search destinations" value={query} onChange={event=>setQuery(event.target.value)}/></div><div className="filters">{themes.map(theme=><Pill key={theme} active={filter===theme} onClick={()=>setFilter(theme)}>{theme}</Pill>)}</div></>}
     {savedOnly && <SavedDiscoveryPlaces onPlan={onPlan} profile={library.profile}/>}
     {found.length?<DestinationGrid places={found} saved={library.saved} onSave={onSave} onOpen={onOpen}/>:(!savedOnly||!savedPlaces.length)&&<Empty icon={savedOnly?'heart':'search'} title={savedOnly?'No saved places yet':'No destinations found'} description={savedOnly?'Use the heart on a place card to save it here.':'Try another search or theme.'}/>}
-    {savedOnly && found.length > 0 && <section className="discover-section">
-      <label>Photos for saved destinations<select value={found.some(place=>place.id===photoCity)?photoCity:found[0].id} onChange={event=>setPhotoCity(event.target.value)}>
-        {found.map(place=><option key={place.id} value={place.id}>{place.name}</option>)}
-      </select></label>
-      <ReferencePhotos key={photoCity||found[0].id} location={found.find(place=>place.id===photoCity)||found[0]} grid/>
-    </section>}
   </div>
 }
 export function Trips({library,catalog,onPlan,onOpen,onDelete,onOpenDraft,onDeleteDraft}) {

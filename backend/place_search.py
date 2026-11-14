@@ -13,12 +13,12 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from .agents import USER_AGENT, clean
-from .auth import limit
+from .auth import current_user, google_required, limit
 from .locations import compact, find_destinations, lookup
 from .nearby import ENCYCLOPEDIA_CATEGORIES, distance_metres, nearby_report
 from .open_places import osm_places
 from .place_media import nearby_media
-from .place_photos import attach_place_photos
+from .place_photos import attach_place_photos, title_key
 from .wikivoyage import travel_listings
 from .source_cache import SourceCache, source_result
 
@@ -214,10 +214,7 @@ async def google_search(client, key, query, category, city, point, min_rating, s
     return ranked, data.get("nextPageToken")
 
 
-async def google_photo(client, key, place, raw):
-    photo = next(iter(raw.get("photos") or []), None)
-    if not photo:
-        return
+async def resolve_google_photo(client, key, place, photo):
     name = photo.get("name", "")
     if not re.fullmatch(r"places/[\w-]+/photos/[\w-]+", name, re.ASCII) or name.split("/")[1] != place["id"]:
         return
@@ -231,12 +228,67 @@ async def google_photo(client, key, place, raw):
         return
     if not url or not (urlsplit(url).hostname or "").endswith(".googleusercontent.com"):
         return
-    place["photo"] = {
+    return {
         "url": url, "sourceUrl": public_url(photo.get("googleMapsUri")) or place["url"],
         "authors": [{"name": author["displayName"], "url": public_url(author.get("uri")),
                      "avatar": public_url(author.get("photoUri"))}
                     for author in photo.get("authorAttributions") or [] if author.get("displayName")],
     }
+
+
+async def google_photo(client, key, place, raw):
+    photo = next(iter(raw.get("photos") or []), None)
+    if photo:
+        resolved = await resolve_google_photo(client, key, place, photo)
+        if resolved:
+            place["photo"] = resolved
+
+
+async def matched_venue_photo(client, key, name, lat, lon):
+    fields = ["places.id", "places.displayName", "places.location", "places.googleMapsUri", "places.photos"]
+    response = await client.post(GOOGLE_ENDPOINT + ":searchText", headers=google_headers(key, fields), json={
+        "textQuery": name, "pageSize": 5, "locationRestriction": {"rectangle": {
+            "low": {"latitude": max(-90, lat - .002), "longitude": max(-180, lon - .002)},
+            "high": {"latitude": min(90, lat + .002), "longitude": min(180, lon + .002)},
+        }},
+    })
+    response.raise_for_status()
+    point = {"lat": lat, "lon": lon}
+    matches = []
+    for raw in response.json().get("places", []):
+        location = raw.get("location") or {}
+        position = coordinates(location.get("latitude"), location.get("longitude"))
+        if (raw.get("id") and position and title_key((raw.get("displayName") or {}).get("text", "")) == title_key(name)
+                and distance_metres(point, position) <= 80):
+            matches.append(raw)
+    if len(matches) != 1:
+        return None
+    raw = matches[0]
+    photo = next(iter(raw.get("photos") or []), None)
+    return await resolve_google_photo(client, key, {"id": raw["id"], "url": public_url(raw.get("googleMapsUri"))}, photo) if photo else None
+
+
+@router.get("/places/google/{place_id}/photos")
+async def google_place_photos(place_id: str, request: Request, count: int = Query(default=10, alias="limit", ge=1, le=10)):
+    limit(request, "google-place-gallery", 18, 60)
+    if not re.fullmatch(r"[a-zA-Z0-9_-]{4,160}", place_id):
+        raise HTTPException(422, "Invalid Google place ID.")
+    key = os.getenv("GOOGLE_PLACES_API_KEY")
+    if not key or os.getenv("ENABLE_GOOGLE_PLACE_PHOTOS") != "1":
+        return {"status": "disabled", "items": []}
+    try:
+        async with httpx.AsyncClient(timeout=6) as client:
+            response = await client.get(f"{GOOGLE_ENDPOINT}/{place_id}", headers=google_headers(key, ["id", "googleMapsUri", "photos"]))
+            response.raise_for_status()
+            raw = response.json()
+            if raw.get("id") != place_id:
+                return {"status": "empty", "items": []}
+            place = {"id": place_id, "url": public_url(raw.get("googleMapsUri"))}
+            photos = await asyncio.gather(*(resolve_google_photo(client, key, place, photo) for photo in (raw.get("photos") or [])[:count]))
+        items = [{**photo, "type": "photo"} for photo in photos if photo]
+        return {"status": "live" if items else "empty", "items": items}
+    except (httpx.HTTPError, TypeError, ValueError) as error:
+        raise HTTPException(503, "Google Maps photos are unavailable right now.") from error
 
 
 @router.get("/places/google/{place_id}")
@@ -479,7 +531,8 @@ async def search_places(
     page_token: Annotated[str | None, Query(max_length=1600)] = None,
 ):
     limit(request, "worldwide-place-search", 24, 60)
-    return await lookup_places(q, category, location_id, lat, lon, min_rating, sort, page_token)
+    guest = google_required() and not await asyncio.to_thread(current_user, request)
+    return await lookup_places(q, category, location_id, lat, lon, min_rating, sort, page_token, public_only=guest)
 
 
 @router.get("/places/media")
@@ -490,10 +543,25 @@ async def place_media(
     q: Annotated[str, Query(max_length=120)] = "",
     radius: Annotated[int, Query(ge=50, le=10_000)] = 800,
     type: Literal["all", "photo", "video"] = "all",
+    exact: bool = False,
+    venue: bool = False,
 ):
-    limit(request, "place-media", 24, 60)
+    limit(request, "exact-place-media" if exact else "place-media", 48 if exact else 24, 60)
     async with httpx.AsyncClient(timeout=5, headers={"User-Agent": USER_AGENT}) as client:
-        return await nearby_media(client, lat, lon, " ".join(q.split()), radius, type)
+        name = " ".join(q.split())
+        result = await nearby_media(client, lat, lon, name, radius, type, exact=exact)
+        key = os.getenv("GOOGLE_PLACES_API_KEY")
+        if (exact and venue and type != "video" and name and key and os.getenv("ENABLE_GOOGLE_PLACE_PHOTOS") == "1"
+                and (not google_required() or await asyncio.to_thread(current_user, request))):
+            if result["items"] and type == "photo":
+                return result
+            try:
+                photo = await matched_venue_photo(client, key, name, lat, lon)
+            except (httpx.HTTPError, TypeError, ValueError):
+                photo = None
+            if photo:
+                return {**result, "status": "live", "items": [{**photo, "type": "photo", "title": name}, *result["items"]]}
+        return result
 
 
 async def lookup_places(q, category="all", location_id=None, lat=None, lon=None, min_rating=None,

@@ -20,6 +20,13 @@ from .models import Finding
 
 
 class ApiTest(unittest.TestCase):
+    def test_trip_transport_endpoint_exposes_timed_quotes(self):
+        with patch("backend.transport_sources.transport_quotes", new=AsyncMock(return_value={"transit": {"status": "empty"}})) as quote:
+            response = self.client.get("/api/travel-providers?timetable=true&local=true&origin=17.4,78.4&destination=17.5,78.5")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["quotes"]["transit"]["status"], "empty")
+        self.assertTrue(quote.await_args.kwargs["local"])
+
     def setUp(self):
         self.client = TestClient(app)
         self.client.__enter__()
@@ -54,7 +61,7 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.client.post("/api/login", json=credentials).status_code, 200)
         self.assertEqual(self.client.get("/api/library").json()["revision"], 1)
 
-    def test_google_required_blocks_travel_and_isolates_chat_sessions(self):
+    def test_guests_can_browse_but_account_details_and_chat_are_private(self):
         from unittest.mock import patch
         with (patch.dict(os.environ, {"REQUIRE_GOOGLE_SIGN_IN": "1"}),
               patch("backend.auth.firebase_config", return_value={"apiKey": "example"}),
@@ -64,19 +71,27 @@ class ApiTest(unittest.TestCase):
               ])):
             self.assertEqual(self.client.get("/api/health").status_code, 200)
             self.assertTrue(self.client.get("/api/auth/config").json()["googleRequired"])
-            self.assertEqual(self.client.get("/api/destinations").status_code, 401)
-            self.assertEqual(self.client.get("/api/news?destination=goa").status_code, 401)
-            self.assertEqual(self.client.get("/api/locations?q=Hyderabad").status_code, 401)
+            self.assertEqual(self.client.get("/api/destinations").status_code, 200)
+            self.assertEqual(self.client.get("/api/news?days=1").status_code, 422)
+            self.assertEqual(self.client.get("/api/locations?q=x").status_code, 422)
+            self.assertEqual(self.client.get("/api/account").status_code, 401)
+            self.assertEqual(self.client.get("/api/library").status_code, 401)
             self.assertEqual(self.client.post("/api/planning-agent/sessions").status_code, 401)
             token = {"token": "x" * 120}
             self.assertEqual(self.client.post("/api/auth/firebase", json=token).status_code, 200)
             self.assertEqual(self.client.get("/api/destinations").status_code, 200)
+            self.assertEqual(self.client.get("/api/account").json()["phone"], "")
+            profile = {"name": "First traveler", "username": "first-traveler", "phone": "+91 98765 43210"}
+            self.assertEqual(self.client.put("/api/account", json=profile).status_code, 200)
+            self.assertEqual(self.client.get("/api/account").json()["phone"], profile["phone"])
+            self.assertNotIn("phone", self.client.get("/api/session").json()["user"])
             conversation = self.client.post("/api/planning-agent/sessions").json()["token"]
             path = f"/api/planning-agent/sessions/{conversation}"
             self.assertEqual(self.client.get(path).status_code, 200)
             self.assertEqual(self.client.post("/api/logout").status_code, 200)
             self.assertEqual(self.client.get(path).status_code, 401)
             self.assertEqual(self.client.post("/api/auth/firebase", json=token).status_code, 200)
+            self.assertEqual(self.client.get("/api/account").json()["phone"], "")
             self.assertEqual(self.client.get(path).status_code, 404)
 
     def test_registration_schedules_welcome_after_creating_account(self):

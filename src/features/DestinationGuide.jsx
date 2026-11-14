@@ -1,8 +1,11 @@
-import React, {useEffect, useState} from 'react'
+import React, {useEffect, useRef, useState} from 'react'
 import {DestinationSearch} from '../components/DestinationSearch.jsx'
 import {DestinationBrief} from '../components/CityBrief.jsx'
-import {ReferencePhotos} from '../components/PhotoRail.jsx'
-import {Button, Icon, Pill, SourcePill} from '../components/UI.jsx'
+import {PlacePhoto} from '../components/PlacePhoto.jsx'
+import {Button, Dialog, Icon, Pill, SourcePill} from '../components/UI.jsx'
+import {PlaceDetails} from './PlaceDetails.jsx'
+import {JourneyMap} from './JourneyMap.jsx'
+import {useNearbyDiscovery} from './DiscoveryFeed.jsx'
 import {fetchResearch, researchTopics} from '../research.mjs'
 import {request} from '../api.mjs'
 
@@ -16,6 +19,24 @@ export function DestinationGuide({catalog, initialDestination, profile, initialT
   const [research, setResearch] = useState(null)
   const [updates, setUpdates] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [resolved, setResolved] = useState(null)
+  const [selected, setSelected] = useState(null)
+  const [mapOpen, setMapOpen] = useState(true)
+  const mapToggle = useRef(null)
+  const cityId = place.id.startsWith('geo:') ? place.id.slice(4) : resolved?.key === place.id ? resolved.id : null
+  const {report, photosPending} = useNearbyDiscovery(cityId)
+
+  useEffect(() => {
+    if (place.id.startsWith('geo:')) return
+    const controller = new AbortController()
+    request('locations?q=' + encodeURIComponent(place.name), {signal:controller.signal}).then(rows => {
+      const regions = [place.region, ...(place.region || '').split(',').map(part => part.trim())]
+      const match = rows.find(row => row.name.toLowerCase() === place.name.toLowerCase() &&
+        (!place.region || [row.region, row.country].some(region => region && regions.includes(region))))
+      if (!controller.signal.aborted) setResolved({key:place.id, id:match?.id})
+    }).catch(() => {})
+    return () => controller.abort()
+  }, [place.id, place.name, place.region])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -34,6 +55,14 @@ export function DestinationGuide({catalog, initialDestination, profile, initialT
   }, [place, topic, profile, attempt])
 
   const stories = (updates?.articles || []).slice().sort((a, b) => Boolean(b.images?.length) - Boolean(a.images?.length)).slice(0, 3)
+  const categories = {stays:['Stay'], food:['Food'], experiences:['Sight','Nature','Activity','Shopping']}
+  const places = (report?.places || []).filter(item => !categories[topic] || categories[topic].includes(item.category))
+  const featured = [...places].sort((a,b) => Number(Boolean(b.photo?.url && b.photo.kind !== 'nearby')) -
+    Number(Boolean(a.photo?.url && a.photo.kind !== 'nearby'))).slice(0, 8)
+  const remaining = places.filter(item => !featured.includes(item))
+  const point = report?.location || place.places?.[0] || place
+  const center = {...point, name:place.name}
+  const canMap = Number.isFinite(center.lat) && Number.isFinite(center.lon)
   return <div className="page inner-page destination-guide">
     <header className="guide-heading"><div><h1>Destination guide</h1><p>Local highlights, practical details, and recent changes for your trip.</p></div>
       <DestinationSearch catalog={catalog} selected={place} onSelect={setPlace} global label="Choose a destination"/>
@@ -58,11 +87,36 @@ export function DestinationGuide({catalog, initialDestination, profile, initialT
       {loading && <p role="status">Checking for recent updates…</p>}
       {!loading && !stories.length && <p className="form-note">{updates && updates.status !== 'unavailable' ? 'No recent updates for this topic.' : 'Recent updates are temporarily unavailable.'}</p>}
       {!!stories.length && <div className="guide-stories">{stories.map(story => <article className="panel" key={story.url}>
-        {story.images?.[0] && <img alt="" src={story.images[0]} loading="lazy" referrerPolicy="no-referrer" onError={event => {event.currentTarget.hidden = true}}/>}
+        {story.images?.[0] && <a className="place-photo-open" href={story.url} target="_blank" rel="noreferrer" aria-label={`Read ${story.title}`}><img alt="" src={story.images[0]} loading="lazy" referrerPolicy="no-referrer" onError={event => {event.currentTarget.parentElement.hidden = true}}/></a>}
         <div><small>{[story.publisher, story.date && new Date(story.date).toLocaleDateString()].filter(Boolean).join(' · ')}</small>
           <h3>{story.title}</h3><SourcePill url={story.url} label="Read update"/></div>
       </article>)}</div>}
     </section>
-    {!place.image && <ReferencePhotos key={place.id} location={place} limit={4} grid description="Licensed destination photos."/>}
+    <div className={'discovery-layout' + (canMap && mapOpen ? ' discovery-with-map' : '')}>
+    <section className="guide-places" aria-label="Place photos and details">
+      <div className="world-list-heading"><h2>Places in {place.name}</h2>
+        {canMap && <Button ref={mapToggle} icon="map" aria-expanded={mapOpen} onClick={() => setMapOpen(value => !value)}>{mapOpen ? 'Hide map' : 'Show map'}</Button>}
+      </div>
+      <div className="guide-stories">{featured.map(item => <article className="panel" key={item.url}>
+        <PlacePhoto place={item} lookup hideUnavailable onOpen={() => setSelected(item)}/>
+        <div><small>{item.category}{Number.isFinite(item.rating) ? ` · ★ ${item.rating}` : ''}</small>
+          <h3><button type="button" className="guide-place-name" onClick={() => setSelected(item)}>{item.name}</button></h3>
+          {item.publishedPrice && <p>{item.publishedPrice}</p>}
+        </div>
+      </article>)}</div>
+      {!featured.length && <p className="form-note">{photosPending ? 'Checking place photos…' : 'No listings available for this view.'}</p>}
+      {!!remaining.length && <details><summary>More places and details</summary><div className="guide-stories">
+        {remaining.map(item => <article className="panel" key={item.url}>
+          <PlacePhoto place={item} lookup hideUnavailable onOpen={() => setSelected(item)}/>
+          <div><button type="button" className="guide-place-name" onClick={() => setSelected(item)}>{item.name}</button></div>
+        </article>)}
+      </div></details>}
+    </section>
+    {canMap && mapOpen && <div className="discovery-map-panel"><JourneyMap key={place.id} center={center}
+      places={places} onSelect={item => item && setSelected(item)} onClose={() => {setMapOpen(false);mapToggle.current?.focus()}}/></div>}
+    </div>
+    {selected && <Dialog label={selected.name} className="discovery-details-dialog" onClose={() => setSelected(null)}>
+      <PlaceDetails key={selected.url} place={selected} initialTab="media"/>
+    </Dialog>}
   </div>
 }

@@ -241,5 +241,11 @@ export function useLibrary() {
     setLibrary(data.current)
     setStatus('')
   }
-  return {user,library,ready,profileReady,status,login:(user,options)=>load(user,options?.mergeGuest!==false,options?.mergeProfile!==false),logout,change:callback=>save(callback(data.current))}
+  function updateIdentity(next) {
+    if (account.current?.id !== next.id) return
+    const updated = {...account.current, name:next.name}
+    account.current = updated
+    setUser(updated)
+  }
+  return {user,library,ready,profileReady,status,login:(user,options)=>load(user,options?.mergeGuest!==false,options?.mergeProfile!==false),logout,updateIdentity,change:callback=>save(callback(data.current))}
 }

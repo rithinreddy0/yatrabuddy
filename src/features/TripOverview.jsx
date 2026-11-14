@@ -2,10 +2,10 @@ import React, {useEffect, useMemo, useRef, useState} from 'react'
 import {Camera, ClipboardList, NotebookPen} from 'lucide-react'
 import {request} from '../api.mjs'
 import {PlacePhoto} from '../components/PlacePhoto.jsx'
-import {PhotoRail, ReferencePhotos} from '../components/PhotoRail.jsx'
+import {PhotoRail} from '../components/PhotoRail.jsx'
 import {DestinationBrief} from '../components/CityBrief.jsx'
 import {revealResult} from '../components/revealResult.mjs'
-import {AgentProgress, Button, Icon, IconButton, Pill, SourcePill} from '../components/UI.jsx'
+import {AgentProgress, Button, Dialog, Icon, IconButton, Pill, SourcePill} from '../components/UI.jsx'
 import {money} from '../planner.mjs'
 import {draftSchedule, visitTime} from './draftSchedule.mjs'
 import {draftMapData, JourneyMap, mapPlaceId} from './JourneyMap.jsx'
@@ -36,8 +36,6 @@ const shortcuts = [
   ['journal', 'Trip journal', NotebookPen],
   ['preferences', 'Trip preferences', 'settings'],
 ]
-const primarySections = shortcuts.slice(0, 5)
-const moreSections = shortcuts.slice(5)
 
 function formatDate(value) {
   return value ? dateFormat.format(new Date(value + 'T12:00:00Z')) : 'Flexible dates'
@@ -90,13 +88,13 @@ function TravelBudget({draft}) {
 }
 
 function TripPhotoReferences({draft, stops, onSelect}) {
-  const places = [draft.stay,...stops].filter(place=>place?.photo?.url)
+  const places = [draft.stay,...stops].filter(place=>place?.photo?.url && place.photo.kind !== 'nearby')
   const [failed,setFailed]=useState(()=>new Set())
   const illustrated=places.filter(place=>!failed.has(place.url))
-  if(!illustrated.length)return <ReferencePhotos location={{...stops[0],name:draft.name,cityId:draft.cityId}} grid description="Licensed photos near the trip area." loadingLabel={false}/>
+  if(!illustrated.length)return null
   return <PhotoRail title="Your stops in photos" description="Select a place to open its photos, videos and visit details." count={illustrated.length}>
     {illustrated.map(place=><article className="photo-rail-tile" key={place.url}>
-      <PlacePhoto place={place} hideUnavailable onUnavailable={()=>setFailed(current=>new Set([...current,place.url]))}/>
+      <PlacePhoto place={place} hideUnavailable onOpen={()=>onSelect(place)} onUnavailable={()=>setFailed(current=>new Set([...current,place.url]))}/>
       <Button variant="text-btn" onClick={()=>onSelect(place)}>{place.name}</Button>
     </article>)}
   </PhotoRail>
@@ -212,7 +210,7 @@ function StayOptions({draft, nearby, onSelect, onEdit, retry}) {
     {!nearby.loading && !nearby.error && !stays.length && <p>Open the trip planner to search for other accommodation.</p>}
     <div className="trip-overview-stays">
       {stays.slice(0, 8).map(place => <article key={place.url}>
-        <PlacePhoto place={place} hideUnavailable/>
+        <PlacePhoto place={place} lookup hideUnavailable/>
         <div><h3>{place.name}</h3><p>{place.address || place.source}</p>
           {place.publishedPrice && <p>Published price · {place.publishedPrice}</p>}
           <div className="trip-overview-pills">
@@ -250,7 +248,7 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
     return 'overview'
   })
   const [invite, setInvite] = useState(initialSection === 'invite' ? 1 : 0)
-  const [mapOpen, setMapOpen] = useState(false)
+  const [mapOpen, setMapOpen] = useState(true)
   const [selection, setSelection] = useState(null)
   const [query, setQuery] = useState('')
   const voice = useVoiceInput({continuous:false, onTranscript:text => setQuery(current => [current.trim(), text].filter(Boolean).join(' ').slice(0,600))})
@@ -261,6 +259,7 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
   const [roomDraft, setRoomDraft] = useState(null)
   const mediaSaving = useRef(new Set())
   const sectionHeading = useRef(null)
+  const mapToggle = useRef(null)
   const active = roomDraft?.updated > draft.updated ? roomDraft : draft
   const stops = active.days.flat()
   const cover = [active.stay, ...stops].find(place => place?.photo?.url) || stops[0]
@@ -355,7 +354,7 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
   return <article className="page trip-overview" data-section={section}>
     <header className="trip-overview-header trip-overview-glass">
       <div className="trip-overview-heading">
-        {cover && <PlacePhoto place={cover} compact fallback className="trip-overview-cover"/>}
+        {cover && <PlacePhoto place={cover} compact lookup className="trip-overview-cover"/>}
         <div>
         {onBack && <Button variant="text-btn" icon="back" onClick={onBack}>My trips</Button>}
         <h1>Trip to {active.name}</h1>
@@ -363,36 +362,27 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
         </div>
       </div>
       <div className="trip-overview-actions">
-        {section !== 'travel' && <Button icon="map" aria-pressed={mapVisible} onClick={() => {
+        {section !== 'travel' && <Button ref={mapToggle} icon="map" aria-pressed={mapVisible} onClick={() => {
           if (!mapVisible && !selection && !['overview', 'itinerary'].includes(section)) open('itinerary')
           setMapOpen(!mapVisible)
         }}>{mapVisible ? 'Hide map' : 'Show map'}</Button>}
+        <Button icon="download" onClick={() => window.print()}>Print / PDF</Button>
         {section !== 'travel' && <Button icon="users" onClick={() => open('chat', true)}>Invite teammates</Button>}
         <Button icon="compass" variant="primary" aria-pressed={section === 'travel'} onClick={() => open(section === 'travel' ? 'overview' : 'travel')}>
           {section === 'travel' ? 'Exit Travel Mode' : 'Travel Mode'}
         </Button>
       </div>
     </header>
-    {section !== 'travel' && <div className="trip-overview-meta" aria-label="Trip details">
-      <button type="button" onClick={() => open('preferences')}><Icon name="calendar" size={16}/>{formatDate(active.departure)}</button>
-      <button type="button" onClick={() => open('preferences')}><Icon name="users" size={16}/>{active.travelers} {active.travelers === 1 ? 'traveler' : 'travelers'}</button>
-      <button type="button" onClick={() => open('preferences')}><Icon name="wallet" size={16}/>{active.budget == null ? 'Set budget' : money(active.budget) + ' budget'}</button>
-    </div>}
-    <div className="trip-overview-layout">
+    <div className="trip-overview-layout" data-map-open={mapVisible}>
       {section !== 'travel' && <nav className="trip-overview-shortcuts" aria-label="Trip sections">
-        <div className="trip-section-primary">{primarySections.map(([id, label, glyph]) => <button key={id} type="button" aria-pressed={section === id} onClick={() => open(id)}>
+        {shortcuts.map(([id, label, glyph]) => <button key={id} type="button" aria-pressed={section === id} onClick={() => open(id)}>
           {typeof glyph === 'string' ? <Icon name={glyph} size={17}/> : React.createElement(glyph, {size:17, 'aria-hidden':true})}
           <span>{label}</span>{id === 'itinerary' && <small>{stops.length}</small>}
-        </button>)}</div>
-        <select aria-label="More trip tools" value={moreSections.some(([id]) => id === section) ? section : ''} onChange={event => open(event.target.value)}>
-          <option value="" disabled>More tools</option>
-          {moreSections.map(([id, label]) => <option key={id} value={id}>{id === 'journal' ? 'Notes & journal' : label}</option>)}
-        </select>
+        </button>)}
       </nav>}
       <section className="trip-overview-main" aria-label="Trip planning tools">
-        {section !== 'travel' && <header className="trip-section-title" key={section} tabIndex={-1} ref={sectionHeading}>
+        {!['travel', 'itinerary'].includes(section) && <header className="trip-section-title" key={section} tabIndex={-1} ref={sectionHeading}>
           <h2>{section === 'media' ? 'Photos, videos & memories' : title}</h2>
-          {section === 'itinerary' && <Button icon="download" onClick={() => window.print()}>Print / PDF</Button>}
           {section === 'calendar' && <Button icon="download" disabled={!active.departure}
             title={!active.departure ? 'Set a departure date in trip preferences' : undefined} onClick={() => exportCalendar(active)}>Export calendar</Button>}
         </header>}
@@ -401,7 +391,7 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
             <h2>{active.days.length} {active.days.length === 1 ? 'day' : 'days'} in {active.name}</h2>
             <p>{stops.length} planned {stops.length === 1 ? 'stop' : 'stops'}{active.origin ? ' · Departing from ' + active.origin : ''}</p>
             {active.stay && <button type="button" className="trip-overview-stay-preview" onClick={() => select(active.stay)}>
-              <PlacePhoto place={active.stay} compact fallback className="trip-overview-stay-thumb"/>
+              <PlacePhoto place={active.stay} compact lookup className="trip-overview-stay-thumb"/>
               <span><small>Suggested stay</small><strong>{active.stay.name}</strong>
                 {Number.isFinite(active.stay.rating) && <small>★ {active.stay.rating.toFixed(1)} / 5{active.stay.reviewCount ? ` · ${active.stay.reviewCount} reviews` : ''}</small>}
                 {active.stay.publishedPrice && <small>{active.stay.publishedPrice}</small>}</span>
@@ -420,18 +410,8 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
         {section === 'transport' && <div className="trip-overview-glass trip-overview-section"><TripTransport draft={active} onAsk={onAsk && (text => onAsk(text, active.id))}/></div>}
         {section === 'stays' && <StayOptions draft={active} nearby={nearby} onSelect={select} onEdit={onEdit} retry={() => setAttempt(value => value + 1)}/>}
         {['packing', 'journal'].includes(section) && <PersonalList key={section} kind={section} tripId={active.id}/>}
-        <div className="trip-overview-content" data-with-map={mapVisible || Boolean(selection)}
-          ref={section === 'itinerary' ? sectionHeading : undefined} tabIndex={section === 'itinerary' ? -1 : undefined}>
-        {(mapVisible || selection) && <div className="trip-overview-context">
-          {mapVisible && <div className="trip-overview-map-frame">
-            <JourneyMap center={map.center} places={mapPlaces} routes={map.routes} selectedId={pin && mapPlaceId(pin)}
-              onSelect={select} onClose={() => setMapOpen(false)}/>
-          </div>}
-          {selection && <div className="trip-overview-glass trip-overview-place">
-            <PlaceDetails key={mapPlaceId(selection)} place={selection} onClose={() => setSelection(null)}
-              onShowMap={!mapOpen ? () => setMapOpen(true) : undefined} onSaveMedia={saveMedia} savedMedia={savedMedia}/>
-          </div>}
-        </div>}
+        <div className="trip-overview-content"
+          ref={['itinerary','travel'].includes(section) ? sectionHeading : undefined} tabIndex={['itinerary','travel'].includes(section) ? -1 : undefined}>
         {workspaceTabs.has(section) && <div className="trip-overview-room" aria-label={title}>
           {section === 'ideas' && nearby.loading && <AgentProgress label="Finding places and photos for this trip"/>}
           {section === 'ideas' && nearby.error && <p role="status">{nearby.error} <Button onClick={() => setAttempt(value => value + 1)}>Retry</Button></p>}
@@ -454,7 +434,18 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
         {voice.error && <p className="form-note" role="status">{voice.error}</p>}
         {status && <p className="trip-overview-status" role="status">{status}</p>}
       </section>
+      {mapVisible && <aside className="trip-overview-context" aria-label="Trip map panel">
+        <div className="trip-overview-map-frame">
+          <JourneyMap center={map.center} places={mapPlaces} routes={map.routes} selectedId={pin && mapPlaceId(pin)}
+            compactControls onSelect={select} onClose={() => {setMapOpen(false);mapToggle.current?.focus({preventScroll:true})}}/>
+        </div>
+      </aside>}
     </div>
+    {selection && <Dialog label={selection.name} className="discovery-details-dialog" onClose={() => setSelection(null)}>
+      <PlaceDetails key={mapPlaceId(selection)} place={selection}
+        onShowMap={() => {if (!['overview', 'itinerary'].includes(section)) open('itinerary'); setMapOpen(true); setSelection(null)}}
+        onSaveMedia={saveMedia} savedMedia={savedMedia}/>
+    </Dialog>}
     <PrintItinerary draft={active}/>
   </article>
 }

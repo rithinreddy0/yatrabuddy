@@ -19,3 +19,19 @@
 @media (prefers-reduced-motion: reduce) {
   .agent-tool-status li[data-tool-state] > svg { animation: none; }
 }
+
+
+.streaming-caret {
+  display: inline-block;
+  width: 6px;
+  height: 14px;
+  background: var(--primary, #0284c7);
+  margin-left: 3px;
+  vertical-align: -2px;
+  animation: caret-pulse 0.75s ease-in-out infinite;
+}
+
+@keyframes caret-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}

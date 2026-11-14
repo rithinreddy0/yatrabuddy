@@ -1,6 +1,7 @@
 import React,{useCallback,useEffect,useRef,useState} from 'react'
+import {UserRound} from 'lucide-react'
 import {needsOnboarding} from './authGate.mjs'
-import {AgentProgress,Brand,Button,Dialog,Empty,Icon,IconButton} from './components/UI.jsx'
+import {AgentProgress,Brand,Button,Dialog,Empty,Icon} from './components/UI.jsx'
 import {request} from './api.mjs'
 import {allowedStop,setCatalog} from './planner.mjs'
 import {Home,Discover,Trips,storedCity} from './features/Home.jsx'
@@ -31,6 +32,8 @@ const labels={
 }
 labels.demo='Demo scenario'
 labels.preferences='Preferences'
+labels.account='Account'
+labels.signin='Sign in'
 labels.trip='Trip workspace'
 labels.browse='Plan a trip'
 labels.draft='Worldwide trip draft'
@@ -40,6 +43,7 @@ labels.attractions='Places to visit'
 labels.food='Food & restaurants'
 labels.itinerary='Itinerary'
 labels.budget='Budget'
+const guestPages = new Set(['home','discover','guide','hotels','stays','attractions','food','preferences','signin'])
 
 function currentRoute(){
   const value=location.hash.slice(1)||(new URLSearchParams(location.search).has('group')?'demo':'home')
@@ -48,19 +52,20 @@ function currentRoute(){
 }
 function storedTheme(){
   try { if (['light','dark'].includes(localStorage.getItem('yatra.theme'))) return localStorage.getItem('yatra.theme') } catch {}
-  return window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'
+  return 'system'
 }
 export default function App(){
   const [route,setRoute]=useState(currentRoute)
   const [modal,setModal]=useState(null)
   const [menu,setMenu]=useState(false)
   const [navHover,setNavHover]=useState(false)
-  const [navPinned,setNavPinned]=useState(false)
+  const [navFocus,setNavFocus]=useState(false)
   const [theme,setTheme]=useState(storedTheme)
-  const desktopNav=useRef(null)
-  const closeNav=()=>{setNavHover(false);setNavPinned(false);setMenu(false)}
-  const expanded=navHover||navPinned
-  const [catalog,setPlaces]=useState(null)
+  const [systemDark,setSystemDark]=useState(()=>window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const resolvedTheme=theme==='system'?(systemDark?'dark':'light'):theme
+  const mobileNav=useRef(null)
+  const expanded=navHover||navFocus
+  const [catalog,setPlaces]=useState(fallbackCatalog)
   const [policy,setPolicy]=useState(null)
   const [loadError,setLoadError]=useState('')
   const [notice,setNotice]=useState(null)
@@ -72,6 +77,8 @@ export default function App(){
   const state=useLibrary()
   const {user,library,ready,profileReady,change}=state
   const mustSignIn=policy!==false
+  const restricted = !user && (route.page === 'account' || mustSignIn && !guestPages.has(route.page))
+  const signInTarget = useRef('home')
   const tripPages=['trip','itinerary','budget']
   const validActiveTripId=library.trips.some(item=>item.id===activeTripId)?activeTripId:(library.trips[0]?.id||'')
   const selectedTripId=route.id||validActiveTripId
@@ -110,35 +117,52 @@ export default function App(){
   },[route.page,route.id,route.section,place?.name])
 
   useEffect(()=>{
-    document.documentElement.dataset.theme=theme
-  },[theme])
-  function toggleTheme(){
-    const next=theme==='light'?'dark':'light'
+    const media=window.matchMedia('(prefers-color-scheme: dark)')
+    const update=event=>setSystemDark(event.matches)
+    media.addEventListener('change',update)
+    return ()=>media.removeEventListener('change',update)
+  },[])
+  useEffect(()=>{
+    document.documentElement.dataset.theme=resolvedTheme
+  },[resolvedTheme])
+  function changeTheme(next){
     setTheme(next)
     try { localStorage.setItem('yatra.theme',next) } catch {}
   }
 
-  function loadCatalog(){
-    setLoadError('')
-    request('destinations',{signal:AbortSignal.timeout(3500)}).then(places=>{
-      if(!Array.isArray(places)||!places.length)throw new Error('Catalog unavailable')
-      setCatalog(places);setPlaces(places)
-    }).catch(()=>{
-      setCatalog(fallbackCatalog);setPlaces(fallbackCatalog)
-      setLoadError('Bundled destination guide. Online results may be unavailable.')
-    })
-  }
+  useEffect(()=>{
+    setCatalog(fallbackCatalog)
+    const controller=new AbortController()
+    let retry
+    function loadCatalog(attempt=0) {
+      const signal=AbortSignal.any([controller.signal,AbortSignal.timeout(4500)])
+      request('destinations',{signal}).then(places=>{
+        if(!Array.isArray(places)||!places.length)throw new Error('Catalog unavailable')
+        if(controller.signal.aborted)return
+        setCatalog(places)
+        setPlaces(places)
+        setLoadError('')
+      }).catch(()=>{
+        if(controller.signal.aborted)return
+        setLoadError('Showing the saved destination guide while the travel service connects.')
+        if(attempt<3)retry=window.setTimeout(()=>loadCatalog(attempt+1),2000 * (attempt+1))
+      })
+    }
+    loadCatalog()
+    return ()=>{controller.abort();window.clearTimeout(retry)}
+  },[])
   useEffect(()=>{
     const controller=new AbortController()
     request('auth/config',{signal:controller.signal}).then(config=>setPolicy(config.googleRequired!==false)).catch(()=>{if(!controller.signal.aborted)setPolicy(true)})
     return ()=>controller.abort()
   },[])
   useEffect(()=>{
-    if(!ready||policy===null||(mustSignIn&&!user))return
-    loadCatalog()
-  },[ready,policy,user?.id])
+    if(!ready || policy===null || !restricted)return
+    signInTarget.current=location.hash.slice(1) || route.page
+    location.replace('#signin')
+  },[ready,policy,restricted,route.page,route.id,route.section])
   useEffect(()=>{
-    const handle=()=>{setRoute(currentRoute());setMenu(false);window.scrollTo(0,0)}
+    const handle=()=>{setRoute(currentRoute());setMenu(false);setNavHover(false);setNavFocus(false);window.scrollTo(0,0)}
     window.addEventListener('hashchange',handle)
     return ()=>window.removeEventListener('hashchange',handle)
   },[])
@@ -181,6 +205,7 @@ export default function App(){
     if(!stayInChat)navigate('draft/'+next.id)
   }
   function toggleSaved(id){
+    if(mustSignIn&&!user){signInTarget.current='saved';navigate('signin');return}
     const exists=library.saved.includes(id)
     change(data=>({...data,saved:exists?data.saved.filter(value=>value!==id):[...data.saved,id]}))
     message(exists?'Removed from saved places.':'Saved to your places.')
@@ -244,7 +269,7 @@ export default function App(){
     }
   }
   const common={catalog,library,onSave:toggleSaved,onOpen:place=>setModal({type:'destination',place})}
-  const accountControl=<Button variant="outline" onClick={()=>setModal({type:'account'})}>{user?'Account':'Sign in'}</Button>
+  const accountControl=<a className="icon-btn account-nav-icon" href="#account" aria-label={user?'Account':'Sign in'} title={user?'Account':'Sign in'}><UserRound size={20}/></a>
   let content
   if(!catalog)content=<div className="page inner-page"><AgentProgress label="Loading your travel workspace"/></div>
   else switch(route.page){
@@ -290,22 +315,39 @@ export default function App(){
     case 'trip':content=!ready?<div className="page inner-page" role="status">Loading your saved trip...</div>:trip&&place?<Trip key={trip.id} view={route.page==='budget'?'budget':'itinerary'} trip={trip} place={place} profile={library.profile} onUpdate={updateTrip} onEdit={editIndex=>setModal({type:'plan',initial:trip.brief,editIndex})} onMessage={message} history={history} onUndo={()=>restore('undo')} onRedo={()=>restore('redo')}/>:<div className="page inner-page"><Empty title="Trip unavailable" description="Create and save a trip in chat, then its itinerary and budget will appear here." action={<Button onClick={()=>start()}>Create a trip</Button>}/></div>;break
     case 'guide':content=<DestinationGuide key={route.id||'overview'} catalog={catalog} initialTopic={route.id} profile={library.profile}
       initialDestination={homeDestination||catalog.find(item=>library.saved.includes(item.id))?.id}/>;break
-    case 'preferences':content=<Preferences user={user} style={library.profile?.style||library.style} profile={library.profile} onEditProfile={()=>setModal({type:'onboarding'})} onResetProfile={()=>setModal({type:'clear-profile'})} onChange={style=>{change(data=>({...data,style,profile:data.profile?{...data.profile,style}:null}));message('Travel style saved.')}} onAccount={()=>setModal({type:'account'})}/>;break
-    default:content=<Home catalog={catalog} library={library} destination={homeDestination} onDestination={setHomeDestination} onPlan={start} onAsk={ask} onNavigate={navigate} onResearch={topic=>navigate('guide/'+topic)}/>
+    case 'account':
+    case 'preferences':content=<Preferences key={route.page} initialTab={route.page==='account'?'account':'travel'} user={user} theme={theme} onThemeChange={changeTheme} style={library.profile?.style||library.style} profile={library.profile}
+      onIdentity={state.updateIdentity} onSignOut={signOut} onEditProfile={()=>{if(mustSignIn&&!user)requireSignIn('preferences');else setModal({type:'onboarding'})}}
+      onResetProfile={()=>setModal({type:'clear-profile'})} onChange={style=>{if(mustSignIn&&!user){requireSignIn('preferences');return}change(data=>({...data,style,profile:data.profile?{...data.profile,style}:null}));message('Travel style saved.')}} onAccount={()=>requireSignIn('account')}/>;break
+    default:content=<Home catalog={catalog} library={user||!mustSignIn?library:{trips:[],drafts:[],profile:null}} destination={homeDestination} onDestination={setHomeDestination} onPlan={start} onAsk={ask} onNavigate={navigate} onResearch={topic=>navigate('guide/'+topic)}
+      onRequireAccount={mustSignIn&&!user?()=>requireSignIn('saved'):undefined}/>
   }
   const close=()=>setModal(null)
-  if(!ready||policy===null)return <main className="google-entry"><section className="panel google-entry-card"><AgentProgress label="Checking your YatraBuddy session"/></section></main>
-  if(mustSignIn&&!user)return <Account required onLogin={async account=>{await state.login(account,{mergeGuest:false});setModal(null)}}/>
-  if(mustSignIn&&needsOnboarding(user,library,profileReady))return <OnboardingChat name={user.name} initial={{style:library.style||'Balanced'}} onDone={saveProfile} onSignOut={signOut}/>
+  function requireSignIn(target) {
+    signInTarget.current=target
+    navigate('signin')
+  }
+  if((!ready&&!guestPages.has(route.page))||restricted)return <main className="google-entry"><section className="panel google-entry-card"><AgentProgress label="Checking your YatraBuddy session"/>
+    <Button variant="text-btn" icon="back" onClick={()=>navigate('home')}>Back to Home</Button></section></main>
+  if(route.page==='signin')return <Account page required={mustSignIn} onClose={()=>{signInTarget.current='home';navigate('home')}} onLogin={async account=>{
+    await state.login(account,{mergeGuest:false})
+    const target=signInTarget.current
+    signInTarget.current='home'
+    navigate(target)
+  }}/>
+  if(mustSignIn&&!guestPages.has(route.page)&&route.page!=='account'&&needsOnboarding(user,library,profileReady))return <OnboardingChat name={user.name} initial={{style:library.style||'Balanced'}} onDone={saveProfile} onSignOut={signOut}/>
   return <div className={'app-layout travel-shell '+(expanded?'nav-expanded':'compact-nav')}>
     <a className="skip" href="#main" onClick={event=>{event.preventDefault();document.getElementById('main')?.focus()}}>Skip to content</a>
     {menu&&<button className="scrim" aria-label="Close menu" onClick={()=>setMenu(false)}/>}
     <aside id="primary-navigation" className={'sidebar '+(menu?'open':'')}
       onPointerEnter={event=>{if(event.pointerType==='mouse')setNavHover(true)}} onPointerLeave={()=>setNavHover(false)}
-      onKeyDown={event=>{if(event.key==='Escape'){closeNav();desktopNav.current?.focus()}}}><div className="sidebar-heading">
+      onFocus={event=>{if(event.target.matches(':focus-visible'))setNavFocus(true)}}
+      onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget))setNavFocus(false)}}
+      onKeyDown={event=>{if(event.key==='Escape'){
+        setNavHover(false);setNavFocus(false);setMenu(false)
+        if(menu)mobileNav.current?.focus()
+      }}}><div className="sidebar-heading">
       <a className="brand" href="#home" aria-label="YatraBuddy home"><Brand/></a>
-      <button ref={desktopNav} type="button" className="icon-btn desktop-menu" aria-label={expanded?'Collapse sidebar':'Expand sidebar'} aria-expanded={expanded}
-        onClick={()=>{if(expanded)closeNav();else setNavPinned(true)}}><Icon name="menu"/></button>
     </div>
       <nav aria-label="Workspace">{pages.map(([id,icon,label])=>{
         const active=route.page===id||(['draft','browse','trip','itinerary','budget','workspace','join'].includes(route.page)&&id==='trips')||(['hotels','stays','food','attractions'].includes(route.page)&&id==='discover')
@@ -314,18 +356,19 @@ export default function App(){
         return <a key={id} href={href} className={'nav-item '+(active?'active':'')} aria-label={label} title={label} aria-current={active?'page':undefined}><Icon name={icon}/> <span className="nav-title">{label}</span>{id==='trips'&&tripCount>0&&<small>{tripCount}</small>}</a>
       })}</nav>
       <div className="side-bottom"><Button className="workspace-new-chat" icon="plus" aria-label="New chat" onClick={()=>newTripChat()}>New chat</Button>
-        <button type="button" className="nav-item theme-control" onClick={toggleTheme} aria-label={theme==='dark'?'Switch to light mode':'Switch to dark mode'}>
-          <span aria-hidden="true">{theme==='dark'?'☀':'☾'}</span><span className="nav-title">{theme==='dark'?'Light mode':'Dark mode'}</span>
+        <button type="button" className="nav-item theme-control" onClick={()=>changeTheme(theme==='system'?(resolvedTheme==='dark'?'light':'dark'):theme==='dark'?'light':'dark')} aria-label={resolvedTheme==='dark'?'Switch to light mode':'Switch to dark mode'}>
+          <span aria-hidden="true">{resolvedTheme==='dark'?'☀':'☾'}</span><span className="nav-title">{resolvedTheme==='dark'?'Light mode':'Dark mode'}</span>
         </button>
         <a href="#preferences" aria-label="Preferences" title="Preferences" className={'nav-item '+(route.page==='preferences'?'active':'')}><Icon name="settings"/> <span className="nav-title">Preferences</span></a><div className="side-utilities">{accountControl}</div></div>
     </aside>
-    <div className={'shell'+(route.page==='chat'&&catalog?' chat-shell':'')}>
-    <div className="workspace-menu-anchor"><IconButton icon="menu" label="Toggle navigation" className="mobile-menu" aria-expanded={menu} aria-controls="primary-navigation" onClick={()=>setMenu(value=>!value)}/></div>
+    <div className={'shell'+(route.page==='chat'&&catalog?' chat-shell':'')+(draft?' draft-shell':'')}>
     <nav className="mobile-workspace-dock" aria-label="Quick navigation">
       <a href="#home" aria-label="Home" aria-current={route.page==='home'?'page':undefined}><Icon name="home"/></a>
       <a href="#chat" aria-label="Chats" aria-current={route.page==='chat'?'page':undefined}><Icon name="chat"/></a>
       <a href="#trips" aria-label="My trips" aria-current={['trips','trip','draft','itinerary','budget'].includes(route.page)?'page':undefined}><Icon name="trip"/></a>
       <a href="#saved" aria-label="Saved" aria-current={route.page==='saved'?'page':undefined}><Icon name="heart"/></a>
+      <button ref={mobileNav} type="button" className="icon-btn" aria-label="More navigation" aria-expanded={menu}
+        aria-controls="primary-navigation" onClick={()=>setMenu(value=>!value)}>•••</button>
     </nav>
     {(state.status||loadError)&&<div className="sync-notice" role="status">{state.status||loadError}</div>}
     <main id="main" tabIndex={-1}>{trip&&<div className="page trip-workspace-nav"><label>Working on<select aria-label="Active trip" value={trip.id} onChange={event=>navigate((route.page==='budget'?'budget':'itinerary')+'/'+event.target.value)}>{library.trips.map(item=><option key={item.id} value={item.id}>{catalog?.find(place=>place.id===item.brief.destination)?.name||item.brief.destination} · {item.brief.days} days · {item.brief.people} travellers</option>)}</select></label><nav aria-label="Active trip views"><Button variant={route.page!=='budget'?'primary':'outline'} onClick={()=>navigate('itinerary/'+trip.id)}>Itinerary & map</Button><Button variant={route.page==='budget'?'primary':'outline'} onClick={()=>navigate('budget/'+trip.id)}>Budget</Button><Button icon="chat" onClick={()=>navigate('chat/'+trip.id)}>Discuss this trip</Button></nav></div>}{content}</main></div>

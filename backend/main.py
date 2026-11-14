@@ -1,4 +1,5 @@
 import os
+import re
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -10,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from . import agents, auth, conversation, locations, nearby, news, partners, place_search, planning_agent, trip_workspace, voice, yatra
 from .catalog import CATALOG
 from .city_briefing import router as city_briefing_router
+from .transport_sources import router as transport_router
 from .db import Base, Library, engine, transaction
 from .source_cache import SourceCache, source_result
 from .models import Brief, Destination, LibraryDocument, LibraryUpdate, PlanRequest, ResearchRequest, RouteRequest, Trip
@@ -36,6 +38,9 @@ async def lifespan(app):
 app = FastAPI(title="Wayfarer API", version="1.0.0", lifespan=lifespan)
 road_cache = SourceCache()
 PUBLIC_API_PATHS = {"/api/health", "/api/session", "/api/auth/config", "/api/auth/firebase", "/api/logout"}
+PUBLIC_BROWSE_GET = {"/api/destinations", "/api/locations", "/api/locations/reverse", "/api/city-briefing",
+                     "/api/news", "/api/places/search", "/api/places/media"}
+PUBLIC_LOCATION = re.compile(r"/api/locations/[0-9]+(?:/(?:nearby|weather|briefing|guide))?")
 app.include_router(auth.router)
 app.include_router(partners.router)
 app.include_router(locations.router)
@@ -47,6 +52,7 @@ app.include_router(voice.router)
 app.include_router(yatra.router)
 app.include_router(planning_agent.router)
 app.include_router(trip_workspace.router)
+app.include_router(transport_router)
 
 
 @app.middleware("http")
@@ -60,7 +66,9 @@ async def protect_api(request: Request, call_next):
         if site == "cross-site" or (origin and origin not in allowed):
             return JSONResponse({"detail": "Open Wayfarer directly and try again."}, status_code=403)
     path = request.url.path.rstrip("/")
-    if auth.google_required() and path.startswith("/api/") and path not in PUBLIC_API_PATHS:
+    public_browse = (request.method == "GET" and (path in PUBLIC_BROWSE_GET or PUBLIC_LOCATION.fullmatch(path))
+                     or request.method == "POST" and path == "/api/research")
+    if auth.google_required() and path.startswith("/api/") and path not in PUBLIC_API_PATHS and not public_browse:
         user = await run_in_threadpool(auth.current_user, request)
         if not user:
             return JSONResponse({"detail": "Sign in with Google to use YatraBuddy."}, status_code=401,

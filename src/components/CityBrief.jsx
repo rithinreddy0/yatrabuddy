@@ -1,6 +1,7 @@
 import React,{useEffect,useState} from 'react'
 import {BusFront,CalendarDays,CloudSun,Compass,Hotel,ShieldCheck,Utensils} from 'lucide-react'
-import {Icon} from './UI.jsx'
+import {Icon,WikivoyageSource} from './UI.jsx'
+import {isWikivoyage} from './sourceUrl.mjs'
 import {request} from '../api.mjs'
 import '../features/ResearchBrief.css'
 
@@ -55,7 +56,8 @@ export function CityBrief({name,report,weather,airQuality,loading,compact=false,
     {weather&&<p className="city-brief-weather"><Icon name="globe" size={17}/><span><strong>{weather.temperature}°C · {weather.conditions}</strong>{airQuality&&` · Model US AQI ${airQuality.index}`}</span></p>}
     {loading&&<p className="city-brief-loading" role="status"><span/>Reading the city guide and safety notes…</p>}
     {!!rows.length&&<div className="city-brief-points">{(compact?rows.slice(0,3):rows).map((point,index)=>{const Glyph=icons[point.kind]||Compass;return <article key={point.sourceUrl+':'+index} data-kind={point.kind}>
-      <h3><span className="city-point-icon"><Glyph size={17}/></span>{point.title}</h3><p>{point.text}</p>{point.sourceUrl&&<a href={point.sourceUrl} target="_blank" rel="noreferrer">{point.source||'Source'} ↗</a>}
+      <h3><span className="city-point-icon"><Glyph size={17}/></span>{point.title}</h3><p>{point.text}</p>{point.sourceUrl&&(isWikivoyage(point.sourceUrl)
+        ? <WikivoyageSource url={point.sourceUrl} label={point.title}/> : <a href={point.sourceUrl} target="_blank" rel="noreferrer">{point.source||'Source'} ↗</a>)}
       {point.licenseUrl&&<a className="city-brief-license" href={point.licenseUrl} target="_blank" rel="noreferrer">{point.license}</a>}
     </article>})}</div>}
     {!compact&&report&&!rows.length&&<p className="city-brief-limit">City guide details couldn’t be verified from the sources available right now.</p>}

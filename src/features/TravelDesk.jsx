@@ -3,7 +3,6 @@ import {AgentProgress,Button,Icon,Pill,SourcePill} from '../components/UI.jsx'
 import {request} from '../api.mjs'
 import {money} from '../planner.mjs'
 import {DestinationSearch} from '../components/DestinationSearch.jsx'
-import {ReferencePhotos} from '../components/PhotoRail.jsx'
 import {DestinationBrief} from '../components/CityBrief.jsx'
 import {revealResult} from '../components/revealResult.mjs'
 
@@ -109,7 +108,6 @@ export function TravelDesk({catalog,profile,trip,initialDestination,initialTab='
       <div className="filters">{[['mobility','map','Getting around'],['stays','bed','Stays'],['fuel','wallet','Fuel and rentals'],['guide','calendar','When to go']].map(([value,icon,label])=><Pill active={tab===value} key={value} icon={icon} onClick={()=>{setTab(value);revealResult(result.current)}}>{label}</Pill>)}</div>
     </div>
     {!compact&&<DestinationBrief location={place} topic={tab==='stays'?'stays':tab==='guide'?'events':'routes'} compact/>}
-    {!compact&&<ReferencePhotos location={place} description="Licensed destination photos. Use the provider links below for current travel information."/>}
     <div ref={result} className="result-scroll-anchor"/>
     {tab==='mobility'&&<Mobility place={place} origin={origin} profile={profile}/>}
     {tab==='stays'&&<HotelSearch place={place} key={id} trip={trip} profile={profile}/>}

@@ -130,7 +130,7 @@ function pinElement(place, select, showPreview, clearPreview) {
 }
 
 export function JourneyMap({
-  center, places = empty, routes = empty, selectedId, onSelect, onClose, className = '',
+  center, places = empty, routes = empty, selectedId, onSelect, onClose, className = '', compactControls = false,
 }) {
   const container = useRef(null)
   const map = useRef(null)
@@ -192,7 +192,7 @@ export function JourneyMap({
       instance = new VectorMap({
         container: container.current, style: requestedStyle, center: [0, 18], zoom: 1.3,
         minZoom: 1, maxZoom: 19, maxPitch: 0, dragRotate: false, pitchWithRotate: false,
-        touchPitch: false, attributionControl: {compact: false},
+        touchPitch: false, scrollZoom: !compactControls, attributionControl: {compact: compactControls},
       })
       map.current = instance
       instance.touchZoomRotate.disableRotation()
@@ -316,7 +316,7 @@ export function JourneyMap({
   const mapName = center?.name || 'Trip map'
   const hover=ready&&preview&&visiblePlaces.includes(preview.item)?preview:null
 
-  return <section className={'journey-map ' + className} aria-label={mapName + ' map'}>
+  return <section className={'journey-map ' + className} data-compact-controls={compactControls || undefined} aria-label={mapName + ' map'}>
     <div className="journey-map-canvas" ref={container}/>
     {hover&&<div className="journey-pin-preview" role="tooltip" data-below={hover.below}
       style={{left:hover.x,width:hover.width,top:hover.below?Math.min(hover.top+35,Math.max(12,(container.current?.clientHeight||250)-165)):hover.top-10}}>
@@ -328,9 +328,9 @@ export function JourneyMap({
       </div>
     </div>}
     <div className="journey-map-top">
-      <div className="journey-map-title"><Icon name="map" size={18}/><div>
+      {!compactControls && <div className="journey-map-title"><Icon name="map" size={18}/><div>
         <strong>{mapName}</strong><small>{visiblePlaces.length ? visiblePlaces.length + (visiblePlaces.length === 1 ? ' place' : ' places') : 'Map'}</small>
-      </div></div>
+      </div></div>}
       <div className="journey-map-controls">
         {!!mappable.length && <IconButton icon="search" label="Find a place on the map" aria-expanded={searchOpen} aria-controls={searchId} onClick={toggleSearch}/>}
         {!unavailable && <button type="button" className="icon-btn" title={light ? 'Switch to dark map' : 'Switch to light map'}

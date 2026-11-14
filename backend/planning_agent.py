@@ -829,18 +829,7 @@ async def guide_answer(query, sections=None):
         return {"query": query, "sections": [], "error": "I couldn’t match that destination. Try adding its country or region."}
     name = query.split(",", 1)[0].strip().casefold()
     location = next((item for item in matches if item["name"].casefold() == name), matches[0])
-    if sections:
-        guide = await destination_guide(location)
-    else:
-        async def guide_photos():
-            try:
-                async with asyncio.timeout(5):
-                    return (await destination_images(location["name"])).get("places", [])[:5]
-            except (TimeoutError, httpx.HTTPError, HTTPException, ValueError, KeyError, TypeError):
-                return []
-
-        guide, photos = await asyncio.gather(destination_guide(location), guide_photos())
-        guide = {**guide, "photos": photos}
+    guide = await destination_guide(location)
     if sections:
         guide["sections"] = [item for item in guide["sections"] if item["title"] in sections]
     if not guide["sections"]:
@@ -1613,7 +1602,8 @@ async def turn_stream(token: str, turn: Turn, request: Request):
                                          if place.get("url") and tool.get("result", {}).get("query") == prior.get("query")}
                         result = await place_answer(query, category, turn.offline, excluded=already_shown)
                     elif tool_name == "Travel providers":
-                        from .transport_sources import stay_sources, transport_sources
+                        from .transport_sources import _india, requested_departure, stay_sources, transport_sources
+                        from .transport_quotes import transport_quotes
                         intent = question[1]
                         origin = intent.get("origin") or (None if intent.get("local") else previous.get("origin") or (turn.preferences.homeCity if turn.preferences else None))
                         destination = intent.get("destination") or active_destination
@@ -1631,10 +1621,23 @@ async def turn_stream(token: str, turn: Turn, request: Request):
                                 is_local = intent.get("local", False)
                                 result = transport_sources(origin, destination, mode=intent.get("modes") or intent.get("mode"), destination_location=location, local=is_local, **dates)
                                 result["local"] = is_local
+                                country = (location or {}).get("country")
+                                india = _india(destination, country) or (is_local and _india(active_destination, country))
+                                travel_date = date.fromisoformat(result["date"]) if result.get("date") else None
+                                departure = requested_departure(turn.text, travel_date, india=india)
+                                if not origin:
+                                    result["lookupPrompt"] = "Which stop or address are you starting from?" if is_local else "Which city or airport are you leaving from?"
                                 if not turn.offline:
                                     try:
                                         async with asyncio.timeout(14):
-                                            await enrich_transport(result, origin, destination, is_local, location)
+                                            async def read_quotes():
+                                                result["quotes"] = await transport_quotes(
+                                                    origin, destination, travel_date=travel_date, departure=departure,
+                                                    travelers=result.get("travelers"), local=is_local,
+                                                    country="India" if india else country, modes=intent.get("modes") or intent.get("mode"),
+                                                )
+                                            await asyncio.gather(enrich_transport(result, origin, destination, is_local, location),
+                                                                 read_quotes(), return_exceptions=True)
                                     except (TimeoutError, httpx.HTTPError, HTTPException, ValueError, KeyError):
                                         pass
                     elif tool_name == "Destination guide":

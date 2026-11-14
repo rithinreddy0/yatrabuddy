@@ -162,7 +162,7 @@ const categoryIcons = {Food:'food', Stay:'bed', Nature:'compass', Activity:'spar
 const itinerarySources = new Set(['Wikipedia', 'Wikivoyage', 'OpenStreetMap'])
 
 function StopThumbnail({place}) {
-  return <div className="trip-room-stop-thumb"><PlacePhoto place={place} fallback/></div>
+  return <div className="trip-room-stop-thumb"><PlacePhoto place={place} lookup hideUnavailable/></div>
 }
 
 function PlacePicker({draft, used, title, onClose, onPick, busy, errorText, excludeUrl}) {
@@ -264,7 +264,7 @@ function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, onRep
   const used = new Set(draft.days.flat().map(place => place.url))
   return <div className="trip-room-itinerary">
     <div className="trip-room-section-heading">
-      <h3>Itinerary <small>{draft.days.length} {draft.days.length === 1 ? 'day' : 'days'}</small></h3>
+      <h2>Itinerary <small>{draft.days.length} {draft.days.length === 1 ? 'day' : 'days'}</small></h2>
       <div className="trip-room-actions">
         <Button aria-pressed={showDistances} onClick={() => setShowDistances(value => !value)}>{showDistances ? 'Hide distances' : 'Show distances'}</Button>
         {onEdit && <Button icon="edit" disabled={busy} onClick={onEdit}>Edit plan</Button>}

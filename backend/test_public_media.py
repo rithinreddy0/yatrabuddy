@@ -7,6 +7,31 @@ from .wikivoyage import fetch_wikivoyage_page
 
 
 class PublicMediaTest(IsolatedAsyncioTestCase):
+    async def test_exact_gallery_excludes_unlocated_and_same_name_distant_files(self):
+        def page(title, latitude=None):
+            path = title.replace(" ", "_") + ".jpg"
+            return {"title": "File:" + title + ".jpg",
+                    "coordinates": [{"lat": latitude, "lon": 78.4747}] if latitude is not None else [],
+                    "imageinfo": [{"mime": "image/jpeg", "size": 3000,
+                                   "url": "https://upload.wikimedia.org/wikipedia/commons/a/a1/" + path,
+                                   "descriptionurl": "https://commons.wikimedia.org/wiki/File:" + path,
+                                   "extmetadata": {"LicenseShortName": {"value": "Public domain"}}}]}
+
+        def respond(request):
+            if request.url.params.get("generator") == "search":
+                self.assertIn('intitle:"example cafe"', request.url.params["gsrsearch"])
+                return httpx.Response(200, json={"query": {"pages": [page("Example Cafe counter", 17.36155)]}})
+            return httpx.Response(200, json={"query": {"pages": [
+                page("Example Cafe entrance", 17.3615),
+                page("Example Cafe branch", 17.41),
+                page("Example Cafe interior"),
+                page("Street near Example Cafe", 17.3615),
+            ]}})
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            result = await nearby_media(client, 17.3615, 78.4747, "Example Cafe", kind="photo", exact=True)
+        self.assertEqual([item["title"] for item in result["items"]], ["Example Cafe entrance", "Example Cafe counter"])
+
     async def test_combined_gallery_plays_named_ogg_clip_as_webm(self):
         filename = "File:Charminar Surrounding video.ogv"
         source = "https://commons.wikimedia.org/wiki/File:Charminar_Surrounding_video.ogv"

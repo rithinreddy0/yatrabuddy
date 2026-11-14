@@ -22,6 +22,59 @@ function dateLabel(value) {
   }).format(date)
 }
 
+const quoteStatus = {
+  unconfigured:'Live provider connection is not configured.',
+  need_airports:'Enter departure and arrival airport codes and a date to look up flight offers.',
+  need_time:'Choose a future departure date or time to check schedules.',
+  empty:'The provider returned no options for this search.',
+  unavailable:'The provider could not return schedules right now.',
+}
+
+function displayTime(value, timeZone) {
+  if (!value) return ''
+  if (timeZone) {
+    try {
+      return new Intl.DateTimeFormat(undefined,{timeZone,year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}).format(new Date(value))
+    } catch {}
+  }
+  return value.replace('T', ' ').replace(/(\d\d:\d\d):\d\d(?:\.\d+)?/, '$1').replace(/Z$/, ' UTC')
+}
+
+function displayDuration(value) {
+  if (!value) return ''
+  const seconds = /^(\d+)s$/.exec(value)
+  if (seconds) {
+    const minutes = Math.round(Number(seconds[1]) / 60)
+    return [Math.floor(minutes / 60) && Math.floor(minutes / 60) + ' h', minutes % 60 && minutes % 60 + ' min'].filter(Boolean).join(' ') || '< 1 min'
+  }
+  return value.replace(/^PT/, '').replace(/(\d+)H/, '$1 h ').replace(/(\d+)M/, '$1 min').trim()
+}
+
+export function TransportQuotes({quotes, kind}) {
+  if (!quotes) return null
+  return <div className="transport-quote-list">{Object.entries(quotes).filter(([id])=>!kind||id===kind).map(([id, group])=>
+    <section key={id} className="trip-transport-card">
+      <h4>{id==='flights'?'Flight offers':'Scheduled transit'} · {group.source}</h4>
+      {group.searchedAt && <small>Search departure · {displayTime(group.searchedAt)}</small>}
+      {group.checkedAt && <small>Checked · {new Date(group.checkedAt).toLocaleString()}</small>}
+      {group.status!=='ready' && <p>{quoteStatus[group.status]}</p>}
+      {(group.options||[]).map((option,index)=><article className="transport-quote" key={index}>
+        <div className="transport-quote-summary"><strong>{option.price
+          ? `${option.price.currency} ${option.price.amount}${option.partyTotal?' total for the group':''}`
+          : 'Fare unavailable'}</strong>
+          <small>{[displayDuration(option.duration), option.metres!=null&&`${(option.metres/1000).toFixed(1)} km`].filter(Boolean).join(' · ')}</small></div>
+        <ol>{option.legs.map((leg,j)=><li key={j}>
+          <strong>{[leg.operator,leg.service,leg.vehicle?.replaceAll('_',' ')].filter(Boolean).join(' · ')}</strong>
+          {leg.direction && <small>Direction · {leg.direction}</small>}
+          <div>Board · {leg.board.name||'Stop unavailable'}{leg.board.terminal&&` · Terminal ${leg.board.terminal}`} {displayTime(leg.board.time,leg.board.timeZone)}</div>
+          <div>Arrive · {leg.alight.name||'Stop unavailable'}{leg.alight.terminal&&` · Terminal ${leg.alight.terminal}`} {displayTime(leg.alight.time,leg.alight.timeZone)}</div>
+          {leg.operatorUrl && <ExternalSource url={leg.operatorUrl}>Operator</ExternalSource>}
+        </li>)}</ol>
+      </article>)}
+      {group.options?.length>0 && <small>{id==='flights'?'Prices and terminals can change. Confirm with the airline before booking.':'Scheduled times and published fares can change. Confirm with the operator before travel.'}</small>}
+    </section>)}</div>
+}
+
 export function TravelProviderSources({result, answerFirst = false}) {
   if (!result) return null
   const {title = 'Travel providers', route, date, checkout, travelers, notes = [], providers = [], detail, guide, error} = result
@@ -44,6 +97,8 @@ export function TravelProviderSources({result, answerFirst = false}) {
     <h3>{title}</h3>
     {context && <strong>{context}</strong>}
     {error && <p>{error}</p>}
+    {result.lookupPrompt && <p>{result.lookupPrompt}</p>}
+    <TransportQuotes quotes={result.quotes}/>
     {result.road && <p><strong>{result.road.kilometres.toLocaleString()} km</strong>
       {result.road.minutes != null && ` · about ${Math.floor(result.road.minutes / 60)} h ${result.road.minutes % 60} min by car`} · {result.road.estimated}</p>}
     {!!result.passes?.length && <div><h4>Published transit passes</h4><ul>{result.passes.map(pass => <li key={pass.name}>{pass.name} · ₹{pass.amount} <ExternalSource url={pass.url}>Operator details</ExternalSource></li>)}</ul></div>}
@@ -57,7 +112,7 @@ export function TravelProviderSources({result, answerFirst = false}) {
         <ExternalSource url={section.sourceUrl}>{section.source || 'Destination guide'}</ExternalSource>
       </details>
     })}
-    {answerFirst && !error && !result.places && !guideSections.length && !result.road && <p>Route details and schedules could not be verified from the available sources.</p>}
+    {answerFirst && !error && !result.lookupPrompt && !result.places && !guideSections.length && !result.road && !Object.values(result.quotes || {}).some(group=>group.status==='ready') && <p>Route details and schedules could not be verified from the available sources.</p>}
     {!error && detail && <p><small>{detail}</small></p>}
     {notes.map(note => <p key={note}><small>{note}</small></p>)}
     {answerFirst && providers.length > 0 && <details><summary>Operators and booking references</summary>{providerList}</details>}
