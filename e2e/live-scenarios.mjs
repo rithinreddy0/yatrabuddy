@@ -1,6 +1,6 @@
 // Drives real conversations through the chat UI against the live planner and public data sources.
-// Usage: node e2e/live-scenarios.mjs [scenario...]   Output: docs/screenshots/scenarios/*.png and a text log.
-import {chromium} from '@playwright/test'
+// Usage: node e2e/live-scenarios.mjs [scenario...]   Output: docs/screenshots/scenarios/*.jpg and a text log.
+import {launch} from './browser.mjs'
 import {mkdir, writeFile} from 'node:fs/promises'
 
 const base = process.env.BASE_URL || 'http://localhost:3000'
@@ -16,7 +16,7 @@ const scenarios = {
 const chosen = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(scenarios)
 
 await mkdir(out, {recursive:true})
-const browser = await chromium.launch({channel:'msedge'})
+const browser = await launch()
 const log = []
 for (const name of chosen) {
   const context = await browser.newContext({viewport:{width:390, height:844}, isMobile:true, hasTouch:true})
@@ -41,7 +41,7 @@ for (const name of chosen) {
     })
     const errors = await page.locator('.agent-error').allInnerTexts()
     log.push(`> ${message}  (${seconds}s)`, reply, ...errors.map(text => 'ERROR: ' + text))
-    await page.screenshot({path:`${out}/${name}-${index + 1}.png`, fullPage:false})
+    await page.screenshot({path:`${out}/${name}-${index + 1}.jpg`, type:'jpeg', quality:80, fullPage:false})
   }
   await context.close()
 }

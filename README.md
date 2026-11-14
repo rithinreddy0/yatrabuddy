@@ -82,6 +82,19 @@ Enable Google in Firebase Authentication and add the exact frontend hostname to 
 
 The Travel Desk links travelers to provider sites for rail, buses, ride-hailing, and rentals. The Booking.com adapter uses Demand API access when `BOOKING_API_TOKEN` and `BOOKING_AFFILIATE_ID` are set on the API. Otherwise the desk links to a prefilled Booking.com search. The app does not show live inventory or fares for providers that have not supplied access.
 
+## Testing
+
+- Backend: `python -m unittest backend.test_*` (from the repository root, with the virtual environment active).
+- Frontend unit tests: `npm test`.
+- Browser journeys and accessibility checks: `npm run test:e2e`. Playwright uses the installed Microsoft Edge
+  (`channel: msedge`), so no browser download is needed. It starts the API and Vite if they are not running,
+  with Google sign-in disabled for the test run.
+- Screenshots at eight widths with overflow and broken-image checks: `npm run screenshots -- <label>`.
+- Real conversations against the live planner: `node e2e/live-scenarios.mjs`.
+- Load performance of a production build (`npx vite preview`): `GPU=1 node e2e/perf.mjs label=http://localhost:3010`.
+
+See `docs/FINAL_REPORT.md` for the latest results.
+
 ## Build and deploy
 
 See the [deployment guide](docs/deployment.md) for GitHub, Vercel, Render, Neon, and Firebase setup. The production deployment requires Google sign-in. Only use `REQUIRE_GOOGLE_SIGN_IN=0` in a dedicated local test environment.

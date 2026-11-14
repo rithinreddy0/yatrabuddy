@@ -1178,6 +1178,18 @@ def itinerary_change(text):
     return None
 
 
+def base_switch(text):
+    """The new base city in "Switch to Kochi", "Make Kochi the base", "Stay in Kochi instead"; otherwise None."""
+    clean = text.strip(" .?!")
+    match = (re.fullmatch(r"(?:switch|change|move)(?:\s+the)?(?:\s+(?:destination|base|city|trip))?\s+to\s+(.+?)(?:\s+instead)?", clean, re.I)
+             or re.fullmatch(r"(?:make|use)\s+(.+?)\s+(?:as\s+)?(?:the|my)\s+base", clean, re.I)
+             or re.fullmatch(r"(?:stay|base(?:\s+it)?)\s+(?:in|at)\s+(.+?)(?:\s+instead)?", clean, re.I)
+             or re.fullmatch(r"(?:go\s+to|visit)\s+(.+?)\s+instead", clean, re.I))
+    if not match or not city_phrase(match[1]) or re.search(r"\b(?:day|stop|budget|hotel|stay|dates?)\b", match[1], re.I):
+        return None
+    return match[1].strip()
+
+
 async def revise_stops(draft, change, offline):
     action, name, number, other_name = change
     if not draft:
@@ -1524,6 +1536,10 @@ async def turn_stream(token: str, turn: Turn, request: Request):
                     and not re.match(r"^(?:hi|hey|thanks?|what|where|when|why|which|how|no|yes|help|trip preferences|travel on|flexible dates|budget|start at|already there)\b", message)):
                 details["replace_destination"] = bare_destination
                 asks_for_plan = True
+            # Switching the base of an existing plan: "Switch to Kochi", "Make Kochi the base", "Stay in Kochi instead".
+            if current_draft and not details.get("replace_destination") and not build_now and (new_base := base_switch(bare_destination)):
+                details["replace_destination"] = new_base
+                asks_for_plan = True
             # A city the planner just offered (typed or tapped as "Panaji, Goa") is used as offered.
             # Searching for it again can miss: the geocoder does not always return smaller towns by name.
             offered_city = None
@@ -1829,7 +1845,11 @@ async def turn_stream(token: str, turn: Turn, request: Request):
             event = {"kind": "undo", "text": turn.text}
             state = reduce_log([*active_events, event])
         elif message and not choice and not planning and not re.search(r"\b(?:cheaper|cheapest|less expensive|go back to)\b", message):
-            if re.search(r"\b(?:rest|breaks?|slow(?:er)? down|take it easy|less packed|fewer stops|nap)\b", message):
+            if re.fullmatch(r"[A-Z][\w'’-]+(?: [A-Z][\w'’-]+){0,2}", (turn.text or "").strip(" .!?")):
+                name = turn.text.strip(" .!?")
+                question = ("Notice", f"Do you want to plan around {name}? Say “Switch to {name}” and I’ll rebuild the trip there, "
+                                      f"or ask “What to see in {name}?”.")
+            elif re.search(r"\b(?:rest|breaks?|slow(?:er)? down|take it easy|less packed|fewer stops|nap)\b", message):
                 question = ("Notice", "Your plan keeps the visits to a few stops a day, with free time between them. "
                                       "For longer breaks, remove a stop with “Remove <place>”, or ask for a relaxed pace when you plan the trip.")
             else:

@@ -861,7 +861,7 @@ export function TripWorkspace({draft, workspaceId, inviteCode, ideas=[], media=[
         ideas={ideas} media={media} draft={shownDraft} onSave={save} onRemove={remove} onPlaceSelect={onPlaceSelect} busy={busy}
         onUpdate={(id, body) => apply(() => request(`${path}/${roomId}/entries/${id}`, {method:'PATCH', body}))}/>}
     </div>
-    {inviteOpen && workspace?.isOwner && <InviteDialog workspace={workspace} onClose={() => {
+    {Boolean(inviteOpen) && workspace?.isOwner && <InviteDialog workspace={workspace} onClose={() => {
       setInviteOpen(false)
       onInviteClose?.()
     }} onRefresh={() => {

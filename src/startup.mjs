@@ -15,8 +15,16 @@ const mounted = new Promise(resolve => {
   observer.observe(app, {childList:true})
 })
 
+let ready = false
+const connection = navigator.connection
+const constrained = Boolean(connection?.saveData) || /(^|-)2g$/.test(connection?.effectiveType || '')
+
 async function play() {
-  if (motion.matches) return
+  if (motion.matches || constrained) return
+  // Only fetch the 240 KB animation when the app is not already up; on fast loads it would just
+  // compete with the app's own files for bandwidth.
+  await new Promise(resolve => window.setTimeout(resolve, 600))
+  if (ready) return
   const plane = startup.querySelector('.startup-plane')
   plane.src = animation
   try { await plane.decode() }
@@ -40,6 +48,7 @@ async function play() {
 // holding a ready app behind the splash until the animation finishes.
 void play()
 mounted.then(() => {
+  ready = true
   startup.remove()
   app.inert = false
 })

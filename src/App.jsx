@@ -70,7 +70,9 @@ export default function App(){
   const mobileNav=useRef(null)
   const expanded=navHover||navFocus
   const [catalog,setPlaces]=useState(fallbackCatalog)
-  const [policy,setPolicy]=useState(null)
+  // Last known sign-in policy, so a returning visitor's saved trips render on the first frame instead of
+  // popping in (and shifting the page) when /api/auth/config answers.
+  const [policy,setPolicy]=useState(()=>{try{const value=localStorage.getItem('yatra.authPolicy');return value==null?null:value==='required'}catch{return null}})
   const [loadError,setLoadError]=useState('')
   const [notice,setNotice]=useState(null)
   const [chatRequest,setChatRequest]=useState({query:'',id:0,context:null})
@@ -157,7 +159,7 @@ export default function App(){
   },[])
   useEffect(()=>{
     const controller=new AbortController()
-    request('auth/config',{signal:controller.signal}).then(config=>setPolicy(config.googleRequired!==false)).catch(()=>{if(!controller.signal.aborted)setPolicy(true)})
+    request('auth/config',{signal:controller.signal}).then(config=>{const required=config.googleRequired!==false;setPolicy(required);try{localStorage.setItem('yatra.authPolicy',required?'required':'optional')}catch{}}).catch(()=>{if(!controller.signal.aborted)setPolicy(true)})
     return ()=>controller.abort()
   },[])
   useEffect(()=>{

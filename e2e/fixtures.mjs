@@ -55,6 +55,7 @@ export async function seedGuest(page) {
   await page.addInitScript(library => {
     if (!sessionStorage.getItem('seeded')) {
       localStorage.setItem('wayfarer.guest.v2', JSON.stringify(library))
+      localStorage.setItem('yatra.authPolicy', 'optional') // a returning visitor on a deployment without required sign-in
       sessionStorage.setItem('seeded', '1')
     }
   }, guestLibrary)

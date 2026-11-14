@@ -327,3 +327,12 @@ class StopCommandTest(unittest.TestCase):
         self.assertEqual(extract("Reduce the budget to 15000", live=True).get("budget"), 15000)
         self.assertEqual(extract("budget is 18,000", live=True).get("budget"), 18000)
         self.assertIsNone(extract("budget to 3 days", live=True).get("budget"))
+
+
+class BaseSwitchTest(unittest.TestCase):
+    def test_switch_phrases_only_match_place_names(self):
+        from .planning_agent import base_switch
+        for text in ("Switch to Kochi", "Make Kochi the base", "Stay in Kochi instead", "Change the destination to Kochi", "go to Kochi instead."):
+            self.assertEqual(base_switch(text), "Kochi", text)
+        for text in ("use cabs", "Move Miramar Beach to day 2", "visit the fort", "Change the dates to 20 December", "Switch to day 3"):
+            self.assertIsNone(base_switch(text), text)

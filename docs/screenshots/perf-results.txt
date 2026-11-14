@@ -1,0 +1,12 @@
+slow-4g  home  before  first paint  1756 ms · largest paint  4636 ms · app ready  3000 ms · CLS 0.225 · 716 KB
+slow-4g  home  after   first paint  1472 ms · largest paint  4336 ms · app ready  2817 ms · CLS 0.000 · 445 KB
+slow-4g  chat  before  first paint  1864 ms · largest paint  2068 ms · app ready  2974 ms · CLS 0.000 · 534 KB
+slow-4g  chat  after   first paint  1388 ms · largest paint  1400 ms · app ready  2259 ms · CLS 0.000 · 711 KB
+slow-4g  trip  before  first paint  1860 ms · largest paint  1860 ms · app ready  2814 ms · CLS 0.000 · 519 KB
+slow-4g  trip  after   first paint  1392 ms · largest paint  1392 ms · app ready  2186 ms · CLS 0.000 · 710 KB
+fast-4g  home  before  first paint   992 ms · largest paint  4232 ms · app ready  2214 ms · CLS 0.200 · 716 KB
+fast-4g  home  after   first paint   824 ms · largest paint  3816 ms · app ready  1992 ms · CLS 0.000 · 445 KB
+fast-4g  chat  before  first paint  1156 ms · largest paint  1156 ms · app ready  2333 ms · CLS 0.000 · 989 KB
+fast-4g  chat  after   first paint  1056 ms · largest paint  2416 ms · app ready  2093 ms · CLS 0.000 · 711 KB
+fast-4g  trip  before  first paint  1276 ms · largest paint  2984 ms · app ready  2447 ms · CLS 0.000 · 988 KB
+fast-4g  trip  after   first paint  1088 ms · largest paint  2292 ms · app ready  2014 ms · CLS 0.000 · 710 KB

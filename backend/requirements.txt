@@ -1,7 +1,7 @@
 fastapi==0.136.0
 uvicorn==0.44.0
 httpx==0.28.1
-python-dotenv==1.2.1
+python-dotenv==1.2.2
 SQLAlchemy==2.0.51
 psycopg[binary]>=3.2,<4
 google-cloud-storage>=3,<4

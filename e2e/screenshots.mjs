@@ -1,7 +1,7 @@
 // Capture screenshots of the running app at several viewport sizes.
 // Usage: node e2e/screenshots.mjs <label> [baseURL]
-// Writes docs/screenshots/<label>/<width>-<page>.png and prints overflow and broken-image checks.
-import {chromium} from '@playwright/test'
+// Writes docs/screenshots/<label>/<width>-<page>.jpg and prints overflow and broken-image checks.
+import {launch} from './browser.mjs'
 import {mkdir} from 'node:fs/promises'
 import {TRIP_ID, seedGuest} from './fixtures.mjs'
 
@@ -19,13 +19,18 @@ const pages = [
   ['trip-budget', `#draft/${TRIP_ID}/budget`],
   ['trip-transport', `#draft/${TRIP_ID}/transport`],
   ['trip-bookings', `#draft/${TRIP_ID}/bookings`],
+  ['trip-calendar', `#draft/${TRIP_ID}/calendar`],
+  ['trip-travel-mode', `#draft/${TRIP_ID}/travel`],
+  ['stays', '#stays'],
+  ['saved', '#saved'],
+  ['signin', '#signin'],
   ['preferences', '#preferences'],
 ]
 const only = process.env.PAGES ? new Set(process.env.PAGES.split(',')) : null
 const onlyWidths = process.env.WIDTHS ? new Set(process.env.WIDTHS.split(',').map(Number)) : null
 
 await mkdir(out, {recursive:true})
-const browser = await chromium.launch({channel:'msedge'})
+const browser = await launch()
 const report = []
 for (const [width, height] of widths) {
   if (onlyWidths && !onlyWidths.has(width)) continue
@@ -50,7 +55,7 @@ for (const [width, height] of widths) {
         && getComputedStyle(image).visibility !== 'hidden' && !image.closest('[hidden]')).map(image => image.src.slice(0, 80))
       return {scroll:document.documentElement.scrollWidth - innerWidth, overflow, broken}
     })
-    await page.screenshot({path:`${out}/${width}-${name}.png`, fullPage:width < 768})
+    await page.screenshot({path:`${out}/${width}-${name}.jpg`, type:'jpeg', quality:80, fullPage:width < 768})
     report.push({width, name, ...check, errors:errors.splice(0)})
   }
   await context.close()

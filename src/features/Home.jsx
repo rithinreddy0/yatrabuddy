@@ -1,9 +1,11 @@
-import React, {useEffect,useState} from 'react'
+import React, {Suspense,lazy,useEffect,useState} from 'react'
 import {Button,Dialog,Icon,IconButton,Pill,Empty} from '../components/UI.jsx'
 import {themes,money} from '../planner.mjs'
 import {request} from '../api.mjs'
-import {DiscoveryWeather,SavedDiscoveryPlaces,useNearbyDiscovery} from './DiscoveryFeed.jsx'
-import {PlaceDetails} from './PlaceDetails.jsx'
+import {DiscoveryWeather,useNearbyDiscovery} from './discoveryData.jsx'
+const SavedDiscoveryPlaces = lazy(() => import('./DiscoveryFeed.jsx').then(module => ({default:module.SavedDiscoveryPlaces})))
+// Loaded only when a place is opened, so the home page does not download the details view up front.
+const PlaceDetails = lazy(() => import('./PlaceDetails.jsx').then(module => ({default:module.PlaceDetails})))
 import './Home.css'
 import {useSavedDiscoveryPlaces} from './discoveryPlaces.mjs'
 import {PlacePhoto} from '../components/PlacePhoto.jsx'
@@ -131,8 +133,8 @@ export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onR
 
     {catalog.length > 0 && <section className="hm-section" aria-labelledby="hm-destinations">
       <div className="hm-section-head"><h2 id="hm-destinations">Popular trips</h2><a href="#discover">See all</a></div>
-      <div className="hm-rail hm-destinations" role="list">{catalog.slice(0, 5).map(place => <article className="hm-destination" role="listitem" key={place.id}>
-        <img src={`/images/${place.image}.jpg`} alt={`${place.name}, ${place.region}`} loading="lazy" decoding="async" width="480" height="320"/>
+      <div className="hm-rail hm-destinations" role="list">{catalog.slice(0, 5).map((place, index) => <article className="hm-destination" role="listitem" key={place.id}>
+        <img src={`/images/${place.image}.jpg`} alt={`${place.name}, ${place.region}`} loading={index < 2 ? 'eager' : 'lazy'} decoding="async" width="480" height="320"/>
         <div><h3>{place.name}</h3><p>{[place.theme, place.season && `Best ${place.season}`].filter(Boolean).join(' · ')}</p>
           <button type="button" onClick={() => onPlan('', place.id)} aria-label={`Plan a trip to ${place.name}`}>Plan this trip <ArrowRight size={15} aria-hidden="true"/></button></div>
       </article>)}</div>
@@ -163,7 +165,7 @@ export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onR
       <p>Places from OpenStreetMap, Wikipedia and Wikivoyage. Weather from Open-Meteo. Prices and timings are estimates unless a provider confirms them.</p>
     </footer>
     {openPlace && <Dialog label={openPlace.name} className="discovery-details-dialog" onClose={()=>setOpenPlace(null)}>
-      <PlaceDetails key={openPlace.url} place={openPlace} initialTab="media"/>
+      <Suspense fallback={<p role="status" className="hm-muted">Opening details…</p>}><PlaceDetails key={openPlace.url} place={openPlace} initialTab="media"/></Suspense>
     </Dialog>}
   </div>
 }
@@ -177,7 +179,7 @@ export function Discover({catalog,library,onSave,onOpen,onPlan,savedOnly}) {
   return <div className="page inner-page"><div className="eyebrow"><span/> {savedOnly?'YOUR SHORTLIST':'DESTINATION GUIDE'}</div><h1>{savedOnly?'Saved places':'Explore destinations'}</h1>
     <p className="lede">{savedOnly?'Keep the places you want to come back to.':'Find a place that fits the way you want to travel.'}</p>
     {!savedOnly&&<><div className="search"><Icon name="search"/><input aria-label="Search destinations" placeholder="Search destinations" value={query} onChange={event=>setQuery(event.target.value)}/></div><div className="filters">{themes.map(theme=><Pill key={theme} active={filter===theme} onClick={()=>setFilter(theme)}>{theme}</Pill>)}</div></>}
-    {savedOnly && <SavedDiscoveryPlaces onPlan={onPlan} profile={library.profile}/>}
+    {savedOnly && <Suspense fallback={null}><SavedDiscoveryPlaces onPlan={onPlan} profile={library.profile}/></Suspense>}
     {found.length?<DestinationGrid places={found} saved={library.saved} onSave={onSave} onOpen={onOpen}/>:(!savedOnly||!savedPlaces.length)&&<Empty icon={savedOnly?'heart':'search'} title={savedOnly?'No saved places yet':'No destinations found'} description={savedOnly?'Use the heart on a place card to save it here.':'Try another search or theme.'}/>}
   </div>
 }

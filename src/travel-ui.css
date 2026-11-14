@@ -689,3 +689,6 @@ main h1[tabindex="-1"]:focus { outline: none; box-shadow: none; }
 @media (prefers-reduced-motion: reduce) {
   .place-photo img, .hm-destination > img, .destination-cover img, .trip-photo img { animation:none; }
 }
+
+/* Travel Mode dropdowns were 21px tall; give them a comfortable touch size everywhere. */
+.travel-daybar select, .travel-settings select { min-height:40px; padding-inline:8px; border-radius:10px; }
