@@ -148,7 +148,9 @@ class ChatPublicTest(unittest.TestCase):
             session, event = self.turn("Chennai, Tamil Nadu")
             intake = session["currentItinerary"]["request"]
             self.assertEqual((intake["destination"], intake["days"], intake["people"]), ("Chennai, Tamil Nadu", 5, 3))
-            self.assertEqual([call.args[1] for call in geocode.await_args_list], ["tamil nadu", "Chennai, Tamil Nadu"])
+            # The offered city is used as verified; it is not geocoded a second time.
+            self.assertEqual([call.args[1] for call in geocode.await_args_list], ["tamil nadu"])
+            self.assertEqual(intake["location"]["id"], chennai["id"])
             self.groq.assert_not_called()
 
     def test_bare_destination_retries_failed_match_with_existing_preferences(self):
@@ -289,3 +291,39 @@ class TripStopRankingTest(unittest.TestCase):
         remote = {**cathedral, "lat": 48.855, "url": "https://www.openstreetmap.org/way/100"}
         self.assertEqual([place["url"] for place in ranked_places([cathedral, alias, separate, remote], {}, "Paris")],
                          [place["url"] for place in (cathedral, separate, remote)])
+
+
+class GroupSizeTest(unittest.TestCase):
+    def test_group_phrases_set_the_number_of_travellers(self):
+        from .planning_agent import extract
+        cases = {
+            "We are a family of 4 with two kids going to Kerala for 5 days": 4,
+            "2 adults and 2 kids to Goa for 3 days": 4,
+            "group of six friends to Goa": 6,
+            "there are 3 of us going to Ooty": 3,
+            "Plan 3 days in Goa for 2 people": 2,
+        }
+        for text, people in cases.items():
+            self.assertEqual(extract(text, live=True).get("people"), people, text)
+        self.assertIsNone(extract("we are 2 days away", live=True).get("people"))
+
+    def test_offered_city_names_match_without_accents_or_case(self):
+        from .planning_agent import plain_name
+        self.assertEqual(plain_name("Kōchi"), plain_name("kochi"))
+        self.assertEqual(plain_name("  Panaji "), "panaji")
+
+
+class StopCommandTest(unittest.TestCase):
+    def test_add_without_a_day_and_non_place_requests(self):
+        from .planning_agent import itinerary_change
+        self.assertEqual(itinerary_change("Add Fort Aguada"), ("add", None, None, "Fort Aguada"))
+        self.assertEqual(itinerary_change("Include Calangute Beach in the trip"), ("add", None, None, "Calangute Beach"))
+        self.assertEqual(itinerary_change("add Fort Aguada to day 2"), ("add", None, 2, "Fort Aguada"))
+        self.assertIsNone(itinerary_change("Add a rest break in the afternoons"))
+        self.assertIsNone(itinerary_change("add more food places"))
+
+    def test_budget_phrasing(self):
+        from .planning_agent import extract
+        self.assertEqual(extract("Reduce the budget to 15000", live=True).get("budget"), 15000)
+        self.assertEqual(extract("budget is 18,000", live=True).get("budget"), 18000)
+        self.assertIsNone(extract("budget to 3 days", live=True).get("budget"))

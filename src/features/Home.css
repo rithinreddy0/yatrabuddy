@@ -1,0 +1,133 @@
+/* Home: mobile-first layout. Spacing follows a 4px scale; colours come from the shared theme tokens. */
+.hm {
+  --hm-gap: 16px;
+  --hm-radius: 18px;
+  display: grid;
+  gap: 24px;
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 12px 16px 24px;
+}
+.travel-shell .page.hm { padding-inline: 16px; }
+.hm h2 { margin: 0; font-size: 1.15rem; font-weight: 750; letter-spacing: -.01em; }
+.hm p { margin: 0; }
+
+.hm-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; }
+.hm-brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 1.05rem; color: var(--ink); }
+.hm-top-link { display: inline-flex; align-items: center; gap: 2px; min-height: 40px; padding: 0 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--white); color: var(--ink); font-weight: 650; font-size: .88rem; text-decoration: none; }
+
+/* Hero: a photo card with the planner inside it. */
+.hm-hero { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); min-height: 420px; overflow: hidden; border-radius: 24px; isolation: isolate; color: #fff; }
+.hm-hero-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
+.hm-hero::before { content: ""; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(180deg, rgb(10 12 24 / 20%) 0%, rgb(10 12 24 / 55%) 45%, rgb(10 12 24 / 88%) 100%); }
+.hm-hero-copy { display: grid; grid-template-columns: minmax(0, 1fr); align-content: end; gap: 12px; min-width: 0; padding: 20px 16px 18px; }
+.hm-kicker { display: inline-flex; align-items: center; gap: 6px; width: fit-content; padding: 5px 10px; border-radius: 999px;
+  background: rgb(255 255 255 / 16%); backdrop-filter: blur(8px); font-size: .78rem; font-weight: 700; }
+.hm-hero h1 { margin: 0; font-size: clamp(1.75rem, 7.5vw, 3rem); line-height: 1.08; letter-spacing: -.03em; font-weight: 750; color: #fff; }
+.hm-lede { max-width: 46ch; color: rgb(255 255 255 / 86%); font-size: .95rem; line-height: 1.45; }
+.hm-prompt { display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 16px; border-radius: 16px;
+  background: var(--white); box-shadow: 0 10px 30px rgb(0 0 0 / 25%); }
+.hm-prompt input { flex: 1; min-width: 0; min-height: 44px; border: 0; background: transparent; color: var(--ink); font-size: 1rem; outline: none; }
+.hm-prompt:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 55%, transparent), 0 10px 30px rgb(0 0 0 / 25%); }
+.hm-send { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border: 0; border-radius: 12px;
+  background: var(--primary); color: #fff; font-weight: 750; cursor: pointer; transition: background 160ms ease, transform 160ms ease, opacity 160ms ease; }
+.hm-send:hover:not(:disabled) { background: var(--primary-hover); }
+.hm-send:active:not(:disabled) { transform: scale(.97); }
+
+.hm-chips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 0 0 2px; scroll-snap-type: x proximity; }
+.hm-chips::-webkit-scrollbar { display: none; }
+.hm-chips button { flex: none; min-height: 38px; padding: 0 14px; border: 1px solid rgb(255 255 255 / 35%); border-radius: 999px;
+  background: rgb(255 255 255 / 14%); backdrop-filter: blur(8px); color: #fff; font-weight: 600; font-size: .85rem; cursor: pointer;
+  scroll-snap-align: start; transition: background 160ms ease; }
+.hm-chips button:hover { background: rgb(255 255 255 / 26%); }
+
+/* Continue planning */
+.hm-continue { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: var(--hm-radius); background: var(--white); }
+.hm-continue-main { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 4px;
+  border-radius: 12px; color: var(--ink); text-decoration: none; }
+.hm-continue-thumb { display: grid; place-items: center; width: 56px; height: 56px; overflow: hidden; border-radius: 12px; background: var(--mint); color: var(--forest); }
+.hm-continue-thumb :is(img, .place-photo) { width: 100%; height: 100%; object-fit: cover; }
+.hm-continue-copy { display: grid; min-width: 0; }
+.hm-continue-copy strong { font-size: 1.02rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-continue-copy small { color: var(--muted); font-size: .8rem; }
+.hm-continue-links { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.hm-continue-links::-webkit-scrollbar { display: none; }
+.hm-continue-links a { flex: none; display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border-radius: 999px;
+  background: var(--mint); color: var(--deep); font-size: .83rem; font-weight: 650; text-decoration: none; }
+
+/* Sections and rails */
+.hm-section { display: grid; gap: 12px; min-width: 0; }
+.hm-section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.hm-section-head p { color: var(--muted); font-size: .85rem; margin-top: 2px; }
+.hm-section-head > a { flex: none; display: inline-flex; align-items: center; min-height: 36px; color: var(--primary); font-weight: 700; font-size: .9rem; text-decoration: none; }
+:root:not([data-theme="light"]) .hm-section-head > a { color: var(--accent); }
+.hm-rail { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(220px, 72%); gap: 12px; overflow-x: auto;
+  padding: 2px 0 6px; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.hm-rail::-webkit-scrollbar { display: none; }
+.hm-rail > * { scroll-snap-align: start; }
+.hm-skeleton { display: block; height: 220px; border-radius: var(--hm-radius);
+  background: linear-gradient(90deg, var(--mint) 0%, color-mix(in srgb, var(--mint) 55%, var(--white)) 50%, var(--mint) 100%) 0 0 / 200% 100%;
+  animation: hm-shimmer 1.4s linear infinite; }
+@keyframes hm-shimmer { to { background-position: -200% 0; } }
+
+.hm-destination, .hm-place { display: grid; grid-template-rows: auto 1fr; min-width: 0; overflow: hidden; border: 1px solid var(--line);
+  border-radius: var(--hm-radius); background: var(--white); transition: transform 200ms ease, box-shadow 200ms ease; }
+.hm-destination > img { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; display: block; background: var(--mint); }
+.hm-destination > div { display: grid; gap: 4px; padding: 12px; }
+.hm-destination h3 { margin: 0; font-size: 1.02rem; }
+.hm-destination p { color: var(--muted); font-size: .82rem; }
+.hm-destination button { justify-self: start; display: inline-flex; align-items: center; gap: 4px; min-height: 36px; margin-top: 4px; padding: 0;
+  border: 0; background: none; color: var(--primary); font-weight: 750; cursor: pointer; }
+:root:not([data-theme="light"]) .hm-destination button { color: var(--accent); }
+.hm-place .place-photo { aspect-ratio: 4 / 3; margin: 0; border-radius: 0; }
+.hm-place .place-photo img { width: 100%; height: 100%; object-fit: cover; }
+.hm-place > button { display: grid; gap: 2px; padding: 10px 12px 12px; border: 0; background: none; color: var(--ink); text-align: left; cursor: pointer; }
+.hm-place > button strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-place > button small { color: var(--muted); font-size: .8rem; }
+@media (hover: hover) {
+  .hm-destination:hover, .hm-place:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+}
+
+.hm-ways { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.hm-way { display: grid; align-content: start; gap: 6px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 16px;
+  background: var(--white); color: var(--ink); text-decoration: none; transition: border-color 160ms ease, transform 160ms ease; }
+.hm-way:active { transform: scale(.98); }
+.hm-way:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--line)); }
+.hm-way-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 12px; background: var(--mint); color: var(--forest); }
+.hm-way strong { font-size: .9rem; line-height: 1.2; }
+.hm-way small { display: none; color: var(--muted); font-size: .8rem; line-height: 1.35; }
+
+.hm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.hm-muted { color: var(--muted); }
+.hm-footer { padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: .8rem; line-height: 1.5; }
+
+@media (min-width: 560px) {
+  .hm-rail { grid-auto-columns: minmax(240px, 44%); }
+  .hm-way small { display: block; }
+}
+
+/* Tablet and up: hero splits into copy and photo; rails become grids. */
+@media (min-width: 900px) {
+  .hm { gap: 36px; padding: 20px 28px 32px; }
+  .hm h2 { font-size: 1.35rem; }
+  .hm-top { display: none; }
+  .hm-hero { min-height: 440px; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); border-radius: 28px; }
+  .hm-hero-copy { align-content: center; gap: 16px; padding: 40px; }
+  .hm-hero h1 { font-size: clamp(2.4rem, 3.6vw, 3.4rem); }
+  .hm-hero::before { background: linear-gradient(90deg, rgb(10 12 24 / 88%) 0%, rgb(10 12 24 / 62%) 48%, rgb(10 12 24 / 10%) 100%); }
+  .hm-chips { flex-wrap: wrap; overflow: visible; padding: 0; }
+  .hm-continue { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .hm-rail { grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); overflow: visible; padding: 0; }
+  .hm-destinations { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .hm-ways { gap: 12px; }
+  .hm-way { grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 12px; padding: 16px; }
+  .hm-way-icon { grid-row: span 2; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hm-skeleton { animation: none; }
+  .hm-destination, .hm-place, .hm-way, .hm-send { transition: none; }
+}

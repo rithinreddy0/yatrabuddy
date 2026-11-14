@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import secrets
+import unicodedata
 from datetime import date, timedelta
 from math import floor
 from time import monotonic, time
@@ -322,6 +323,12 @@ def destination_in(text):
     return min(matches)[2] if matches else None
 
 
+def plain_name(value):
+    """Case- and accent-insensitive form of a place name ("Kōchi" and "kochi" match)."""
+    decomposed = unicodedata.normalize("NFKD", value or "")
+    return " ".join("".join(char for char in decomposed if not unicodedata.combining(char)).casefold().split())
+
+
 def city_phrase(value):
     return bool(value.strip() and not re.search(
         r"\b(?:plan|trip|itinerary|suggest|change|switch|hello|thanks|show|tell|where|what|please|want|help|days|travellers)\b",
@@ -389,12 +396,23 @@ def extract(text, brief=None, *, live=False):
             count = count_words.index(match[1]) if match[1] in count_words else int(match[1])
             with_friends = "friend" in match[0] and (not live or re.search(r"\b(?:me and|my|with)\s+$", clean[:match.start()]))
             values[field] = count + bool(with_friends)
+    # Group phrasing: "family of 4", "group of 6", "we are 3", "4 of us", "2 adults and 2 kids".
+    number = lambda word: count_words.index(word) if word in count_words else int(word)
+    adults = re.search(rf"(?<!\w)({counts})\s+adults?\b", clean)
+    children = re.search(rf"(?<!\w)({counts})\s+(?:kids?|children|child|infants?|bab(?:y|ies))\b", clean)
+    group = re.search(rf"\b(?:family|group|party|gang) of ({counts})\b"
+                      rf"|\b(?:we are|we're|there are|there will be) ({counts})\b(?!\s*(?:days?|nights?))"
+                      rf"|(?<!\w)({counts}) of us\b", clean)
+    if group:
+        values["people"] = number(next(item for item in group.groups() if item))
+    elif adults and children:
+        values["people"] = number(adults[1]) + number(children[1])
     if live and "people" not in values:
         if re.search(r"\b(?:solo|just me|on my own)\b", clean):
             values["people"] = 1
         elif re.search(r"\b(?:a couple|my partner and i|the two of us)\b", clean):
             values["people"] = 2
-    amount = re.search(r"(?:₹|\brs\.?|\binr|\bbudget(?: of)?|\bunder|\bmake it)\s*(-?\d+(?:,\d+)*)(?:\s*(k)\b|(?!\d|,\d|\.\d|\s*(?:days?|nights?|people|travell?ers?)\b))", clean)
+    amount = re.search(r"(?:₹|\brs\.?|\binr|\bbudget(?:\s+(?:of|to|is|at))?|\bunder|\bmake it)\s*(-?\d+(?:,\d+)*)(?:\s*(k)\b|(?!\d|,\d|\.\d|\s*(?:days?|nights?|people|travell?ers?)\b))", clean)
     if live and (reduction := re.search(r"(?:₹|\binr\s*|\brs\.?\s*)?\s*(\d+(?:,\d+)*)\s*(k\b)?\s+(?:cheaper|less)\b", clean)):
         values["budgetReduction"] = int(reduction[1].replace(",", "")) * (1000 if reduction[2] else 1)
         amount = None
@@ -418,7 +436,7 @@ def extract(text, brief=None, *, live=False):
         if re.search(r"\b" + diet.casefold() + r"\b", clean):
             values["diet"] = diet
             break
-    if "relaxed" in clean or "quiet" in clean:
+    if "relaxed" in clean or "quiet" in clean or re.search(r"\b(?:slow(?:er)? pace|take it easy|less packed|fewer stops)\b", clean):
         values["pace"] = "Relaxed"
     if re.search(r"\b(?:no|avoid|without)\s+(?:any\s+)?long\s+(?:drives?|road trips?)\b", clean):
         values["avoidLongDrives"] = True
@@ -1151,6 +1169,10 @@ def itinerary_change(text):
         return "replace", match[1], None, match[2]
     if match := re.fullmatch(r"add\s+(.+?)\s+(?:to|on)\s+day\s+(\d+)", clean, re.I):
         return "add", None, int(match[2]), match[1]
+    # "Add Fort Aguada" without a day: the stop goes on the nearest day with room. Requests such as
+    # "add a rest break" or "add more food" are not place names and are left to other handlers.
+    if (match := re.fullmatch(r"(?:add|include)\s+(?!(?:a|an|some|more|another|the trip|time|rest|breaks?)\b)(.+?)(?:\s+(?:to|in|into)\s+(?:the|my|this)\s+(?:trip|itinerary|plan))?", clean, re.I)):
+        return "add", None, None, match[1]
     if match := re.fullmatch(r"(remove|skip|move)\s+(.+?)(?:\s+(?:to|on|from)\s+day\s+(\d+))?", clean, re.I):
         return match[1].casefold(), match[2], int(match[3]) if match[3] else None, None
     return None
@@ -1161,11 +1183,11 @@ async def revise_stops(draft, change, offline):
     if not draft:
         return None, "Build an itinerary first, then tell me which stop to change."
     days = [day.copy() for day in draft["days"]]
-    if (action in {"move", "add"} and number is None) or (number is not None and not 1 <= number <= len(days)):
+    if (action == "move" and number is None) or (number is not None and not 1 <= number <= len(days)):
         return None, f"Choose a day from 1 to {len(days)}."
     if action == "add":
-        index = number - 1
-        if len(days[index]) >= 5:
+        index = number - 1 if number is not None else None
+        if index is not None and len(days[index]) >= 5:
             return None, f"Day {number} already has five stops. Choose another day or remove a stop first."
     else:
         key = name.strip(" \"'“”").casefold()
@@ -1198,6 +1220,20 @@ async def revise_stops(draft, change, offline):
         except (TimeoutError, httpx.HTTPError, HTTPException):
             return None, "I couldn’t check the destination’s place listings. Try again in a moment."
         candidates = {place["url"]: place for place in report["places"] if place["category"] != "Stay" and place["name"].casefold() == key}
+        if not candidates:
+            # Not in the base town's listings: search the destination's guides, then accept one clear match.
+            try:
+                async with asyncio.timeout(10):
+                    found = await lookup_places(other_name, "attractions", location_id=draft["cityId"],
+                                                public_only=True, include_photos=False)
+            except (TimeoutError, httpx.HTTPError, HTTPException):
+                found = {"places": []}
+            pool = [place for place in found.get("places", []) if place.get("category") != "Stay"
+                    and all(isinstance(place.get(axis), (int, float)) for axis in ("lat", "lon"))]
+            exact = [place for place in pool if place["name"].casefold() == key]
+            loose = [place for place in pool if key in place["name"].casefold()]
+            chosen = exact or (loose if len(loose) == 1 else [])
+            candidates = {place["url"]: place for place in chosen[:1]}
         if len(candidates) != 1:
             return None, f"I couldn’t identify one verified stop named {other_name} in {draft['name']}. Check the place name or use Edit itinerary to pick a result."
         place = next(iter(candidates.values()))
@@ -1209,6 +1245,14 @@ async def revise_stops(draft, change, offline):
             days[index].insert(position, place)
             answer = f"I replaced {stop['name']} with {place['name']} on day {index + 1}."
         else:
+            if number is None:
+                # Nearest day with room, judged by distance to that day's stops.
+                open_days = [day_index for day_index, day in enumerate(days) if len(day) < 5]
+                if not open_days:
+                    return None, "Every day already has five stops. Remove a stop first."
+                index = min(open_days, key=lambda day_index: min((distance_metres(place, stop) for stop in days[day_index]
+                                                                  if isinstance(stop.get("lat"), (int, float))), default=float("inf")))
+                number = index + 1
             days[index].append(place)
             answer = f"I added {place['name']} to day {number}."
     retained_urls = {place["url"] for day in days for place in day}
@@ -1480,6 +1524,14 @@ async def turn_stream(token: str, turn: Turn, request: Request):
                     and not re.match(r"^(?:hi|hey|thanks?|what|where|when|why|which|how|no|yes|help|trip preferences|travel on|flexible dates|budget|start at|already there)\b", message)):
                 details["replace_destination"] = bare_destination
                 asks_for_plan = True
+            # A city the planner just offered (typed or tapped as "Panaji, Goa") is used as offered.
+            # Searching for it again can miss: the geocoder does not always return smaller towns by name.
+            offered_city = None
+            if waiting_for_destination and details.get("replace_destination"):
+                typed = plain_name(bare_destination.split(",", 1)[0])
+                offered_city = next((city for city in (current or {}).get("destinationChoices") or []
+                                     if isinstance(city, dict) and plain_name(city.get("name", "")) == typed
+                                     and all(key in city for key in ("id", "lat", "lon"))), None)
             if (awaiting_field == "origin" and not details.get("origin") and city_phrase(bare_destination)
                     and re.fullmatch(r"[^\W\d_][\w .,\-'’]{1,95}", bare_destination)
                     and not details.keys() & {"days", "people", "budget", "_per_person", "budgetReduction", "diet", "pace"}):
@@ -1499,6 +1551,8 @@ async def turn_stream(token: str, turn: Turn, request: Request):
                     return
                 intake = (turn.trip_settings.apply(previous) if turn.trip_settings is not None else
                           update_intake(turn_text, previous, preferences, details, replace_interests=turn.replace_interests))
+                if offered_city:
+                    intake["location"] = offered_city
             except ValueError as error:
                 reason = str(error)
                 yield event_line({"type": "error", "message": reason if reason.startswith(("Choose", "Tell me")) else "Enter a valid calendar date."})
@@ -1534,10 +1588,24 @@ async def turn_stream(token: str, turn: Turn, request: Request):
                 if same_destination:
                     event["previousDraft"] = current_draft
                 changed_fields = {key for key in intake.keys() | previous.keys() if intake.get(key) != previous.get(key)}
+                dates_only = False
                 if (same_destination and not build_now and not (current or {}).get("needsBuild") and changed_fields
                         and changed_fields <= {"budget", "budgetOpen", "budgetPerPerson", "collectTripDetails"}):
                     revised = {**current_draft, "budget": intake.get("budget"), "updated": max(int(time() * 1000), current_draft["updated"] + 1)}
                     draft = WorldwideDraft.model_validate(revised)
+                elif (same_destination and current_draft and not build_now and not (current or {}).get("needsBuild")
+                        and changed_fields & {"date", "flexibleDates"}
+                        and changed_fields <= {"date", "flexibleDates", "budget", "budgetOpen", "budgetPerPerson", "collectTripDetails"}):
+                    # New dates only: keep the itinerary and its edits, move the start date and refresh the forecast.
+                    point = intake.get("location") or next((stop for day in current_draft["days"] for stop in day), None)
+                    weather, weather_status, weather_note = [], "not_requested", None
+                    if point and intake.get("date") and not turn.offline:
+                        weather, weather_status, weather_note = await date_weather(point, intake)
+                    revised = {**current_draft, "departure": intake.get("date"), "budget": intake.get("budget"),
+                               "weather": weather, "weatherStatus": weather_status, "weatherNote": weather_note,
+                               "updated": max(int(time() * 1000), current_draft["updated"] + 1)}
+                    draft = WorldwideDraft.model_validate(revised)
+                    dates_only = True
                 elif not turn.offline:
                     observations = []
 
@@ -1608,7 +1676,14 @@ async def turn_stream(token: str, turn: Turn, request: Request):
                     event["liveDraft"] = draft.model_dump(mode="json")
                     if build_now and re.search(r"\bsave\b", message):
                         event["saveRequested"] = True
-                    if same_destination and changed_fields <= {"budget", "budgetOpen", "budgetPerPerson", "collectTripDetails"} and not observations:
+                    if dates_only:
+                        event["answer"] = (f"I moved the trip to start on {draft.departure.strftime('%a %d %b %Y')} and kept your itinerary and changes."
+                                           if draft.departure else "I switched the trip to flexible dates and kept your itinerary.")
+                        if draft.weatherStatus == "ready":
+                            event["answer"] += " The forecast for those dates is on each day."
+                        elif draft.weatherNote:
+                            event["answer"] += " " + draft.weatherNote
+                    elif same_destination and changed_fields <= {"budget", "budgetOpen", "budgetPerPerson", "collectTripDetails"} and not observations:
                         event["answer"] = "I updated the budget target and kept your itinerary and entered costs. Check the budget summary for items that still need a price."
                     else:
                         event["answer"] = f"Here’s a {len(draft.days)}-day plan for {draft.name}. I grouped nearby stops and added travel times where available."
@@ -1754,7 +1829,11 @@ async def turn_stream(token: str, turn: Turn, request: Request):
             event = {"kind": "undo", "text": turn.text}
             state = reduce_log([*active_events, event])
         elif message and not choice and not planning and not re.search(r"\b(?:cheaper|cheapest|less expensive|go back to)\b", message):
-            question = ("Notice", "I couldn’t answer that from the available tools. Ask me to look up a place or the weather, or describe a trip to plan.")
+            if re.search(r"\b(?:rest|breaks?|slow(?:er)? down|take it easy|less packed|fewer stops|nap)\b", message):
+                question = ("Notice", "Your plan keeps the visits to a few stops a day, with free time between them. "
+                                      "For longer breaks, remove a stop with “Remove <place>”, or ask for a relaxed pace when you plan the trip.")
+            else:
+                question = ("Notice", "I couldn’t answer that from the available tools. Ask me to look up a place or the weather, or describe a trip to plan.")
             event = {"kind": turn.kind, "text": turn.text, "interruption": "Notice"}
         else:
             try:

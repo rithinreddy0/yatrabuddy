@@ -10,3 +10,6 @@ __pycache__/
 .vercel/
 *.log
 tmp*/
+
+test-results/
+playwright-report/

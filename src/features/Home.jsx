@@ -1,12 +1,13 @@
 import React, {useEffect,useState} from 'react'
-import {Button,Icon,IconButton,Pill,Empty} from '../components/UI.jsx'
+import {Button,Dialog,Icon,IconButton,Pill,Empty} from '../components/UI.jsx'
 import {themes,money} from '../planner.mjs'
 import {request} from '../api.mjs'
-import {DiscoveryFeed,DiscoveryLoading,DiscoveryWeather,SavedDiscoveryPlaces} from './DiscoveryFeed.jsx'
-import {useDiscoveryShortlist,useSavedDiscoveryPlaces} from './discoveryPlaces.mjs'
+import {DiscoveryWeather,SavedDiscoveryPlaces,useNearbyDiscovery} from './DiscoveryFeed.jsx'
+import {PlaceDetails} from './PlaceDetails.jsx'
+import './Home.css'
+import {useSavedDiscoveryPlaces} from './discoveryPlaces.mjs'
 import {PlacePhoto} from '../components/PlacePhoto.jsx'
 import {ArrowRight, ChevronRight, Globe, Map, Sparkles, Utensils} from 'lucide-react'
-import {BentoExploreSection} from '../components/BentoGrid.jsx'
 
 export function DestinationCard({place,saved,onSave,onOpen}) {
   return <article className="destination-card" style={{'--place-color':place.color}}>
@@ -33,14 +34,30 @@ function asCity(item) {
   return {...item,id:`geo:${item.id}`,region:[...new Set([item.region,item.country].filter(Boolean))].join(', ')}
 }
 
+function HomePlaces({city, onOpenPlace}) {
+  const {report, photosPending} = useNearbyDiscovery(city?.id?.replace(/^geo:/, ''))
+  const [failed, setFailed] = useState(() => new Set())
+  // Only places with a matched photo make the home rail; the full list lives in Explore and the guide.
+  const places = (report?.places || []).filter(place => place.category !== 'Stay' && place.photo?.url
+    && place.photo.kind !== 'nearby' && !failed.has(place.url)).slice(0, 10)
+  const skeletons = <div className="hm-rail" aria-hidden="true">{Array.from({length:4}, (_, index) => <i key={index} className="hm-skeleton"/>)}</div>
+  if (!places.length) return !report || photosPending ? skeletons
+    : <p className="hm-muted">Photos for nearby places are not available right now. <a href="#guide">Open the destination guide</a></p>
+  return <div className="hm-rail" role="list">{places.map(place => <article className="hm-place" role="listitem" key={place.url}>
+    <PlacePhoto place={place} hideUnavailable onOpen={() => onOpenPlace(place)}
+      onUnavailable={() => setFailed(current => new Set([...current, place.url]))}/>
+    <button type="button" onClick={() => onOpenPlace(place)}><strong>{place.name}</strong>
+      <small>{[place.category, Number.isFinite(place.distanceMetres) && `${(place.distanceMetres / 1000).toFixed(1)} km away`].filter(Boolean).join(' · ')}</small></button>
+  </article>)}</div>
+}
+
 export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onRequireAccount,catalog = []}) {
   const [prompt,setPrompt]=useState('')
   const [suggested,setSuggested]=useState(null)
   const [attempt,setAttempt]=useState(0)
   const [suggestionFailure,setSuggestionFailure]=useState(false)
+  const [openPlace,setOpenPlace]=useState(null)
   const city=destination || suggested
-  const cityId=city?.id?.replace(/^geo:/, '')
-  const shortlist=useDiscoveryShortlist(cityId)
   const name=library.profile?.homeCity?.trim() || catalog[0]?.name
   useEffect(()=>{
     if (destination || !name) return
@@ -55,9 +72,9 @@ export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onR
   },[destination,name,attempt])
 
   const actions=[
-    ['guide',Globe,'Destination guide','Local highlights and travel updates'],
-    ['attractions',Map,'Things to do','Landmarks, parks, and day trips'],
-    ['food',Utensils,'Where to eat','Cafés, restaurants, and local food'],
+    ['guide',Globe,'Destination guide','Best time, costs and getting there'],
+    ['attractions',Map,'Things to do','Landmarks, parks and day trips'],
+    ['food',Utensils,'Where to eat','Cafés, restaurants and local food'],
   ]
   const lastDraft = [...library.drafts].sort((a,b)=>b.updated-a.updated)[0]
   const lastTrip = [...library.trips].sort((a,b)=>b.updated-a.updated)[0]
@@ -67,80 +84,90 @@ export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onR
   const featuredTravelers = featuredDraft?.travelers ?? lastTrip?.brief.people
   const tripHref = featuredDraft ? '#draft/'+featuredDraft.id : featuredPlace ? '#trip/'+lastTrip.id : ''
   const tripPhoto = featuredDraft && [featuredDraft.stay, ...featuredDraft.days.flat()].find(place=>place?.photo?.url)
-  return <div className="page yatra-overview discovery-home">
-    <header className="home-masthead">YatraBuddy</header>
-    {tripHref && <section className="home-active-trip" aria-labelledby="home-active-title">
-      <div className="home-trip-heading">
-        <div className="home-trip-thumbnail">
-          {tripPhoto ? <PlacePhoto place={tripPhoto} compact/> : featuredPlace
-            ? <img src={`/images/${featuredPlace.image}.jpg`} alt=""/> : <Icon name="trip" size={26}/>}
-        </div>
-        <div className="home-trip-copy">
-          <p className="travel-label">Your latest trip</p><h1 id="home-active-title">Trip to {featuredDraft?.name || featuredPlace.name}</h1>
-          <p>{[(featuredDraft ? featuredDraft.departure : lastTrip?.brief.date) || 'Flexible dates',
-            `${featuredDays} ${featuredDays === 1 ? 'day' : 'days'}`, `${featuredTravelers} ${featuredTravelers === 1 ? 'traveler' : 'travelers'}`].join(' · ')}</p>
-        </div>
-      </div>
-      <nav className="home-trip-actions" aria-label="Latest trip actions">
-        <a className="btn primary" href={tripHref}>Go to trip <ArrowRight size={16}/></a>
-        {featuredDraft && <>
-          <a className="btn secondary" href={tripHref+'/preferences'} title="Change the number of travelers">Add members</a>
-          <a className="btn secondary" href={tripHref+'/invite'}>Invite members</a>
-          <a className="btn secondary" href={tripHref+'/travel'}>Trip Mode</a>
-        </>}
-      </nav>
-    </section>}
-    <section className="landing-grid landing-hero" aria-labelledby="landing-title">
-      <div className="landing-copy">
-        {tripHref ? <h2 id="landing-title">Plan your next trip</h2> : <h1 id="landing-title">Where do you want to go?</h1>}
-        <p>Build a day-by-day itinerary with stops, travel times, and a map.</p>
-        <form className="yatra-prompt landing-prompt" onSubmit={event=>{event.preventDefault();if(prompt.trim())onAsk(prompt.trim())}}>
-          <label className="yatra-sr-only" htmlFor="yatra-home-prompt">Ask YatraBuddy</label>
-          <Sparkles size={18} aria-hidden="true"/>
+  const rawDate = featuredDraft ? featuredDraft.departure : lastTrip?.brief.date
+  const tripDate = rawDate ? new Intl.DateTimeFormat(undefined, {weekday:'short', day:'numeric', month:'short', timeZone:'UTC'}).format(new Date(rawDate + 'T12:00:00Z')) : null
+  const greeting = library.profile?.preferredName ? `Hi ${library.profile.preferredName}, where to next?` : 'Where to next?'
+  const submit = text => { if (text.trim()) onAsk(text.trim()) }
+  const skeletons = <div className="hm-rail" aria-hidden="true">{Array.from({length:4}, (_, index) => <i key={index} className="hm-skeleton"/>)}</div>
+  return <div className="page hm">
+    <header className="hm-top">
+      <span className="hm-brand"><img src="/images/brand/yatrabuddy.svg" alt="" width="30" height="30"/> YatraBuddy</span>
+      <a className="hm-top-link" href="#trips">My trips <ChevronRight size={15} aria-hidden="true"/></a>
+    </header>
+
+    <section className="hm-hero" aria-labelledby="hm-title">
+      <img className="hm-hero-image" src="/images/kerala.jpg" alt="" fetchPriority="high" width="1280" height="840"/>
+      <div className="hm-hero-copy">
+        <p className="hm-kicker"><Sparkles size={15} aria-hidden="true"/> Your AI travel buddy</p>
+        <h1 id="hm-title">{greeting}</h1>
+        <p className="hm-lede">Describe a trip and get a day-by-day plan with stays, food, travel times and costs, from your door and back.</p>
+        <form className="hm-prompt" onSubmit={event=>{event.preventDefault();if(prompt.trim())submit(prompt);else event.currentTarget.elements['yatra-home-prompt'].focus()}}>
+          <label className="yatra-sr-only" htmlFor="yatra-home-prompt">Describe your trip</label>
           <input id="yatra-home-prompt" value={prompt} onChange={event=>setPrompt(event.target.value)} maxLength={260}
-            placeholder="Plan 3 days in Goa for two under ₹25,000"/>
-          <button type="submit" aria-label="Send to AI Assistant" disabled={!prompt.trim()}><ArrowRight size={19}/></button>
+            placeholder="3 days in Goa from Hyderabad under ₹20,000" enterKeyHint="go"/>
+          <button type="submit" className="hm-send"><span>Plan</span><ArrowRight size={18} aria-hidden="true"/></button>
         </form>
-        <div className="home-prompt-examples" aria-label="Example trip prompts">
-          {['A weekend in Goa','A food trip to Hyderabad','Three days in Singapore'].map(example=>
-            <Pill key={example} onClick={()=>onAsk(example)}>{example}</Pill>)}
+        <div className="hm-chips" aria-label="Example trips">
+          {['Weekend in Goa','Food trip to Hyderabad','5 days in Kerala with family','Singapore on a budget'].map(example=>
+            <button type="button" key={example} onClick={()=>onAsk(example)}>{example}</button>)}
         </div>
-        <div className="landing-actions">
-          <Button variant="primary" icon="chat" onClick={()=>prompt.trim()?onAsk(prompt.trim()):onNavigate('chat')}>{prompt.trim()?'Plan this trip':'Start planning'}</Button>
-          <a className="btn secondary" href="#trips">Open My Trips <ChevronRight size={16}/></a>
-        </div>
-      </div>
-      <div className="landing-hero-visual">
-        <img className="landing-hero-image" src="/images/kerala.jpg" alt="" fetchPriority="high" width="640" height="420"/>
-        <a className="landing-hero-link" href="#discover"><Map size={17}/> Explore destinations <ChevronRight size={16}/></a>
       </div>
     </section>
-    <BentoExploreSection catalog={catalog} onPlan={id => onPlan('', id)}/>
-    <section className="landing-features home-explore" aria-labelledby="landing-tools">
-      <h2 id="landing-tools">Explore your way</h2>
-      <div className="home-explore-grid">{actions.map(([route,ActionIcon,title,description])=><a href={'#'+route} className="home-explore-card" key={route}>
-        <span className="home-explore-caption"><ActionIcon size={18}/><span><strong>{title}</strong><small>{description}</small></span><ArrowRight size={17}/></span>
+
+    {tripHref && <section className="hm-continue" aria-labelledby="hm-continue-title">
+      <a className="hm-continue-main" href={tripHref}>
+        <span className="hm-continue-thumb">{tripPhoto ? <PlacePhoto place={tripPhoto} compact/> : featuredPlace
+          ? <img src={`/images/${featuredPlace.image}.jpg`} alt=""/> : <Icon name="trip" size={22}/>}</span>
+        <span className="hm-continue-copy"><small>Continue planning</small>
+          <strong id="hm-continue-title">Trip to {featuredDraft?.name || featuredPlace.name}</strong>
+          <small>{[tripDate || 'Flexible dates', `${featuredDays} ${featuredDays === 1 ? 'day' : 'days'}`, `${featuredTravelers} ${featuredTravelers === 1 ? 'traveller' : 'travellers'}`].join(' · ')}</small></span>
+        <ArrowRight size={18} aria-hidden="true"/>
+      </a>
+      {featuredDraft && <nav className="hm-continue-links" aria-label="Trip shortcuts">
+        <a href={tripHref+'/transport'}>Getting there</a><a href={tripHref+'/budget'}>Budget</a>
+        <a href={tripHref+'/bookings'}>Bookings</a><a href={tripHref+'/travel'}>Travel Mode</a>
+      </nav>}
+    </section>}
+
+    {catalog.length > 0 && <section className="hm-section" aria-labelledby="hm-destinations">
+      <div className="hm-section-head"><h2 id="hm-destinations">Popular trips</h2><a href="#discover">See all</a></div>
+      <div className="hm-rail hm-destinations" role="list">{catalog.slice(0, 5).map(place => <article className="hm-destination" role="listitem" key={place.id}>
+        <img src={`/images/${place.image}.jpg`} alt={`${place.name}, ${place.region}`} loading="lazy" decoding="async" width="480" height="320"/>
+        <div><h3>{place.name}</h3><p>{[place.theme, place.season && `Best ${place.season}`].filter(Boolean).join(' · ')}</p>
+          <button type="button" onClick={() => onPlan('', place.id)} aria-label={`Plan a trip to ${place.name}`}>Plan this trip <ArrowRight size={15} aria-hidden="true"/></button></div>
+      </article>)}</div>
+    </section>}
+
+    <section className="hm-section" aria-labelledby="hm-ways">
+      <h2 id="hm-ways" className="yatra-sr-only">Explore your way</h2>
+      <div className="hm-ways">{actions.map(([route,ActionIcon,title,description])=><a href={'#'+route} className="hm-way" key={route}>
+        <span className="hm-way-icon"><ActionIcon size={19} aria-hidden="true"/></span><strong>{title}</strong><small>{description}</small>
       </a>)}</div>
     </section>
-    <section className="landing-discovery" aria-label="Destination discovery">
-    <header className="discovery-home-intro">
-      <div className="discovery-home-heading">
-        <h2>{city ? <>Explore <span>{city.name}</span></> : 'Explore near you'}</h2>
-        <p>{city && !destination && library.profile?.homeCity ? 'Near your profile city' : 'Find places to go, eat and stay.'}</p>
+
+    <section className="hm-section" aria-labelledby="hm-near">
+      <div className="hm-section-head"><div><h2 id="hm-near">{city ? <>Around {city.name}</> : 'Places to explore'}</h2>
+        <p>{city && !destination && library.profile?.homeCity ? 'Near your home city' : 'Photographed places from open travel sources'}</p></div>
+        {city && <DiscoveryWeather key={city.id} cityId={city.id.replace(/^geo:/, '')}/>}</div>
+      {city ? <HomePlaces city={city} onOpenPlace={setOpenPlace}/>
+        : suggestionFailure ? <div className="discovery-message" role="status"><p>Nearby places are temporarily unavailable.</p>
+          <Button onClick={()=>{setSuggestionFailure(false);setAttempt(value=>value+1)}}>Try again</Button></div>
+        : skeletons}
+      <div className="hm-actions">
+        <Button variant="primary" icon="chat" onClick={()=>city?onPlan('',city.id,city):onPlan()}>{city ? `Plan a trip to ${city.name}` : 'Plan a trip'}</Button>
+        <Button icon="globe" onClick={()=>onResearch('overview')}>Destination guide</Button>
       </div>
-      {cityId && <DiscoveryWeather key={cityId} cityId={cityId}/>}
-    </header>
-    {city ? <DiscoveryFeed key={city.id} location={city} profile={library.profile} onPlan={onPlan} onAsk={onAsk} onRequireAccount={onRequireAccount}/>
-      : name && !suggestionFailure ? <DiscoveryLoading city={name}/>
-      : suggestionFailure ? <div className="discovery-message" role="status"><p>Nearby places are temporarily unavailable.</p><Button onClick={()=>{setSuggestionFailure(false);setAttempt(value=>value+1)}}>Retry suggestion</Button><a className="btn secondary" href="#discover">Explore destinations</a></div>
-      : null}
-    <div className="discovery-home-links">
-      <Button icon="plus" variant="primary" onClick={()=>city?onPlan('',city.id,city,false,{selected:shortlist}):onPlan()}>Plan a trip</Button>
-      <Button variant="text-btn" icon="arrow" onClick={()=>onResearch('overview')}>Destination guide</Button>
-    </div>
     </section>
+
+    <footer className="hm-footer">
+      <p>Places from OpenStreetMap, Wikipedia and Wikivoyage. Weather from Open-Meteo. Prices and timings are estimates unless a provider confirms them.</p>
+    </footer>
+    {openPlace && <Dialog label={openPlace.name} className="discovery-details-dialog" onClose={()=>setOpenPlace(null)}>
+      <PlaceDetails key={openPlace.url} place={openPlace} initialTab="media"/>
+    </Dialog>}
   </div>
 }
+
 export function Discover({catalog,library,onSave,onOpen,onPlan,savedOnly}) {
   const [filter,setFilter]=useState('All places')
   const [query,setQuery]=useState('')
