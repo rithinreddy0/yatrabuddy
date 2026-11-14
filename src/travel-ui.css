@@ -365,15 +365,15 @@
   .travel-shell .journey-chat .agent-grid.journey-map-open { grid-template-rows:minmax(0,min(30dvh,220px)) minmax(0,1fr); gap:6px; }
   .travel-shell .journey-chat .journey-side { grid-row:1; }
   .travel-shell .journey-chat .journey-map-open .agent-chat { grid-row:2; }
-  .travel-shell .journey-chat:has(.agent-composer:focus-within) .agent-grid.journey-map-open { grid-template-rows:minmax(0,1fr); }
-  .travel-shell .journey-chat:has(.agent-composer:focus-within) .journey-side { display:none; }
-  .travel-shell .journey-chat:has(.agent-composer:focus-within) .agent-chat { grid-row:1; }
+  :root[data-keyboard=open] .travel-shell .journey-chat .agent-grid.journey-map-open { grid-template-rows:minmax(0,1fr); }
+  :root[data-keyboard=open] .travel-shell .journey-chat .journey-side { display:none; }
+  :root[data-keyboard=open] .travel-shell .journey-chat .agent-chat { grid-row:1; }
 }
 @media (max-width:850px) {
   .travel-shell .chat-shell > main { padding-bottom:calc(max(10px,env(safe-area-inset-bottom)) + 55px); }
   .travel-shell .chat-shell .journey-chat.agent-workspace { padding-bottom:6px; }
-  .travel-shell .chat-shell:has(.agent-composer:focus-within) > main { padding-bottom:0; }
-  .travel-shell .chat-shell:has(.agent-composer:focus-within) .mobile-workspace-dock { display:none; }
+  :root[data-keyboard=open] .travel-shell .chat-shell > main { padding-bottom:0; }
+  :root[data-keyboard=open] .travel-shell .mobile-workspace-dock { display:none; }
 }
 .journey-chat[data-network-offline] { grid-template-rows:auto auto minmax(0,1fr); }
 .agent-network-status { background:var(--mint); color:var(--deep); margin:0 auto 8px; padding:7px 12px; border-radius:10px; }
@@ -460,4 +460,17 @@
 }
 @media(min-width:850px) {
   .travel-mode .travel-now {grid-template-columns:minmax(0, 1fr) auto minmax(170px, 236px)}
+}
+
+/* Route changes move focus to the page heading so screen readers announce the new page.
+   That focus is programmatic, so it should not paint a focus ring over the title. */
+main h1[tabindex="-1"]:focus:not(:focus-visible),
+main h1[tabindex="-1"]:focus { outline: none; box-shadow: none; }
+
+/* Touch screens: give standalone links and icon controls a comfortable ~40px hit area.
+   Inline text links inside sentences keep their size. */
+@media (pointer: coarse) {
+  .source-pill, .discovery-weather { min-height: 40px; display: inline-flex; align-items: center; }
+  .wiki-source-arrow { width: 40px; height: 40px; }
+  .journey-stop-title { min-height: 36px; padding-block: 6px; text-align: left; }
 }

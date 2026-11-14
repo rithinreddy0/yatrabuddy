@@ -36,7 +36,10 @@ async function play() {
   })
 }
 
-Promise.all([mounted, play()]).then(() => {
+// The animation only decorates the wait. Reveal the app as soon as it has rendered instead of
+// holding a ready app behind the splash until the animation finishes.
+void play()
+mounted.then(() => {
   startup.remove()
   app.inert = false
 })

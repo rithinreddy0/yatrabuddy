@@ -55,6 +55,8 @@ const promptTemplates = [
 const saveRequest = /^(?:\/save|(?:please\s+)?(?:(?:can|could) you\s+)?(?:build (?:my |the |this )?(?:trip|itinerary) and )?save(?: (?:my |our |the |this )?(?:trip|itinerary|plan)| it)?(?: now)?(?: please)?)[.!? ]*$/i
 const sourceTools = ['Place search', 'More places', 'Images', 'Videos', 'Public research', 'Weather', 'Local transport', 'Groq research', 'Destination guide', 'Travel providers']
 const choiceBounds = {days: [1, 5], people: [1, 8], budget: [1000, 10000000]}
+const STREAM_IDLE_MS = 30000
+const STREAM_MAX_MS = 120000
 
 function validChoiceValue(field, value, catalog) {
   if (typeof value !== 'string' && typeof value !== 'number') return false
@@ -160,6 +162,21 @@ function PlaceAnswer({result, images, onUseStay, activeStay, busy, onPlace, onAd
   </section>
 }
 
+// The ranker records why each stop was chosen. Show the reasons that help a traveller decide,
+// not bookkeeping such as "has a photo".
+const UNHELPFUL_REASONS = new Set(['Has a sourced photo', 'A nearby verified option from the available sources'])
+function stopReasons(place) {
+  return (Array.isArray(place?.fitReasons) ? place.fitReasons : [])
+    .filter(reason => typeof reason === 'string' && !UNHELPFUL_REASONS.has(reason)).slice(0, 2)
+}
+
+// "Mapusa, Goa" keeps the region the traveller asked for visible after they pick a base town.
+function placeTitle(location) {
+  if (!location?.name) return ''
+  const region = location.region && location.region.toLowerCase() !== location.name.toLowerCase() ? location.region : ''
+  return region ? `${location.name}, ${region}` : location.name
+}
+
 function mapPlace(place) {
   return {...place, lat: place.lat ?? place.latitude, lon: place.lon ?? place.longitude}
 }
@@ -220,6 +237,7 @@ function PlannerTimeline({draft, catalog, onPlace, onSave, onEdit, saved, onAdd,
             <button type="button" className="journey-stop-title" onClick={() => onPlace(place)}>{place.name}</button>
             <div className="journey-stop-meta"><span>{place.category}</span>{Number.isFinite(place.rating) && <span className="trip-room-rating">★ {place.rating.toFixed(1)} / 5{place.reviewCount ? ` · ${place.reviewCount} reviews` : ''}</span>}{place.publishedPrice && <span>{place.publishedPrice}</span>}<SourceLink url={place.url}>{place.source || 'Source'}</SourceLink></div>
             {place.openingHours && <small>Published hours · {place.openingHours}</small>}
+            {stopReasons(place).length > 0 && <small className="journey-stop-why">Why this stop: {stopReasons(place).join(' · ')}</small>}
           </div>
           <JourneyPlacePhoto place={place} onPlace={onPlace}/>
         </li>)}</ol>}
@@ -363,6 +381,8 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
   const composer = useRef(null)
   const active = useRef(null)
   const lock = useRef(false)
+  const stoppedByUser = useRef(false)
+  const [retryAction, setRetryAction] = useState(null)
   const initialSent = useRef(false)
   const voice = useVoiceInput({continuous:false, onTranscript: text => setQuery(current => [current.trim(), text].filter(Boolean).join(' ').slice(0,600))})
   const ownsFocus = target => target === document.body || target.closest?.('.agent-workspace')
@@ -473,8 +493,20 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
     lock.current = true
     followLatest.current = true
     revealNextReply.current = true
+    stoppedByUser.current = false
     const controller = new AbortController()
     active.current = controller
+    // The turn is cancelled only when the stream goes quiet, not because a long, healthy answer
+    // (research plus a full itinerary) takes more than a fixed number of seconds overall.
+    const idle = new AbortController()
+    let idleTimer = 0
+    const keepAlive = () => {
+      window.clearTimeout(idleTimer)
+      idleTimer = window.setTimeout(() => idle.abort(new DOMException('The planner stopped responding.', 'TimeoutError')), STREAM_IDLE_MS)
+    }
+    keepAlive()
+    const streamSignal = AbortSignal.any([controller.signal, idle.signal, AbortSignal.timeout(STREAM_MAX_MS)])
+    setRetryAction(null)
     setBusy(true)
     setRevealVersion(null)
     setPromptMenu(false)
@@ -485,9 +517,9 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
     setTools([])
     setPendingAnswer(null)
     setPendingMessage(action.text || action.label || '')
+    let session = token
+    let version = model?.version || 0
     try {
-      let session = token
-      let version = model?.version || 0
       if (!session) {
         const created = await createSession(controller.signal)
         session = created.token
@@ -503,7 +535,7 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
             pace:profile.pace, transport:profile.transport, mobility:profile.mobility, homeCity:profile.homeCity,
             travelGroup:profile.travelGroup, stayPreferences:profile.stayPreferences, notes:profile.notes,
             tripDays:profile.tripDays, budget:profile.budget, travelers:profile.travelers} : undefined, ...action}),
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25000)]),
+        signal: streamSignal,
       })
       if (!response.ok || !response.body) {
         const data = await response.json().catch(() => null)
@@ -521,6 +553,7 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
       while (true) {
         const {done, value} = await reader.read()
         if (done) break
+        keepAlive()
         buffer += value
         let end
         while ((end = buffer.indexOf('\n')) !== -1) {
@@ -560,7 +593,24 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
       if (saveRequested) await persistTripAndExit(saveRequested, session)
       return true
     } catch (failure) {
-      if (!controller.signal.aborted) {
+      const retryable = action.kind === 'message' && typeof action.text === 'string' && action.text.trim()
+      if (controller.signal.aborted) {
+        if (stoppedByUser.current && session) {
+          // The server may have finished the turn before the stop reached it. Reload the conversation
+          // so the thread shows what was actually saved and a retry is not rejected as stale.
+          let saved = false
+          try {
+            const latest = validateSession(await request('planning-agent/sessions/' + session, {signal: AbortSignal.timeout(8000)}))
+            setModel(latest)
+            saved = latest.version > version
+          } catch { /* keep the current thread; the next send reports any conflict */ }
+          if (!saved) {
+            setError('Response stopped before it finished. Nothing from it was saved.')
+            if (retryable) setRetryAction(action)
+          }
+        }
+      } else {
+        if (retryable && !sessionUnavailable(failure)) setRetryAction(action)
         if (sessionUnavailable(failure)) {
           localStorage.removeItem(sessionKey)
           localStorage.removeItem(revisionKey)
@@ -575,6 +625,7 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
       }
       return false
     } finally {
+      window.clearTimeout(idleTimer)
       lock.current = false
       setBusy(false)
       setPendingMessage('')
@@ -645,6 +696,7 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
   const [interestsOpen, setInterestsOpen] = useState(false)
   const latestIntake = itineraryRequest || (contextDraft ? {destination: contextDraft.name, days: contextDraft.days.length, people: contextDraft.travelers, date: contextDraft.departure, budget: contextDraft.budget, diet: contextDraft.mealPreference, pace: contextDraft.pace, party:contextDraft.party} : {})
   const hasMap = Boolean(!contextId && (mapData.places.length || mapData.center || selectedPlace))
+  const plannerLabel = liveDraft && !activeIntake?.needsBuild ? 'Edit itinerary' : activeIntake ? 'Continue planning' : 'Plan a trip'
   const validDraft = drafts?.some(item => item.id === liveDraft?.id)
   const roomDraft = drafts?.find(item => item.id === roomDraftId) || (liveDraft?.id === roomDraftId ? liveDraft : null)
   const editableMessage = recent?.kind === 'message' && recent.text?.trim() ? recent.text : ''
@@ -938,12 +990,12 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
         if (partial) fillPrompt(matchingPrompts[0][0])
         else event.currentTarget.form.requestSubmit()
       }
-    }} maxLength={600} rows={1} placeholder={liveDraft ? 'Ask about this trip or request a change…' : activeIntake?.question?.field === 'destination' ? 'Enter a city or region…' : 'Describe your trip or ask a travel question…'}/></label>
+    }} maxLength={600} rows={1} placeholder={liveDraft ? 'Ask or change this trip…' : activeIntake?.question?.field === 'destination' ? 'Enter a city or region…' : 'Where do you want to go?'}/></label>
     <div className="agent-composer-actions">
       <button ref={promptTrigger} type="button" className="agent-round" aria-label="Prompt templates" aria-expanded={showPrompts} aria-controls={showPrompts ? 'agent-prompt-list' : undefined} onClick={() => setPromptMenu(value => !value)}><Plus size={18}/></button>
       {!contextId && liveDraft && <Button className="journey-composer-save" disabled={busy || !ready || activeIntake?.needsBuild} onClick={() => saveTripAndExit(liveDraft)} aria-label="Save trip and open itinerary"><Bookmark size={16}/><span>Save trip</span></Button>}
       <DictationControl voice={voice} disabled={busy}/>
-      {busy ? <button type="button" className="agent-round agent-send" onClick={() => active.current?.abort()} aria-label="Stop response"><Square size={15}/></button>
+      {busy ? <button type="button" className="agent-round agent-send" onClick={() => {stoppedByUser.current = true; active.current?.abort()}} aria-label="Stop response"><Square size={15}/></button>
         : <button type="submit" className="agent-round agent-send" disabled={!query.trim() || resuming || missingContext || !connected} aria-label={messageEdit ? 'Send edited message' : 'Send message'}
           onClick={() => {focusNextReply.current = true}}><ArrowUp size={20}/></button>}
     </div>
@@ -971,16 +1023,16 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
       }}><small>{label}</small><strong>{preferenceValues[field]}</strong></button>)}
   </div>
   return <div className="page inner-page agent-workspace journey-chat" data-network-offline={!connected || undefined}>
-    <div className="agent-header"><div className="journey-chat-heading"><h1>{contextTrip ? `Discuss ${catalog.find(item => item.id === contextTrip.brief.destination)?.name || 'this trip'}` : latestIntake.destination ? `Trip to ${latestIntake.location?.name||liveDraft?.name||latestIntake.destination}` : 'AI Assistant'}</h1></div>
+    <div className="agent-header"><div className="journey-chat-heading"><h1>{contextTrip ? `Discuss ${catalog.find(item => item.id === contextTrip.brief.destination)?.name || 'this trip'}` : latestIntake.destination ? `Trip to ${placeTitle(latestIntake.location) || liveDraft?.name || latestIntake.destination}` : 'AI Assistant'}</h1></div>
       <div className="agent-header-controls">
-        {hasMap && <Button ref={mapToggle} icon="map" aria-expanded={mapOpen && !roomOpen} onClick={() => {setSelectedPlace(null);setMapOpen(open => roomOpen || !open);setRoomOpen(false)}}>{mapOpen && !roomOpen ? 'Hide map' : 'Show map'}</Button>}
-        {validDraft && <Button aria-expanded={roomOpen} onClick={() => roomOpen ? setRoomOpen(false) : openRoom(liveDraft)}>Trip workspace</Button>}
-        {!contextId && <Button icon="trip" disabled={busy || resuming || !ready}
+        {hasMap && <Button ref={mapToggle} icon="map" aria-label={mapOpen && !roomOpen ? 'Hide map' : 'Show map'} aria-expanded={mapOpen && !roomOpen} onClick={() => {setSelectedPlace(null);setMapOpen(open => roomOpen || !open);setRoomOpen(false)}}><span className="agent-header-label">{mapOpen && !roomOpen ? 'Hide map' : 'Show map'}</span></Button>}
+        {validDraft && <Button icon="users" aria-label="Trip workspace" aria-expanded={roomOpen} onClick={() => roomOpen ? setRoomOpen(false) : openRoom(liveDraft)}><span className="agent-header-label">Trip workspace</span></Button>}
+        {!contextId && <Button icon="calendar" disabled={busy || resuming || !ready} aria-label={plannerLabel}
           onClick={liveDraft && !activeIntake?.needsBuild ? () => openBuilder(liveDraft) : continueTrip}>
-          {liveDraft && !activeIntake?.needsBuild ? 'Edit itinerary' : activeIntake ? 'Continue planning' : 'Plan a trip'}
+          <span className="agent-header-label">{plannerLabel}</span>
         </Button>}
-        {tripDetails && <Button className={showMapPanel ? 'journey-details-mobile-toggle' : ''} icon="trip" onClick={() => setDetailsOpen(true)}>Trip details</Button>}
-        {hasTripPanel && <Button ref={sidebarToggle} aria-expanded={sidebarOpen} aria-controls="agent-trip-panel" onClick={() => setSidebarOpen(open => !open)}>{sidebarOpen ? 'Hide trip budget' : 'Trip budget'}</Button>}
+        {tripDetails && <Button className={showMapPanel ? 'journey-details-mobile-toggle' : ''} icon="info" aria-label="Trip details" onClick={() => setDetailsOpen(true)}><span className="agent-header-label">Trip details</span></Button>}
+        {hasTripPanel && <Button ref={sidebarToggle} icon="wallet" aria-label={sidebarOpen ? 'Hide trip budget' : 'Trip budget'} aria-expanded={sidebarOpen} aria-controls="agent-trip-panel" onClick={() => setSidebarOpen(open => !open)}><span className="agent-header-label">{sidebarOpen ? 'Hide trip budget' : 'Trip budget'}</span></Button>}
         <details className="agent-chat-menu" ref={chatMenu} open={settingsOpen}>
           <summary ref={settingsTrigger} title="Conversation settings" onClick={event=>{event.preventDefault();setSettingsOpen(open=>!open)}}><Ellipsis size={21}/><span className="yatra-sr-only">Conversation settings</span></summary>
           <div onClick={event=>{if(event.target.closest('button'))setSettingsOpen(false)}}>
@@ -1091,6 +1143,7 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
         {error && <div className="agent-error">
           <p className="form-error" role="alert">{error}</p>
           {resuming && <Button onClick={() => {setError(''); setResumeAttempt(value => value + 1)}}>Retry opening conversation</Button>}
+          {!resuming && retryAction && !busy && <Button disabled={offline} onClick={() => {setError(''); void send(retryAction)}}>Retry</Button>}
         </div>}
         {busy && <section className="agent-reply agent-pending" aria-label="YatraBuddy’s response in progress">
           <span className="agent-avatar" aria-hidden="true"><Sparkles size={18}/></span>

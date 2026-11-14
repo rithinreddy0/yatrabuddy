@@ -43,6 +43,22 @@ PLACE_TYPES = {
     "Relaxation": {"Nature"}, "Shopping": {"Shopping"}, "Arts & design": {"Sight"}, "Nightlife": {"Activity", "Food"},
 }
 PACE_CAPACITY = {"Relaxed": 2, "Balanced": 3, "Packed": 4}
+CURATED_SOURCES = {"Wikivoyage", "Wikipedia"}
+# Chain outlets are available everywhere and rarely the reason to visit a destination.
+CHAIN_OUTLETS = re.compile(
+    r"^(?:domino'?s|mcdonald'?s|kfc|subway|pizza hut|burger king|starbucks|caf[eé] coffee day|ccd|"
+    r"baskin robbins|dunkin'?|taco bell|wow!? momo|haldiram'?s|barista|costa coffee|tim hortons)(?![a-z])", re.I,
+)
+# Everyday venues that exist in any city; kept as options but ranked below destination-specific stops.
+GENERIC_VENUES = re.compile(r"(?<![a-z])(?:inox|pvr|cinepolis|cinema|multiplex|shopping mall|mall)(?![a-z])", re.I)
+# Map data often splits one feature into numbered segments ("Avenue - Stretch 1", "Stretch 5").
+SEGMENT_SUFFIX = re.compile(r"\s*[-–—,]?\s*(?<![a-z])(?:stretch|section|segment|phase|part|block|gate|sector)\s*\d+\s*$", re.I)
+
+
+def feature_key(name):
+    return re.sub(r"[\W_]+", "", SEGMENT_SUFFIX.sub("", name or "").casefold())
+
+
 MONTHS = "january february march april may june july august september october november december".split()
 MONTH_PATTERN = "|".join(f"{name[:3]}(?:{name[3:]})?" if len(name) > 3 else name for name in MONTHS)
 WRITTEN_DATE = re.compile(rf"\b(?:(\d{{1,2}})(?:st|nd|rd|th)?\s+({MONTH_PATTERN})|({MONTH_PATTERN})\s+(\d{{1,2}})(?:st|nd|rd|th)?)(?:,?\s+(\d{{4}}))?\b", re.I)
@@ -268,9 +284,22 @@ def ranked_places(places, preferences, city="", weather=None):
             reasons.append("Has a sourced photo")
         if place.get("description"):
             value += 3
+        if place.get("source") in CURATED_SOURCES:
+            value += 12
+            reasons.append(f"Listed in the {place['source']} guide")
+        elif not any(place.get(field) for field in ("description", "photo", "rating", "website")):
+            # A bare map tag with no description, photo, rating or website gives the traveller little to go on.
+            value -= 8
+        if place["category"] == "Food" and CHAIN_OUTLETS.search(place.get("name") or ""):
+            value -= 30
+        if place["category"] != "Food" and GENERIC_VENUES.search(place.get("name") or ""):
+            value -= 20
         distance = place.get("distanceMetres")
         if isinstance(distance, (int, float)) and distance <= 5_000:
             value += 5
+        elif isinstance(distance, (int, float)) and distance > 25_000:
+            value -= 6
+            reasons.append(f"A day trip from your base ({round(distance / 1000)} km)")
         if isinstance(distance, (int, float)) and preferences.get("avoidLongDrives") and distance > 10_000:
             value -= 20
             reasons.append("Farther from the city center")
@@ -286,9 +315,16 @@ def ranked_places(places, preferences, city="", weather=None):
         -place["fitScore"], not bool(place.get("photo")), place.get("distanceMetres") or 0,
     ))
     distinct = []
+    features = set()
     for place in ordered:
+        segmented = bool(SEGMENT_SUFFIX.search(place.get("name") or ""))
+        key = (place["category"], feature_key(place.get("name"))) if segmented else None
+        if key and key[1] and key in features:
+            continue
         if not any(same_landmark(place, previous, city) for previous in distinct):
             distinct.append(place)
+            if key:
+                features.add(key)
     return distinct
 
 

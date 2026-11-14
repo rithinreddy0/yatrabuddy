@@ -278,3 +278,19 @@
   .journey-map-side:has(.journey-trip-summary) {grid-template-rows:minmax(0,1fr)}
   .journey-map-side .journey-trip-summary {display:none}
 }
+
+/* Phones: keep the chat header on one row so the conversation keeps its height.
+   Header actions become 40px icon buttons; their names stay available to assistive tech. */
+@media (max-width: 560px) {
+  .journey-chat .agent-header { flex-wrap: nowrap; align-items: center; }
+  .journey-chat .journey-chat-heading { min-width: 0; flex: 1 1 auto; }
+  .journey-chat .agent-header h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .journey-chat .agent-header-controls { flex-wrap: nowrap; flex: none; gap: 4px; }
+  .journey-chat .agent-header-controls > .btn:has(.icon) {
+    width: 40px; min-width: 40px; height: 40px; min-height: 40px; padding: 0; justify-content: center; gap: 0;
+  }
+  .journey-chat .agent-header-controls > .btn .agent-header-label {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+}
+.journey-stop-why { display: block; color: var(--muted); font-size: 12px; line-height: 1.35; margin-top: 2px; }

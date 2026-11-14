@@ -1,6 +1,7 @@
 import React from 'react'
 import {createRoot} from 'react-dom/client'
 import App from './App.jsx'
+import {watchKeyboard} from './viewport.mjs'
 import './styles.css'
 import './workspace.css'
 import './refine.css'
@@ -40,6 +41,8 @@ class ErrorBoundary extends React.Component {
     return this.props.children
   }
 }
+
+watchKeyboard()
 
 createRoot(document.getElementById('app')).render(
   <ErrorBoundary>

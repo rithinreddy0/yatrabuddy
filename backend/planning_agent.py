@@ -37,6 +37,10 @@ from .wikivoyage import wikivoyage_document
 router = APIRouter(prefix="/api/planning-agent")
 logger = logging.getLogger(__name__)
 cache = SourceCache()
+# Attractions found for the base town itself stay within an easy local trip; region-wide guide listings
+# are kept only when a day trip from the base is realistic.
+RADIUS_BASE_ATTRACTIONS = 25_000
+RADIUS_REGION_ATTRACTIONS = 45_000
 
 
 def session_storage_key(token, request):
@@ -576,6 +580,21 @@ MEDIA_REQUEST = re.compile(
 )
 
 
+LANDMARK_SUFFIX = re.compile(r"\s+(?:beach(?:es)?|area|side|region|town|city|village|station|market|junction|road)$", re.I)
+PLACE_SUBJECTS = (
+    ("attractions", re.compile(
+        r"\b(?:things to do|places to (?:see|visit)|attractions|sights|sightseeing|activities|beaches|museums|"
+        r"what (?:can|should|to) (?:i |we )?(?:see|visit|do)|(?:what|which) places (?:can|should) (?:i|we) (?:see|visit)|"
+        r"(?:nature|culture|adventure|heritage) (?:spots|places|experiences))\b")),
+    ("food", re.compile(
+        r"\b(?:restaurants?|caf[eé]s?|where (?:can (?:i|we) |should (?:i|we) |to )?eat|food spots|street food|"
+        r"places to eat|(?:breakfast|lunch|dinner) (?:spots|places|options))\b")),
+    ("stays", re.compile(
+        r"\b(?:hotels?|hostels?|resorts?|(?:home)?stays|guest\s?houses?|lodg(?:es?|ing)|accommodations?|"
+        r"where (?:can (?:i|we) |should (?:i|we) |to )?stay|places to stay)\b")),
+)
+
+
 def travel_question(text, brief, *, public_only=False, active_destination=None):
     message = text.strip().casefold()
     if re.match(r"^(?:plan|build|create|change|make|add|replace|remove)\b", message):
@@ -614,14 +633,15 @@ def travel_question(text, brief, *, public_only=False, active_destination=None):
         if active_destination:
             return "Weather", active_destination
         return "Notice", "Which city should I check for weather?"
-    if re.search(r"\b(?:things to do|places to (?:see|visit)|attractions|sights|activities|what (?:can|should|to) (?:i |we )?(?:see|visit|do)|(?:what|which) places (?:can|should) (?:i|we) (?:see|visit)|(?:nature|culture|adventure|heritage) (?:spots|places|experiences))\b", message):
-        category = "attractions"
-    elif re.search(r"\b(?:restaurants?|caf[eé]s?|where (?:can (?:i|we) |should (?:i|we) |to )?eat|food spots)\b", message):
-        category = "food"
-    elif re.search(r"\b(?:hotels?|hostels?|resorts?|where (?:can (?:i|we) |should (?:i|we) |to )?stay|places to stay)\b", message):
-        category = "stays"
-    else:
+    # The category named first is the subject: "stays near the beach" wants stays,
+    # "restaurants near the hotel" wants food.
+    subjects = []
+    for name, pattern in PLACE_SUBJECTS:
+        if found := pattern.search(message):
+            subjects.append((found.start(), name))
+    if not subjects:
         return None
+    category = min(subjects)[1]
     if not (explicit_lookup or direct_question or (public_only and active_destination and re.match(
             r"^(?:what about|(?:best|top)\s|restaurants?\b|caf[eé]s?\b|hotels?\b|sights?\b)", message))
             or re.match(r"^(?:things to do|places to (?:see|visit)|where to (?:eat|stay))\b", message)):
@@ -652,10 +672,25 @@ async def place_answer(query, category, offline, timeout=12, excluded=None):
     base = {"query": query, "category": category, "places": [], "status": "unavailable"}
     if offline:
         return {**base, "error": "Offline demo is on. Turn it off to look up real places."}
+    started = monotonic()
     try:
         async with asyncio.timeout(timeout):
             result = await lookup_places(query, category, public_only=True, include_photos=True)
     except (TimeoutError, httpx.HTTPError, HTTPException, ValueError, KeyError, TypeError):
+        result = None
+    # Travellers name areas the way they speak ("Calangute beach", "near the station area"), while the
+    # place index knows the locality ("Calangute"). Retry once with the trailing landmark word removed.
+    locality = LANDMARK_SUFFIX.sub("", query).strip(" ,")
+    remaining = timeout - (monotonic() - started)
+    if (result is None or not result.get("places")) and locality and locality != query and len(locality) >= 2 and remaining > 2:
+        try:
+            async with asyncio.timeout(remaining):
+                retried = await lookup_places(locality, category, public_only=True, include_photos=True)
+            if retried.get("places"):
+                result = retried
+        except (TimeoutError, httpx.HTTPError, HTTPException, ValueError, KeyError, TypeError):
+            pass
+    if result is None:
         return {**base, "error": "The place sources didn’t respond. Try again or use a nearby city name."}
     places = []
     candidates = result["places"]
@@ -751,19 +786,37 @@ async def live_place_research(intake, turn_started):
         async with asyncio.timeout(max(1, min(13, 17 - (monotonic() - turn_started)))):
             report = await nearby_report(location["id"])
         places = [item.copy() for item in report["places"]]
-        if sum(item["category"] in {"Sight", "Nature", "Activity"} for item in places) < (intake.get("days") or 1):
-            try:
-                async with asyncio.timeout(max(0.1, min(7, 18 - (monotonic() - turn_started)))):
-                    attractions = await lookup_places(location["name"], "attractions", location_id=location["id"],
-                                                      public_only=True, include_photos=False)
-                known = {item["url"] for item in places}
-                for item in attractions.get("places", []):
-                    if (item.get("url") not in known and item.get("category") in {"Sight", "Nature", "Activity"}
-                            and all(isinstance(item.get(axis), (int, float)) for axis in ("lat", "lon"))):
-                        places.append({**item, "distanceMetres": distance_metres(location, item)})
-                        known.add(item["url"])
-            except (TimeoutError, httpx.HTTPError, HTTPException, KeyError, ValueError, TypeError):
-                pass
+        # Always consult the curated attraction listings for the base town and its parent region.
+        # A small base town (for example Mapusa in Goa) can return only street-level map tags nearby,
+        # while the region guide lists the landmarks a traveller actually came for.
+        searches = [(location["name"], location["id"], RADIUS_BASE_ATTRACTIONS)]
+        region_name = (location.get("region") or "").strip()
+        if region_name and region_name.casefold() != location["name"].casefold():
+            searches.append((region_name, None, RADIUS_REGION_ATTRACTIONS))
+
+        async def attraction_search(query, location_id):
+            return await lookup_places(query, "attractions", location_id=location_id,
+                                       public_only=True, include_photos=False)
+
+        try:
+            async with asyncio.timeout(max(0.1, min(8, 18 - (monotonic() - turn_started)))):
+                results = await asyncio.gather(*(attraction_search(query, location_id)
+                                                 for query, location_id, _ in searches), return_exceptions=True)
+        except TimeoutError:
+            results = []
+        known = {item["url"] for item in places}
+        for (_, _, radius), result in zip(searches, results):
+            if isinstance(result, BaseException) or not isinstance(result, dict):
+                continue
+            for item in result.get("places", []):
+                if (item.get("url") in known or item.get("category") not in {"Sight", "Nature", "Activity"}
+                        or not all(isinstance(item.get(axis), (int, float)) for axis in ("lat", "lon"))):
+                    continue
+                distance = distance_metres(location, item)
+                if distance > radius:
+                    continue
+                places.append({**item, "distanceMetres": distance})
+                known.add(item["url"])
         diet = intake.get("diet")
         if diet and diet not in {"No preference", "No restrictions", "Non-vegetarian"}:
             try:
