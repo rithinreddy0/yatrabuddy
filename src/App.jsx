@@ -1,4 +1,4 @@
-import React,{useCallback,useEffect,useRef,useState} from 'react'
+import React,{Suspense,lazy,useCallback,useEffect,useRef,useState} from 'react'
 import {UserRound} from 'lucide-react'
 import {needsOnboarding} from './authGate.mjs'
 import {AgentProgress,Brand,Button,Dialog,Empty,Icon,TravelArtwork} from './components/UI.jsx'
@@ -9,19 +9,20 @@ import {Account,Preferences} from './features/Account.jsx'
 import {OnboardingChat} from './features/OnboardingChat.jsx'
 import {ProfileWizard} from './features/Profile.jsx'
 import {preferredDestination} from './profile.mjs'
-import {DestinationGuide} from './features/DestinationGuide.jsx'
-import {TripBrief} from './features/TripBrief.jsx'
-import {Trip} from './features/Trip.jsx'
-import {PlanningAgent} from './features/PlanningAgent.jsx'
-import {TravelDesk} from './features/TravelDesk.jsx'
-import {WorldSearch} from './features/WorldSearch.jsx'
-import {Buddy} from './features/Buddy.jsx'
-import {TripDiscovery} from './features/TripDiscovery.jsx'
-import {TripWorkspace, TripWorkspaceList} from './features/TripWorkspace.jsx'
-import {TripOverview} from './features/TripOverview.jsx'
+const DestinationGuide=lazy(()=>import('./features/DestinationGuide.jsx').then(module=>({default:module.DestinationGuide})))
+const TripBrief=lazy(()=>import('./features/TripBrief.jsx').then(module=>({default:module.TripBrief})))
+const Trip=lazy(()=>import('./features/Trip.jsx').then(module=>({default:module.Trip})))
+const PlanningAgent=lazy(()=>import('./features/PlanningAgent.jsx').then(module=>({default:module.PlanningAgent})))
+const TravelDesk=lazy(()=>import('./features/TravelDesk.jsx').then(module=>({default:module.TravelDesk})))
+const WorldSearch=lazy(()=>import('./features/WorldSearch.jsx').then(module=>({default:module.WorldSearch})))
+const Buddy=lazy(()=>import('./features/Buddy.jsx').then(module=>({default:module.Buddy})))
+const TripDiscovery=lazy(()=>import('./features/TripDiscovery.jsx').then(module=>({default:module.TripDiscovery})))
+const TripWorkspace=lazy(()=>import('./features/TripWorkspace.jsx').then(module=>({default:module.TripWorkspace})))
+const TripWorkspaceList=lazy(()=>import('./features/TripWorkspace.jsx').then(module=>({default:module.TripWorkspaceList})))
+const TripOverview=lazy(()=>import('./features/TripOverview.jsx').then(module=>({default:module.TripOverview})))
 import {speak,useReminders} from './features/reminders.mjs'
 import {useLibrary} from './features/useLibrary.mjs'
-import {Yatra} from './features/Yatra.jsx'
+const Yatra=lazy(()=>import('./features/Yatra.jsx').then(module=>({default:module.Yatra})))
 import fallbackCatalog from '../backend/catalog.json'
 
 const pages=[['home','home','Home'],['chat','chat','Chats'],['trips','trip','My Trips'],['discover','map','Explore'],['saved','heart','Saved'],['guide','globe','Destination guide']]
@@ -326,7 +327,7 @@ export default function App(){
         navigate('browse/'+id)
       }
       content=draft?<TripOverview key={draft.id+'/'+(route.section||'')} draft={draft} initialSection={route.section} onEdit={editDraft} onAsk={ask} onBack={()=>navigate('trips')}
-        onPreferences={next=>saveDraft(next,{stayInChat:true,silent:true})}/>:<div className="page inner-page"><Empty icon="trip" title="Draft unavailable" description="Open a saved draft from My trips."/></div>;break
+        onPreferences={next=>saveDraft(next,{stayInChat:true,silent:true})} onSaveDraft={next=>saveDraft(next,{stayInChat:true,silent:true,requirePersistence:true})}/>:<div className="page inner-page"><Empty icon="trip" title="Draft unavailable" description="Open a saved draft from My trips."/></div>;break
     }
     case 'workspace':content=<div className="page inner-page"><TripWorkspace key={route.id} workspaceId={route.id} initialTab="chat"/></div>;break
     case 'join':content=<div className="page inner-page"><TripWorkspace key={route.id} inviteCode={route.id} onJoined={id=>navigate('workspace/'+id)}/></div>;break
@@ -392,7 +393,7 @@ export default function App(){
         aria-controls="primary-navigation" onClick={()=>setMenu(value=>!value)}>•••</button>
     </nav>
     {(state.status||loadError)&&<div className="sync-notice" role="status">{state.status||loadError}</div>}
-    <main id="main" tabIndex={-1}>{trip&&<div className="page trip-workspace-nav"><label>Working on<select aria-label="Active trip" value={trip.id} onChange={event=>navigate((route.page==='budget'?'budget':'itinerary')+'/'+event.target.value)}>{library.trips.map(item=><option key={item.id} value={item.id}>{catalog?.find(place=>place.id===item.brief.destination)?.name||item.brief.destination} · {item.brief.days} days · {item.brief.people} travellers</option>)}</select></label><nav aria-label="Active trip views"><Button variant={route.page!=='budget'?'primary':'outline'} onClick={()=>navigate('itinerary/'+trip.id)}>Itinerary & map</Button><Button variant={route.page==='budget'?'primary':'outline'} onClick={()=>navigate('budget/'+trip.id)}>Budget</Button><Button icon="chat" onClick={()=>navigate('chat/'+trip.id)}>Discuss this trip</Button></nav></div>}{content}</main></div>
+    <main id="main" tabIndex={-1}>{trip&&<div className="page trip-workspace-nav"><label>Working on<select aria-label="Active trip" value={trip.id} onChange={event=>navigate((route.page==='budget'?'budget':'itinerary')+'/'+event.target.value)}>{library.trips.map(item=><option key={item.id} value={item.id}>{catalog?.find(place=>place.id===item.brief.destination)?.name||item.brief.destination} · {item.brief.days} days · {item.brief.people} travellers</option>)}</select></label><nav aria-label="Active trip views"><Button variant={route.page!=='budget'?'primary':'outline'} onClick={()=>navigate('itinerary/'+trip.id)}>Itinerary & map</Button><Button variant={route.page==='budget'?'primary':'outline'} onClick={()=>navigate('budget/'+trip.id)}>Budget</Button><Button icon="chat" onClick={()=>navigate('chat/'+trip.id)}>Discuss this trip</Button></nav></div>}<Suspense fallback={<div className="page inner-page"><AgentProgress label="Opening"/></div>}>{content}</Suspense></main></div>
     {modal?.type==='buddy'&&<Buddy catalog={catalog} profile={library.profile} defaultDestination={preferredDestination(library,catalog)} trip={trip} onClose={close} onPlan={planWithChat} onDesk={()=>navigate('desk')} onTrip={close} reminders={reminders}/>}
     {modal?.type==='account'&&<Account user={user} onClose={close} onLogin={async (user,isNew,welcomeEmail)=>{await state.login(user);setModal(isNew?{type:'onboarding'}:null);message(welcomeEmail==='scheduled'?'Account created. Check your inbox shortly.':welcomeEmail==='unavailable'?'Account created. Email delivery is unavailable.':'Signed in.')}} onLogout={async()=>{try{await state.logout();navigate('home');message('Signed out.')}catch(error){message(error.message)}}}/>}
     {modal?.type==='onboarding'&&<ProfileWizard name={user?.name} catalog={catalog||[]} isEditing={Boolean(library.profile)} initial={{style:library.style||'Balanced',...library.profile}} onClose={close} onDone={profile=>{change(data=>({...data,style:profile.style,profile}));close();message('Travel profile saved.')}}/>}

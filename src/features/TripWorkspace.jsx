@@ -7,6 +7,9 @@ import {money} from '../planner.mjs'
 import {draftSchedule, visitTime} from './draftSchedule.mjs'
 import {JourneyMap, draftMapData} from './JourneyMap.jsx'
 import {TravelMode} from './TravelMode.jsx'
+import {JourneyCard} from './JourneyTimeline.jsx'
+import {clockText, journeyEvents} from './journey.mjs'
+import {BOOKING_STATUSES, BOOKING_TYPES, statusLabel} from './budgetLedger.mjs'
 import './TripWorkspace.css'
 
 const path = 'trip-workspaces'
@@ -111,16 +114,21 @@ function EntryForm({kind, places, defaultPlace, onSave, onClose, busy, current})
   const placeListId = useId()
   const [title, setTitle] = useState(current?.title || '')
   const [file, setFile] = useState(null)
+  const [status, setStatus] = useState(current?.status || 'pending')
   const isMedia = kind === 'media'
   const isBooking = kind === 'booking'
+  const refundable = ['cancelled', 'refunded'].includes(status)
   function submit(event) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     const amount = form.get('amount')
+    const refund = form.get('refundAmount')
     const entry = {
       kind, title:title.trim(), place:form.get('place')?.trim() || null,
       url:form.get('url')?.trim() || null, notes:form.get('notes')?.trim() || '',
       date:form.get('date') || null, time:form.get('time') || null, amount:amount ? Number(amount) : null,
+      ...(isBooking ? {status, bookingType:form.get('bookingType') || null, reference:form.get('reference')?.trim() || '',
+        refundAmount:refundable && refund ? Number(refund) : null} : {}),
     }
     onSave(entry, file)
   }
@@ -134,6 +142,15 @@ function EntryForm({kind, places, defaultPlace, onSave, onClose, busy, current})
       list={placeListId} defaultValue={defaultPlace || ''}/><datalist id={placeListId}>
       {places.map(place => <option key={place} value={place}/>)}
     </datalist></label>}
+    {isBooking && <div className="trip-room-form-row">
+      <label>Type<select name="bookingType" defaultValue={current?.bookingType || 'Stay'}>
+        {BOOKING_TYPES.map(type => <option key={type}>{type}</option>)}</select></label>
+      <label>Status<select name="status" value={status} onChange={event => setStatus(event.target.value)}>
+        {BOOKING_STATUSES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
+      <label>Booking reference / PNR<input name="reference" maxLength={60} defaultValue={current?.reference || ''} autoComplete="off"/></label>
+      {refundable && <label>Refund received (₹)<input name="refundAmount" type="number" min={0} max={10000000} step={1} defaultValue={current?.refundAmount ?? ''}/></label>}
+    </div>}
+    {isBooking && status !== 'confirmed' && <p className="trip-room-muted">Only mark a booking confirmed once the provider has confirmed it. Unconfirmed bookings are not counted in the budget.</p>}
     {isBooking && <div className="trip-room-form-row">
       <label>Booking date<input name="date" type="date" defaultValue={current?.date || ''} onChange={event => {
         if (!event.target.value) event.target.form.elements.time.value = ''
@@ -254,7 +271,7 @@ function PlacePicker({draft, used, title, onClose, onPick, busy, errorText, excl
   </Dialog>
 }
 
-function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, onReplaceStop, busy, ideas, onIdeas, pinnedDays=[], onTogglePinDay}) {
+function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, onReplaceStop, busy, ideas, onIdeas, pinnedDays=[], onTogglePinDay, onPlanJourney}) {
   const [showDistances, setShowDistances] = useState(true)
   const [picker, setPicker] = useState(null)
   const [mapDay, setMapDay] = useState(null)
@@ -275,6 +292,7 @@ function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, onRep
       <Icon name="heart" size={20}/><span><strong>Ideas</strong><small>{ideas.length ? `${ideas.length} saved for later` : 'Save places you’re considering'}</small></span>
       <Icon name="chevron" size={16}/>
     </button>
+    <JourneyCard draft={draft} direction="outbound" onPlan={onPlanJourney}/>
     {draft.days.map((stops, index) => {
       const pinned = pinnedDays.includes(index)
       const schedule = draftSchedule(draft, index)
@@ -350,6 +368,7 @@ function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, onRep
         {onAddStop && <Button icon="plus" aria-label={`Add stop to day ${index + 1}`} disabled={busy || replacing || stops.length >= 5}
         onClick={() => {setPickerError('');setPicker({day:index})}}>Add stop</Button>}
     </details>})}
+    <JourneyCard draft={draft} direction="return" onPlan={onPlanJourney}/>
     {picker && <PlacePicker key={`${picker.day}:${picker.replace?.url || 'add'}`} draft={draft} used={used} excludeUrl={picker.replace?.url}
       title={picker.replace ? `Swap ${picker.replace.name} on day ${picker.day + 1}` : `Add a stop to day ${picker.day + 1}`} busy={busy || replacing}
       errorText={pickerError} onClose={() => setPicker(null)} onPick={async place => {
@@ -366,8 +385,20 @@ function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, onRep
   </div>
 }
 
+function JourneyEvent({event}) {
+  return <section className="trip-room-calendar-day">
+    <h3>{formatDate.format(new Date(event.date + 'T12:00:00Z'))}</h3>
+    <div className="trip-room-event" data-category="Journey">
+      <small>{event.start == null ? 'Time not set' : clockText(event.start) + (event.end != null ? ' – ' + clockText(event.end) + (event.end >= 1440 ? ' (+1 day)' : '') : '')}</small>
+      <strong>{event.title}</strong>
+    </div>
+  </section>
+}
+
 function Calendar({draft, onPlaceSelect}) {
+  const [outbound, back] = ['outbound', 'returnLeg'].map(key => journeyEvents(draft.journey).find(event => event.key === key))
   return <div className="trip-room-calendar" aria-label="Trip calendar">
+    {outbound && <JourneyEvent event={outbound}/>}
     {draft.days.map((_, index) => <section key={index} className="trip-room-calendar-day">
       <h3>{dayLabel(draft.departure, index)}</h3>
       {draftSchedule(draft, index).map(({place, start, end}) => <div key={place.url} className="trip-room-event" data-category={place.category}>
@@ -376,6 +407,7 @@ function Calendar({draft, onPlaceSelect}) {
       </div>)}
       {!draft.days[index].length && <p className="trip-room-muted">Free time</p>}
     </section>)}
+    {back && <JourneyEvent event={back}/>}
   </div>
 }
 
@@ -410,15 +442,22 @@ function WorkspaceEntries({entries, kind, ideas, media, draft, onSave, onUpdate,
   const mediaCandidates = kind === 'media' ? media.filter(item => item?.url && !entries.some(entry => entry.url === item.url)) : []
   const noun = kind === 'idea' ? 'idea' : kind === 'booking' ? 'booking' : 'media'
   const [bookingQuery, setBookingQuery] = useState('')
+  const [bookingStatus, setBookingStatus] = useState('')
+  const statusOrder = ['confirmed', 'pending', 'link_opened', 'suggested', undefined, 'cancelled', 'refunded']
   const matching = kind === 'booking' ? shown.filter(entry =>
-    [entry.title, entry.place, entry.notes, entry.date].some(value =>
-      value?.toLowerCase().includes(bookingQuery.trim().toLowerCase()))) : shown
+    (!bookingStatus || (entry.status || 'unset') === bookingStatus) &&
+    [entry.title, entry.place, entry.notes, entry.date, entry.reference].some(value =>
+      value?.toLowerCase().includes(bookingQuery.trim().toLowerCase())))
+    .sort((a, b) => statusOrder.indexOf(a.status) - statusOrder.indexOf(b.status) || (a.date || '9').localeCompare(b.date || '9')) : shown
   return <>
     <div className="trip-room-section-heading">
       <p className="trip-room-muted">{entries.length} {kind === 'media' ? 'media items' : noun + (entries.length === 1 ? '' : 's')}</p>
       <div className="trip-room-actions">
         {kind === 'booking' && entries.length > 0 && <input className="trip-room-booking-search" type="search"
           placeholder="Search bookings" aria-label="Search bookings" value={bookingQuery} onChange={event => setBookingQuery(event.target.value)}/>}
+        {kind === 'booking' && entries.length > 0 && <select className="trip-room-booking-search" aria-label="Filter bookings by status"
+          value={bookingStatus} onChange={event => setBookingStatus(event.target.value)}><option value="">All statuses</option>
+          {BOOKING_STATUSES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}<option value="unset">Status not set</option></select>}
         {kind === 'media' && <Button icon="download" onClick={() => exportMemories(draft, entries)}>Download recap</Button>}
         {!showForm && <Button icon="plus" variant="primary" onClick={() => setShowForm(true)}>Add {kind === 'media' ? 'photos or videos' : noun}</Button>}
       </div>
@@ -432,7 +471,7 @@ function WorkspaceEntries({entries, kind, ideas, media, draft, onSave, onUpdate,
       onSave={async (entry, file) => {if (await onSave(entry, file)) setShowForm(false)}}/>}
     {!entries.length && !showForm && <div className="trip-room-empty">
       <Icon name={kind === 'idea' ? 'heart' : kind === 'booking' ? 'trip' : 'link'} size={27}/>
-      <p>{kind === 'idea' ? 'Keep places you’re considering.' : kind === 'booking' ? 'Keep your confirmations and receipts together.' : 'Save photos, videos, and links for the trip.'}</p>
+      <p>{kind === 'idea' ? 'Keep places you’re considering.' : kind === 'booking' ? 'Track options you are considering and the bookings you confirm, with references and receipts. Opening a provider page never marks anything as booked.' : 'Save photos, videos, and links for the trip.'}</p>
     </div>}
     {filter && !shown.length && <p className="trip-room-muted">No media saved for {filter}.</p>}
     {kind === 'booking' && shown.length > 0 && !matching.length && <p role="status">No bookings match your search.</p>}
@@ -450,8 +489,11 @@ function WorkspaceEntries({entries, kind, ideas, media, draft, onSave, onUpdate,
         </div>
         {editing === entry.id && <EntryForm kind={kind} places={knownPlaces} current={entry} busy={busy} onClose={() => setEditing(null)}
           onSave={async data => {if (await onUpdate(entry.id, data)) setEditing(null)}}/>}
+        {kind === 'booking' && <p className="trip-room-booking-status" data-status={entry.status || 'unset'}>
+          <span>{statusLabel(entry.status)}</span>{entry.bookingType && <small>{entry.bookingType}</small>}</p>}
         {kind === 'booking' && <dl className="trip-room-booking-fields">
           {[['Date', entry.date], ['Time', entry.time?.slice(0, 5)], ['Amount', entry.amount == null ? null : money(entry.amount)],
+            ['Reference', entry.reference], ['Refund', entry.refundAmount == null ? null : money(entry.refundAmount)],
             ['Location', entry.place], ['Notes', entry.notes]].filter(([, value]) => value).map(([label, value]) =>
             <div key={label} data-wide={['Location', 'Notes'].includes(label) || undefined}><dt>{label}</dt><dd>{value}</dd></div>)}
         </dl>}
@@ -805,7 +847,8 @@ export function TripWorkspace({draft, workspaceId, inviteCode, ideas=[], media=[
         onAddStop={workspace?.isOwner ? addStop : undefined}
         onRemoveStop={workspace?.isOwner ? removeStop : undefined}
         onReplaceStop={workspace?.isOwner ? replaceStop : undefined}
-        onTogglePinDay={workspace?.isOwner ? togglePinDay : undefined}/>}
+        onTogglePinDay={workspace?.isOwner ? togglePinDay : undefined}
+        onPlanJourney={onTabChange ? () => onTabChange('transport') : undefined}/>}
       {tab === 'calendar' && <Calendar draft={shownDraft} onPlaceSelect={onPlaceSelect}/>}
       {tab === 'travel' && <TravelMode draft={shownDraft} bookings={group.filter(entry => entry.kind === 'booking')}
         onTabChange={onTabChange || setTab}/>}

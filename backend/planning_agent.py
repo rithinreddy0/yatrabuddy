@@ -28,11 +28,12 @@ from .models import Brief, MealPreference, Pace, SourcedStay, Style, Transport, 
 from .nearby import add_meal_results, distance_metres, estimate_day_route, nearby_report, transit_passes
 from .locations import compact, destination_guide, find_destinations, is_settlement, lookup
 from .city_briefing import concise_points, destination_notes, read_guide
+from .open_places import osm_places
 from .place_search import lookup_places, public_url
 from .planner_commands import command_reply, trip_snapshot
 from .public_answers import contextual_query, factual_answer, research_intent, venue_subject, video_answer
 from .source_cache import SourceCache, source_result
-from .trip_intake import draft_from_sources, next_intake_question, trip_dates, update_intake
+from .trip_intake import MEAL_NEAR_SIGHT, PACE_CAPACITY, draft_from_sources, ranked_places, next_intake_question, sight_clusters, trip_dates, update_intake
 from .wikivoyage import wikivoyage_document
 
 router = APIRouter(prefix="/api/planning-agent")
@@ -870,6 +871,33 @@ async def live_place_research(intake, turn_started):
                     continue
                 places.append({**item, "distanceMetres": distance})
                 known.add(item["url"])
+        # Food listings normally come from around the base town. Look up places to eat near
+        # attraction clusters a day trip away as well, so those days can have lunch nearby.
+        # Anchor on the sights the itinerary is likely to use, not on every listing in the region.
+        days = intake.get("days") or 2
+        likely = [item for item in ranked_places(places, intake, location["name"])
+                  if item.get("category") in {"Sight", "Nature", "Activity"}
+                  and all(isinstance(item.get(axis), (int, float)) for axis in ("lat", "lon"))]
+        likely = likely[:days * PACE_CAPACITY.get(intake.get("pace") or "Balanced", 4)]
+        anchors = sight_clusters(likely, location)[:min(4, days + 1)]
+        if anchors:
+            try:
+                async with asyncio.timeout(max(0.5, min(4, 17 - (monotonic() - turn_started)))):
+                    food_results = await asyncio.gather(*(
+                        osm_places(client, {"lat": anchor["lat"], "lon": anchor["lon"], "kind": "city"}, "food")
+                        for anchor in anchors), return_exceptions=True)
+            except TimeoutError:
+                food_results = []
+            for anchor, result in zip(anchors, food_results):
+                if not isinstance(result, list):
+                    continue
+                for item in result:
+                    if (item.get("url") in known or item.get("category") != "Food"
+                            or not all(isinstance(item.get(axis), (int, float)) for axis in ("lat", "lon"))
+                            or distance_metres(anchor, item) > MEAL_NEAR_SIGHT):
+                        continue
+                    places.append({**item, "distanceMetres": distance_metres(location, item)})
+                    known.add(item["url"])
         diet = intake.get("diet")
         if diet and diet not in {"No preference", "No restrictions", "Non-vegetarian"}:
             try:

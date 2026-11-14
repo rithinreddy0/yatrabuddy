@@ -1,3 +1,4 @@
+import {addDays, clockText, journeyEvents} from './journey.mjs'
 export function draftBudget(draft) {
   const dayCosts = draft.days.map(stops => {
     const amounts = stops.map(stop => draft.stopCosts?.[stop.url]).filter(Number.isFinite)
@@ -50,9 +51,9 @@ function foldLine(line) {
 }
 
 export function tripCalendar(draft, now = new Date()) {
-  if (!draft.departure) return null
+  if (!draft.departure && !journeyEvents(draft.journey).length) return null
   const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')
-  const events = draft.days.flatMap((day, index) => day.length ? [
+  const events = draft.days.flatMap((day, index) => draft.departure && day.length ? [
     'BEGIN:VEVENT',
     'UID:' + draft.id + '-day-' + (index + 1) + '@yatrabuddy',
     'DTSTAMP:' + stamp,
@@ -62,6 +63,17 @@ export function tripCalendar(draft, now = new Date()) {
     'DESCRIPTION:' + calendarText(day.map(stop => stop.name).join('\n')),
     'END:VEVENT',
   ] : [])
+  const local = (date, minutes) => addDays(date, Math.floor(minutes / 1440)).replaceAll('-', '') + 'T' + clockText(minutes).replace(':', '') + '00'
+  const journey = journeyEvents(draft.journey).flatMap(event => [
+    'BEGIN:VEVENT',
+    'UID:' + draft.id + '-' + event.key + '@yatrabuddy',
+    'DTSTAMP:' + stamp,
+    ...(event.start == null
+      ? ['DTSTART;VALUE=DATE:' + event.date.replaceAll('-', ''), 'DTEND;VALUE=DATE:' + addDays(event.date, 1).replaceAll('-', '')]
+      : ['DTSTART:' + local(event.date, event.start), 'DTEND:' + local(event.date, event.end ?? event.start + 60)]),
+    'SUMMARY:' + calendarText(event.title),
+    'END:VEVENT',
+  ])
   return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//YatraBuddy//Trip itinerary//EN',
-    'CALSCALE:GREGORIAN', ...events, 'END:VCALENDAR', ''].map(foldLine).join('\r\n')
+    'CALSCALE:GREGORIAN', ...journey, ...events, 'END:VCALENDAR', ''].map(foldLine).join('\r\n')
 }

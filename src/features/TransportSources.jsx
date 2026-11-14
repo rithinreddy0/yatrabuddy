@@ -1,4 +1,5 @@
-import React from 'react'
+import React, {useState} from 'react'
+import {PRIORITIES, comparable, rankTransport} from './transportRanking.mjs'
 import {ExternalLink} from 'lucide-react'
 import {TravelHighlights} from '../components/TravelHighlights.jsx'
 import {GoogleMapsLink} from '../components/GoogleMapsLink.jsx'
@@ -53,11 +54,30 @@ function displayDuration(value) {
   return value.replace(/^PT/, '').replace(/(\d+)H/, '$1 h ').replace(/(\d+)M/, '$1 min').trim()
 }
 
+function TransportComparison({quotes}) {
+  const [priority, setPriority] = useState('value')
+  const rows = comparable(quotes)
+  if (rows.length < 2) return null
+  const ranked = rankTransport(rows, priority)
+  return <section className="trip-transport-card transport-compare" aria-label="Compare options">
+    <h4>Compare {rows.length} options</h4>
+    <div className="filters" role="group" aria-label="Rank by">{PRIORITIES.map(([id, label]) =>
+      <button type="button" key={id} className={'pill ' + (priority === id ? 'on' : '')} aria-pressed={priority === id} onClick={() => setPriority(id)}>{label}</button>)}</div>
+    <ol>{ranked.slice(0, 6).map(row => <li key={row.id}>
+      <strong>{row.group === 'flights' ? 'Flight' : row.modes.map(mode => mode.replaceAll('_', ' ').toLowerCase()).join(' + ') || 'Transit'}
+        {' · '}{row.fare != null ? `${row.currency} ${Math.round(row.fare).toLocaleString()}${row.option.partyTotal ? ' total' : ''}` : 'fare unavailable'}
+        {row.minutes != null && ` · ${displayDuration(row.option.duration)}`}</strong>
+      <small>{row.reason} · {row.source === 'Google Routes' ? 'Google Maps' : row.source}</small>
+    </li>)}</ol>
+    <small>Ranked only on fares, times and changes the providers returned. Seats and prices are not held.</small>
+  </section>
+}
+
 export function TransportQuotes({quotes, kind}) {
   if (!quotes) return null
   const groups = Object.entries(quotes).filter(([id,group]) => id !== 'driving' && group.status !== 'unconfigured' && (!kind || id === kind))
   if (!groups.length) return null
-  return <div className="transport-quote-list">{groups.map(([id, group])=>
+  return <div className="transport-quote-list"><TransportComparison quotes={Object.fromEntries(groups)}/>{groups.map(([id, group])=>
     <section key={id} className="trip-transport-card">
       <h4>{id==='flights'?'Flight offers':'Scheduled transit'} · {group.source==='Google Routes'?'Google Maps':group.source}</h4>
       {group.searchedAt && <small>Search departure · {displayTime(group.searchedAt)}</small>}

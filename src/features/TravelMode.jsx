@@ -22,12 +22,12 @@ function TimelineItem({event, current, checked, onCheck}) {
       <p>{[location, place?.category, leg && `${leg.kilometres.toFixed(1)} km · ~${leg.minutes} min`,
         Number.isFinite(place?.rating) && `★ ${place.rating.toFixed(1)}${place.reviewCount ? ` (${place.reviewCount})` : ''}`,
         place?.publishedPrice, event.amount != null && money(event.amount)].filter(Boolean).join(' · ')}</p>
-      {booking && event.notes && <p>{event.notes}</p>}
+      {(booking || event.journey) && event.notes && <p>{event.notes}</p>}
       <div className="travel-actions">
         {attachment && <a className="source-pill" href={attachment} target="_blank" rel="noreferrer">Open ticket</a>}
         {url && <SourcePill url={url} label="Booking link"/>}
         {directions && <SourcePill url={'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(directions)} label="Directions"/>}
-        {!booking && <label className="travel-check"><input type="checkbox" checked={checked} onChange={onCheck}/> Visited</label>}
+        {!booking && !event.journey && <label className="travel-check"><input type="checkbox" checked={checked} onChange={onCheck}/> Visited</label>}
       </div>
     </div>
   </li>
@@ -41,7 +41,8 @@ export function TravelMode({draft, bookings, onTabChange}) {
   const clock = tripClock(now, zone)
   const [selected, setSelected] = useState(null)
   const today = draft.departure ? Math.round((Date.parse(clock.date) - Date.parse(draft.departure)) / 86_400_000) : 0
-  const day = selected ?? Math.max(0, Math.min(today, draft.days.length - 1))
+  const {firstDay} = travelTimeline(draft, bookings, 0)
+  const day = selected ?? Math.max(firstDay, Math.min(today, draft.days.length - 1))
   const {events, otherTickets, reminders, dayCount} = travelTimeline(draft, bookings, day)
   const checked = settings.checked || []
   const next = reminders.filter(item => (item.date > clock.date || (item.date === clock.date && item.minute >= clock.minute)) && !checked.includes(item.id))
@@ -82,7 +83,8 @@ export function TravelMode({draft, bookings, onTabChange}) {
     <div role="status" aria-live="polite">{reminder && <p className="travel-reminder"><Icon name="calendar" size={18}/> {reminder}</p>}</div>
     <div className="travel-daybar">
       <label>Trip day<select value={day} onChange={event => setSelected(Number(event.target.value))}>
-        {Array.from({length:dayCount}, (_, index) => <option key={index} value={index}>Day {index + 1}{draft.departure ? ` · ${tripDate(draft.departure, index)}` : ''}</option>)}
+        {Array.from({length:dayCount - firstDay}, (_, offset) => offset + firstDay).map(index => <option key={index} value={index}>
+          {index < 0 || index >= draft.days.length ? 'Travel day' : `Day ${index + 1}`}{draft.departure ? ` · ${tripDate(draft.departure, index)}` : ''}</option>)}
       </select></label>
       {weather && <span>{Math.round(weather.low)}–{Math.round(weather.high)}°C{weather.rainProbability != null && ` · ${weather.rainProbability}% chance of rain`}</span>}
     </div>

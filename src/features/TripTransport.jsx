@@ -1,289 +1,295 @@
 import React, {useEffect, useId, useState} from 'react'
-import {MapPin, Plane, TrainFront} from 'lucide-react'
+import {Bus, Car, Footprints, Fuel, MapPin, Plane, Route, TrainFront} from 'lucide-react'
 import {request} from '../api.mjs'
-import {Button, SourcePill, TravelArtwork} from '../components/UI.jsx'
-import {GoogleMapsLink} from '../components/GoogleMapsLink.jsx'
+import {Button, SourcePill} from '../components/UI.jsx'
 import {money} from '../planner.mjs'
 import {TransportQuotes} from './TransportSources.jsx'
-import {JourneyMap} from './JourneyMap.jsx'
+import {JourneyPlanner} from './JourneyPlanner.jsx'
+import {arrivalPoint, coords, dayLegs, distanceAdvice, flightsSearch, fuelEstimate, hours, legMode, mapsDirections, trainSchedule} from './tripTransportPlan.mjs'
 import './TripTransport.css'
 
-const dateFormat = new Intl.DateTimeFormat(undefined, {dateStyle: 'medium', timeZone: 'UTC'})
+const dateFormat = new Intl.DateTimeFormat(undefined, {day:'numeric', month:'short', year:'numeric', timeZone:'UTC'})
 const passSource = 'https://www.tgsrtc.telangana.gov.in/reservation-marketing-schemes'
-const intercityModes = [['Flights', 'Flights'], ['Rail', 'Trains'], ['Intercity bus', 'Buses'], ['Driving','Driving'], ['Ride-hail','Private rides']]
+const bookingTypes = {flight:'Flight', train:'Train', bus:'Bus', drive:'Car or cab'}
+const FUEL_KEY = 'yatra.fuelAssumptions'
 
-function RouteSearch({draft, result, onSearch, onAsk, quotes, searching}) {
-  const [mode, setMode] = useState('All')
-  const [pinned, setPinned] = useState([])
-  const providers = result?.data?.arrival?.providers || []
-  const picks = providers.filter(provider => pinned.includes(provider.url))
-  const modes = intercityModes.filter(([value]) => mode === 'All' || mode === value)
-  return <section className="trip-transport-search">
-    <form className="trip-transport-fields" onSubmit={event => {
-      event.preventDefault()
-      const form = new FormData(event.currentTarget)
-      const date = form.get('departure')
-      const time = form.get('departureTime')
-      onSearch({origin:form.get('origin').trim(), name:form.get('destination').trim(),
-        departure:date, departAt:date&&time?new Date(date+'T'+time).toISOString():'', travelers:Number(form.get('travelers'))})
-    }}>
-      <label>From<input name="origin" defaultValue={draft.origin || ''} required maxLength={120} placeholder="City or airport code"/></label>
-      <label>To<input name="destination" defaultValue={draft.name} required maxLength={120} placeholder="City or airport code"/></label>
-      <label>Date<input name="departure" type="date" defaultValue={draft.departure || ''}/></label>
-      <label>Time (device time)<input name="departureTime" type="time"/></label>
-      <label>Travelers<input name="travelers" type="number" defaultValue={draft.travelers || 1} min={1} max={99} required/></label>
-      <Button type="submit" variant="primary" icon="search">Compare routes</Button>
-    </form>
-    <div className="filters" aria-label="Transport mode">
-      {[['All','All modes'], ...intercityModes].map(([value, label]) =>
-        <Button key={value} aria-pressed={mode === value} onClick={() => setMode(value)}>{label}</Button>)}
+/** Fetch a JSON resource into keyed state; `key` changes discard stale responses. */
+function useResource(path) {
+  const [state, setState] = useState({path:null})
+  useEffect(() => {
+    if (!path) return
+    const controller = new AbortController()
+    setState({path, loading:true})
+    request(path, {signal:controller.signal})
+      .then(data => { if (!controller.signal.aborted) setState({path, data}) })
+      .catch(error => { if (!controller.signal.aborted) setState({path, error:error.message || 'Unavailable'}) })
+    return () => controller.abort()
+  }, [path])
+  return state.path === path ? state : {loading:Boolean(path)}
+}
+
+function ModeCard({id, active, icon:Glyph, title, lead, children, actions, onSave, saved, onUse}) {
+  return <article className="tt-mode" id={id} data-active={active || undefined}>
+    <header><span className="tt-mode-icon"><Glyph size={18} aria-hidden="true"/></span>
+      <div><h4>{title}</h4>{lead && <p>{lead}</p>}</div></header>
+    {children}
+    <div className="tt-actions">{actions}
+      {onUse && <Button variant="primary" icon="check" onClick={onUse}>Use for my trip</Button>}
+      {onSave && <Button variant="text-btn" icon={saved === 'saved' ? 'check' : 'trip'} disabled={['saving', 'saved'].includes(saved)} onClick={onSave}>
+        {saved === 'saved' ? 'Saved to bookings' : saved === 'saving' ? 'Saving…' : 'Save as an option'}</Button>}
     </div>
-    {searching && <p role="status">Checking schedules and fares…</p>}
-    {quotes?.unavailable && <p role="status">Timed options are temporarily unavailable.</p>}
-    {['All','Flights','Rail','Intercity bus'].includes(mode) && <TransportQuotes quotes={quotes?.data?.quotes} kind={mode==='All'?undefined:mode==='Flights'?'flights':'transit'}/>}
-    {result?.unavailable && <p role="status">Operator links are temporarily unavailable. Submit the route to retry.</p>}
-    {result?.data && <div className="trip-transport-comparison">{modes.map(([value, label]) => {
-      const options = providers.filter(provider => provider.mode === value)
-      return <article className="trip-transport-card" key={value}>
-        <h3>{label}</h3>
-        {options.length ? options.map(option => <div key={option.url}>
-          <strong>{option.name}</strong><p>{result.data.arrival.arrivalTips?.[value] || option.summary}</p>
-          {option.name==='Google Maps' ? <GoogleMapsLink origin={result.data.arrival.origin} destination={result.data.arrival.destination} mode="driving" label="Driving in Google Maps"/> :
-            <SourcePill url={option.url} label={option.action}/>}
-          <Button variant="text-btn" icon="pin" aria-pressed={pinned.includes(option.url)} onClick={() =>
-            setPinned(previous => previous.includes(option.url) ? previous.filter(url => url !== option.url) : [...previous, option.url])}>
-            {pinned.includes(option.url) ? 'Unpin' : 'Pin to compare'}
-          </Button>
-        </div>) : <p>No provider found for this route.</p>}
-      </article>
-    })}</div>}
-    {!!picks.length && <section className="trip-transport-card" aria-label="Pinned operators">
-      <h3>Pinned operators</h3>
-      {picks.map(option => <div key={option.url}><strong>{option.name}</strong> · {option.mode} <SourcePill url={option.url} label={option.action}/></div>)}
-    </section>}
-    {onAsk && <Button icon="chat" onClick={onAsk}>Discuss this route in chat</Button>}
-  </section>
+    {saved && !['saving', 'saved'].includes(saved) && <small role="status">{saved}</small>}
+  </article>
 }
 
-function destinationQuery(draft) {
-  return [draft.name, draft.country].filter(Boolean).join(', ')
+function Hub({hub, to}) {
+  return <li>
+    <strong>{hub.name}</strong>{hub.code && <span className="tt-code">{hub.code}</span>}
+    <small>{hub.distanceKm} km {to ? 'from ' + to : 'away'} (straight line)</small>
+  </li>
 }
 
-function mapsUrl(action, parameters) {
-  return 'https://www.google.com/maps/' + action + '/?' + new URLSearchParams({api: '1', ...parameters})
-}
-
-function coordinates(place) {
-  return place && Number.isFinite(place.lat) && Number.isFinite(place.lon) ? `${place.lat},${place.lon}` : null
-}
-
-function itineraryLegs(draft) {
-  const legs = []
-  for (const [dayIndex, day] of (draft.days || []).entries()) {
-    for (const [index, place] of day.entries()) {
-      const from = day[index - 1] || draft.stay
-      const origin = coordinates(from)
-      const destination = coordinates(place)
-      if (origin && destination && origin !== destination) {
-        legs.push({origin, destination, from: from.name, to: place.name, endpoints: [from, place], day: dayIndex+1,
-          leg: draft.routes?.[dayIndex]?.[index - (draft.stay ? 0 : 1)]})
-      }
-    }
-  }
-  return legs
-}
-
-function openResource(state, key, path, signal, update) {
-  request(path, {signal}).then(data => {
-    if (!signal.aborted) update(previous => ({...previous, [key]: {state, data}}))
-  }).catch(() => {
-    if (!signal.aborted) update(previous => ({...previous, [key]: {state, unavailable: true}}))
+function FuelEstimator({kilometres, travelers}) {
+  const [values, setValues] = useState(() => {
+    try { return {mileage:15, price:105, ...JSON.parse(localStorage.getItem(FUEL_KEY) || '{}')} } catch { return {mileage:15, price:105} }
   })
+  const estimate = fuelEstimate(kilometres, Number(values.mileage), Number(values.price), travelers)
+  function update(key, value) {
+    const next = {...values, [key]:value}
+    setValues(next)
+    try { localStorage.setItem(FUEL_KEY, JSON.stringify(next)) } catch {}
+  }
+  return <div className="tt-fuel">
+    <p><Fuel size={15} aria-hidden="true"/> Fuel, one way: <strong>{estimate ? money(estimate.cost) : '—'}</strong>
+      {estimate && travelers > 1 && <span> · {money(estimate.perPerson)} each if split {travelers} ways</span>}</p>
+    <div className="tt-fuel-inputs">
+      <label>Mileage (km/l)<input type="number" min={1} max={60} step={0.5} value={values.mileage} onChange={event => update('mileage', event.target.value)}/></label>
+      <label>Fuel price (₹/l)<input type="number" min={1} max={500} step={0.5} value={values.price} onChange={event => update('price', event.target.value)}/></label>
+    </div>
+    <small>Your assumptions, not a quote. Tolls, parking and driver costs are not included.</small>
+  </div>
 }
 
-function providerButtons(providers, filter = () => true) {
-  return providers?.filter(filter).map(provider =>
-    <SourcePill key={provider.url} url={provider.url} label={provider.action || provider.name}/>)
+function LegRow({leg, preferred}) {
+  const [lookup, setLookup] = useState(null)
+  const transit = useResource(lookup)
+  const mode = legMode(leg, preferred)
+  const Glyph = mode.travelmode === 'walking' ? Footprints : mode.travelmode === 'transit' ? Bus : Car
+  return <li className="tt-leg">
+    <div className="tt-leg-main">
+      <span className="tt-leg-mode"><Glyph size={15} aria-hidden="true"/>{mode.label}</span>
+      <span className="tt-leg-route">{leg.from.name} <span aria-hidden="true">→</span><span className="yatra-sr-only"> to </span> {leg.to.name}</span>
+      <small>{Number.isFinite(leg.kilometres) ? `${leg.kilometres} km · about ${hours(leg.minutes)}${leg.method === 'straight-line' ? ' (straight-line estimate)' : ' by road'}` : 'Distance not estimated'}</small>
+    </div>
+    <div className="tt-actions">
+      <SourcePill url={mapsDirections(coords(leg.from), coords(leg.to), mode.travelmode)} label="Directions"/>
+      {!lookup && <Button variant="text-btn" icon="search" onClick={() => setLookup('transit/plan?' + new URLSearchParams({origin:coords(leg.from), destination:coords(leg.to)}))}>Public transport times</Button>}
+    </div>
+    {transit.loading && <p role="status">Checking published schedules…</p>}
+    {transit.error && <p role="status">Public transport schedules are unavailable right now.</p>}
+    {transit.data && (transit.data.options?.length ? <TransportQuotes quotes={{transit:transit.data}}/> :
+      <p>No scheduled public transport found for this leg.</p>)}
+  </li>
 }
 
 function guidePoint(guide, title) {
   const section = guide?.sections?.find(item => item.title === title)
   if (!section?.text || !section.sourceUrl) return null
   const words = section.text.trim().split(/\s+/)
-  const excerpt = words.slice(0, 25).join(' ') + (words.length > 25 ? '…' : '')
   return <details className="trip-transport-guide">
-    <summary>{section.title} in Wikivoyage</summary>
-    <p>{excerpt}</p>
-    <SourcePill url={section.sourceUrl} label="Read the destination guide"/>
+    <summary>{title} · travel guide</summary>
+    <p>{words.slice(0, 45).join(' ')}{words.length > 45 ? '…' : ''}</p>
+    <SourcePill url={section.sourceUrl} label="Read on Wikivoyage"/>
   </details>
 }
 
-export function TripTransport({draft, onAsk}) {
+export function TripTransport({draft, onAsk, onSaveDraft}) {
   const heading = useId()
-  const [resources, setResources] = useState({})
-  const [search, setSearch] = useState(null)
-  const [attempt, setAttempt] = useState(0)
-  const [localIndex,setLocalIndex] = useState(0)
-  const [localLookup,setLocalLookup] = useState(null)
-  const [transitLookup,setTransitLookup] = useState(null)
-  const {name, country, cityId, origin, departure, travelers, localModes} = draft || {}
+  const {name, country, cityId, departure, travelers = 1, localModes = []} = draft || {}
+  const [route, setRoute] = useState({origin:draft?.origin || '', departure:departure || '', travelers})
+  const [editing, setEditing] = useState(!draft?.origin)
+  const [saved, setSaved] = useState({})
+  const [chosenMode, setChosenMode] = useState(null)
+  const [startMode, setStartMode] = useState(null)
+  const arrival = arrivalPoint(draft)
+  const plan = useResource(arrival ? 'trip-transport?' + new URLSearchParams({lat:arrival.lat, lon:arrival.lon, name:arrival.name,
+    ...(route.origin ? {origin:route.origin} : {})}) : null)
+  const providerParams = new URLSearchParams({destination:name || ''})
+  if (country) providerParams.set('country', country)
+  if (route.origin) providerParams.set('origin', route.origin)
+  if (route.departure) providerParams.set('departure', route.departure)
+  if (route.travelers) providerParams.set('travelers', String(route.travelers))
+  const providers = useResource(name ? 'travel-providers?' + providerParams : null)
+  const quotes = useResource(name && route.origin && route.departure ? 'travel-providers?timetable=true&' + providerParams : null)
+  const guide = useResource(cityId ? `locations/${cityId}/guide` : null)
   const hyderabad = country === 'India' && /^(?:hyderabad|secunderabad)$/i.test(name || '')
-  const route = search || {origin, name, departure, travelers}
-  const routeCountry = route.name === name ? country : null
-  const resourceKey = JSON.stringify([route.name, routeCountry, route.origin, route.departure, route.travelers, attempt])
-  const requestQuery = new URLSearchParams({destination:route.name || ''})
-  if (routeCountry) requestQuery.set('country', routeCountry)
-  if (route.origin) requestQuery.set('origin', route.origin)
-  if (route.departure) requestQuery.set('departure', route.departure)
-  if (route.travelers) requestQuery.set('travelers', String(route.travelers))
-  const providerQuery = requestQuery.toString()
-  const timetableQuery = new URLSearchParams(providerQuery)
-  if (route.departAt) timetableQuery.set('depart_at',route.departAt)
-  const timetablePath = 'travel-providers?timetable=true&' + timetableQuery
-
-  useEffect(() => {
-    if (!name || !route.name) return
-    const controller = new AbortController()
-    openResource(resourceKey, 'providers', 'travel-providers?' + providerQuery, controller.signal, setResources)
-    return () => controller.abort()
-  }, [resourceKey, providerQuery, name, route.name])
-
-  useEffect(() => {
-    if (!search?.origin || !search.name) return
-    const controller = new AbortController()
-    openResource(resourceKey, 'quotes', timetablePath, controller.signal, setResources)
-    return () => controller.abort()
-  }, [resourceKey, timetablePath, search])
-
-  useEffect(() => {
-    if (!localLookup) return
-    const controller = new AbortController()
-    openResource(localLookup, 'localQuotes', 'travel-providers?' + localLookup, controller.signal, setResources)
-    return () => controller.abort()
-  }, [localLookup])
-
-  useEffect(() => {
-    if (!transitLookup) return
-    const controller = new AbortController()
-    openResource(transitLookup, 'transitous', 'transit/plan?' + transitLookup, controller.signal, setResources)
-    return () => controller.abort()
-  }, [transitLookup])
-
-  useEffect(() => {
-    if (!cityId) return
-    const controller = new AbortController()
-    const {signal} = controller
-    openResource(cityId, 'guide', `locations/${cityId}/guide`, signal, setResources)
-    if (hyderabad) openResource(cityId, 'fares', `locations/${cityId}/local-transport`, signal, setResources)
-    return () => controller.abort()
-  }, [cityId, hyderabad])
-
+  const fares = useResource(hyderabad && cityId ? `locations/${cityId}/local-transport` : null)
   if (!name) return null
-  const providers = resources.providers?.state === resourceKey ? resources.providers : null
-  const searching = Boolean(search && resources.quotes?.state !== resourceKey)
-  const guide = resources.guide?.state === cityId ? resources.guide?.data : null
-  const fares = resources.fares?.state === cityId ? resources.fares?.data : null
-  const legs = itineraryLegs(draft)
-  const preview = legs[localIndex] || legs[0]
-  const routePreview = preview ? [{
-    day: preview.day, approximate: true, label: 'Straight-line preview',
-    points: preview.endpoints.map(({lat, lon}) => [lat, lon]),
-  }] : []
-  const localRoute = preview ? {origin: preview.origin, destination: preview.destination} : null
-  const city = destinationQuery(draft)
-  const arrivalDate = departure ? new Date(departure + 'T12:00:00Z') : null
-  const tripDate = arrivalDate && Number.isFinite(arrivalDate.valueOf()) ? dateFormat.format(arrivalDate) : null
-  const datePrompt = tripDate ? ` on ${departure}` : ''
-  const travelersPrompt = travelers ? ` for ${travelers} ${travelers === 1 ? 'traveller' : 'travellers'}` : ''
-  const arrivalPrompt = `Compare ways to get ${origin ? `from ${origin} ` : ''}to ${city}${datePrompt}${travelersPrompt}.`
-  const localPrompt = preview
-    ? `Compare public transport and cab fares from ${preview.from}, ${city} to ${preview.to}, ${city}${localLookup && new URLSearchParams(localLookup).get('depart_at') ? ' on ' + new URLSearchParams(localLookup).get('depart_at') : datePrompt}.`
-    : `Compare public transport and cab fares in ${city}${datePrompt}.`
+
+  const data = plan.data
+  const origin = data?.origin
+  const destHubs = data?.hubs?.destination || {airports:[], stations:[]}
+  const originHubs = data?.hubs?.origin || {airports:[], stations:[]}
+  const stayLabel = arrival?.isStay ? 'your stay' : arrival?.name
+  const routeLabel = [route.origin || 'Departure city not set', name].join(' → ')
+  const tripDate = route.departure ? dateFormat.format(new Date(route.departure + 'T12:00:00Z')) : 'No date'
+  const advice = distanceAdvice(data?.airDistanceKm, data?.road?.kilometres)
+  const arrivalCoords = coords(arrival)
+  const days = dayLegs(draft)
+  const localProviders = (providers.data?.local?.providers || []).filter(item => item.name !== 'Google Maps')
+  const compareProviders = (providers.data?.arrival?.providers || []).filter(item => item.mode === 'Route comparison')
+  const hasLiveQuotes = quotes.data?.quotes && Object.values(quotes.data.quotes).some(group => group.status === 'ready')
+  const nearbyIntercity = data?.airDistanceKm != null && data.airDistanceKm < 60
+
+  async function track(kind, title, url) {
+    setSaved(current => ({...current, [kind]:'saving'}))
+    try {
+      const room = await request('trip-workspaces', {method:'POST', body:draft})
+      await request(`trip-workspaces/${room.id}/entries`, {method:'POST', body:{kind:'booking', status:'suggested',
+        title:title.slice(0, 220), url, bookingType:bookingTypes[kind], date:route.departure || null,
+        notes:'Saved from Transport. Not booked yet.'}})
+      setSaved(current => ({...current, [kind]:'saved'}))
+    } catch (error) {
+      setSaved(current => ({...current, [kind]:error.message || 'Could not save'}))
+    }
+  }
+
+  const firstAirport = destHubs.airports[0]
+  const fromAirport = originHubs.airports[0]
+  const fromStation = originHubs.stations.find(station => station.code)
+  const toStation = destHubs.stations.find(station => station.code)
+  const schedule = trainSchedule(fromStation, toStation)
+  const flightFrom = fromAirport?.code || route.origin
+  const distance = data?.road?.kilometres ?? data?.airDistanceKm
+  const suggestedMode = !Number.isFinite(distance) ? 'fly' : distance > 700 ? 'fly' : distance > 300 ? 'train' : 'drive'
+  const mode = chosenMode || suggestedMode
+  const tabs = [
+    ['fly', 'Fly', Plane, firstAirport ? `${firstAirport.code} · ${Math.round(firstAirport.distanceKm)} km` : 'Airports'],
+    ['train', 'Train', TrainFront, toStation ? `${toStation.code} · ${Math.round(toStation.distanceKm)} km` : 'Stations'],
+    ['bus', 'Bus', Bus, 'Operators'],
+    ['drive', 'Drive', Car, data?.road ? hours(data.road.minutes) : 'Road'],
+  ]
 
   return <section className="trip-transport" aria-labelledby={heading}>
-    <header className="trip-transport-heading">
-      <h2 id={heading}>Intercity transport</h2>
-      <TravelArtwork name="transport-plane" animated={!providers || searching} className="transport-plane-art" width={210} height={160}/>
+    <header className="tt-route">
+      <div>
+        <h2 id={heading}>Getting there</h2>
+        <p className="tt-route-line">{routeLabel}</p>
+        <p className="tt-route-meta">{tripDate} · {route.travelers} {Number(route.travelers) === 1 ? 'traveller' : 'travellers'}
+          {!route.departure && !editing && <> · <button type="button" className="tt-inline" onClick={() => setEditing(true)}>Add a date</button></>}</p>
+      </div>
+      <Button icon="edit" aria-expanded={editing} onClick={() => setEditing(value => !value)}>{editing ? 'Done' : 'Change'}</Button>
     </header>
-    <RouteSearch key={draft.id || name} draft={draft} result={providers} searching={searching}
-      quotes={resources.quotes?.state===resourceKey?resources.quotes:null} onSearch={next => {
-      setSearch(next)
-      setAttempt(value => value + 1)
-    }} onAsk={onAsk && (() => onAsk(route.origin ? `Compare flights, trains and buses from ${route.origin} to ${route.name}${route.departAt ? ' on ' + route.departAt : route.departure ? ' on ' + route.departure : ''} for ${route.travelers || 1} travelers.` : arrivalPrompt))}/>
-    {!providers && <p role="status">Checking route providers…</p>}
-    <div className="trip-transport-grid">
-      <article className="trip-transport-card">
-        <h3><Plane aria-hidden="true" size={18}/> Getting there</h3>
-        {origin ? <p className="trip-transport-route"><span>{origin}<span aria-hidden="true"> → </span><span className="yatra-sr-only"> to </span>{name}</span></p>
-          : <p>Add a departure city to compare the trip to {name}.</p>}
-        {(tripDate || travelers) && <p className="trip-transport-meta">
-          {tripDate && <time dateTime={departure}>{tripDate}</time>}
-          {tripDate && travelers ? ' · ' : ''}
-          {travelers ? `${travelers} ${travelers === 1 ? 'traveller' : 'travellers'}` : ''}
-        </p>}
-        {origin && <>
-          <p>Compare routes, then confirm fares and availability with the provider.</p>
-          <div className="trip-transport-links">
-            <GoogleMapsLink origin={origin} destination={city} mode="driving" label="Driving in Google Maps"/>
-            <GoogleMapsLink origin={origin} destination={city} mode="transit" label="Transit in Google Maps"/>
-            {!search && providerButtons(providers?.data?.arrival?.providers, provider => !intercityModes.some(([mode]) => mode === provider.mode))}
-          </div>
-        </>}
-        {guidePoint(guide, 'Getting there')}
-        {onAsk && <Button className="trip-transport-action" icon="arrow" onClick={() => onAsk(arrivalPrompt)}>Compare with YatraBuddy</Button>}
-      </article>
-      <article className="trip-transport-card">
-        <h3><TrainFront aria-hidden="true" size={18}/> Local transport</h3>
-        {localModes?.length > 0 && <p className="trip-transport-meta">Preferred modes · {localModes.join(', ')}</p>}
-        {preview && <p className="trip-transport-route">
-          <MapPin aria-hidden="true" size={15}/><span>{preview.from} to {preview.to}</span>
-        </p>}
-        {preview?.leg && <p className="trip-transport-meta">
-          {preview.leg.kilometres} km · about {preview.leg.minutes} min {preview.leg.method === 'road' ? 'by road' : 'estimated'}
-        </p>}
-        {preview && <form className="trip-transport-fields" onSubmit={event=>{
-          event.preventDefault()
-          const value=new FormData(event.currentTarget).get('depart')
-          const query=new URLSearchParams({...localRoute,timetable:'true',local:'true'})
-          if(value)query.set('depart_at',new Date(value).toISOString())
-          setLocalLookup(query.toString())
-        }}>
-          <label>Itinerary leg<select value={legs.indexOf(preview)} onChange={event=>{setLocalIndex(Number(event.target.value));setLocalLookup(null);setTransitLookup(null)}}>
-            {legs.map((leg,index)=><option key={index} value={index}>Day {leg.day} · {leg.from} → {leg.to}</option>)}</select></label>
-          <label>Depart at (device time)<input name="depart" type="datetime-local"/></label>
-          <Button type="submit" icon="search">Check local schedules</Button>
-        </form>}
-        {preview && <Button icon="search" onClick={() => {
-          const query = new URLSearchParams({origin:preview.origin, destination:preview.destination})
-          setTransitLookup(query.toString())
-        }}>Find free transit routes</Button>}
-        {transitLookup && resources.transitous?.state !== transitLookup && <p role="status">Checking Transitous schedules…</p>}
-        {transitLookup && resources.transitous?.state === transitLookup && (resources.transitous.unavailable
-          ? <p>Transitous schedules are temporarily unavailable.</p>
-          : <TransportQuotes quotes={{transit:resources.transitous.data}}/>)}
-        {preview && <div className="trip-transport-map">
-          <JourneyMap center={{name: preview.from + ' to ' + preview.to}} places={preview.endpoints} routes={routePreview} compactControls/>
-        </div>}
-        {localLookup && resources.localQuotes?.state!==localLookup && <p role="status">Checking local schedules…</p>}
-        {localLookup && resources.localQuotes?.state===localLookup && (resources.localQuotes.unavailable
-          ? <p>Local schedules are temporarily unavailable.</p> : <TransportQuotes quotes={resources.localQuotes.data.quotes}/>)}
-        <div className="trip-transport-links">
-          <GoogleMapsLink label={localRoute ? 'Transit in Google Maps' : 'Find transit in Google Maps'} href={localRoute ?
-            mapsUrl('dir', {...localRoute, travelmode: 'transit'}) : mapsUrl('search', {query: `Public transit in ${city}`})}/>
-          {localRoute && <GoogleMapsLink label="Walk in Google Maps" href={mapsUrl('dir', {...localRoute, travelmode: 'walking'})}/>}
-          {route.name === name && providerButtons(providers?.data?.local?.providers, provider => provider.name !== 'Google Maps')}
-          {providers?.unavailable && <SourcePill label="Check Uber prices" url="https://www.uber.com/global/en/price-estimate/"/>}
-        </div>
-        {hyderabad && <div className="trip-transport-fares">
-          <strong>Published bus fares</strong>
-          {fares?.passes?.length > 0 && <ul>{fares.passes.map(pass => <li key={pass.name}>
-            {pass.name} · {money(pass.amount)} per person for 24 hours
-          </li>)}</ul>}
-          <SourcePill url={passSource} label="TGSRTC bus pass and fares"/>
-        </div>}
-        {guidePoint(guide, 'Getting around')}
-        {onAsk && <Button className="trip-transport-action" icon="arrow" onClick={() => onAsk(localPrompt)}>Ask about local fares</Button>}
-      </article>
-    </div>
+    {editing && <form className="tt-route-form" onSubmit={event => {
+      event.preventDefault()
+      const form = new FormData(event.currentTarget)
+      setRoute({origin:String(form.get('origin')).trim(), departure:form.get('departure') || '', travelers:Number(form.get('travelers')) || 1})
+      setEditing(false)
+    }}>
+      <label>From<input name="origin" defaultValue={route.origin} maxLength={120} placeholder="Your city" required/></label>
+      <label>Date<input name="departure" type="date" defaultValue={route.departure}/></label>
+      <label>Travellers<input name="travelers" type="number" min={1} max={20} defaultValue={route.travelers}/></label>
+      <Button type="submit" variant="primary" icon="search">Show options</Button>
+      <small className="tt-wide">This only changes what you see here. Trip preferences keep your saved details.</small>
+    </form>}
+
+    {plan.loading && <p role="status" className="tt-status">Looking up the route, airports and stations…</p>}
+    {data?.originStatus === 'not_found' && <p className="tt-status">Couldn’t find “{route.origin}”. Try the city name, for example “Hyderabad”.</p>}
+    {plan.error && <p className="tt-status">Route details are unavailable right now. Provider links below still work.</p>}
+
+    {data && origin && <div className="tt-facts" aria-label="Route facts">
+      {data.road && <div><Route size={16} aria-hidden="true"/><span><strong>{Math.round(data.road.kilometres)} km by road</strong>
+        <small>about {hours(data.road.minutes)} driving, no traffic</small></span></div>}
+      {data.airDistanceKm != null && <div><Plane size={16} aria-hidden="true"/><span><strong>{Math.round(data.airDistanceKm)} km</strong><small>straight-line distance</small></span></div>}
+      {advice && <p className="tt-advice">{advice} <small>General guidance by distance.</small></p>}
+      {!route.departure && <p className="tt-note tt-wide">Add a travel date so flight and train searches open on that day.</p>}
+    </div>}
+
+    {onSaveDraft && arrival && <div id="tt-journey"><JourneyPlanner draft={draft} plan={data} startMode={startMode}
+      onStarted={() => setStartMode(null)} onSave={onSaveDraft}/></div>}
+
+    {hasLiveQuotes && <section className="tt-live" aria-label="Live options">
+      <h3>Live options for {tripDate}</h3>
+      <TransportQuotes quotes={quotes.data.quotes}/>
+    </section>}
+
+    {!nearbyIntercity && <div className="tt-mode-tabs" role="group" aria-label="Ways to get there">
+      {tabs.map(([id, label, Glyph, hint]) => <button key={id} type="button" aria-pressed={mode === id} aria-controls={'tt-' + id}
+        onClick={() => setChosenMode(id)}><Glyph size={17} aria-hidden="true"/><span><strong>{label}</strong><small>{hint}</small></span></button>)}
+    </div>}
+    {!nearbyIntercity && <div className="tt-modes">
+      <ModeCard id="tt-fly" onUse={onSaveDraft && arrival ? () => {setStartMode('flight'); document.getElementById('tt-journey')?.scrollIntoView({behavior:'smooth', block:'start'})} : null} active={mode === 'fly'} icon={Plane} title="Fly"
+        lead={firstAirport ? `Nearest airports to ${stayLabel}` : 'No airport with scheduled-flight codes found within 150 km.'}
+        onSave={route.origin ? () => track('flight', `Flight ${flightFrom} → ${firstAirport?.code || name}`, flightsSearch(flightFrom, firstAirport?.code || name, route.departure)) : null}
+        saved={saved.flight}
+        actions={<>
+          {destHubs.airports.slice(0, 2).map(airport => <SourcePill key={airport.code}
+            url={flightsSearch(flightFrom || 'your city', airport.code, route.departure)} label={`Flights ${flightFrom ? flightFrom + ' → ' : 'to '}${airport.code}`}/>)}
+          {!destHubs.airports.length && <SourcePill url={flightsSearch(route.origin || 'your city', name, route.departure)} label="Search flights"/>}
+          {firstAirport && arrivalCoords && <SourcePill url={mapsDirections(coords(firstAirport), arrivalCoords, 'driving')} label={`${firstAirport.code} → ${stayLabel}`}/>}
+        </>}>
+        {destHubs.airports.length > 0 && <ul className="tt-hubs">{destHubs.airports.slice(0, 2).map(hub => <Hub key={hub.code} hub={hub} to={stayLabel}/>)}</ul>}
+        {fromAirport && <p className="tt-note">From {origin?.name}: {fromAirport.name} ({fromAirport.code}), {fromAirport.distanceKm} km from the centre.</p>}
+      </ModeCard>
+
+      <ModeCard id="tt-train" onUse={onSaveDraft && arrival ? () => {setStartMode('train'); document.getElementById('tt-journey')?.scrollIntoView({behavior:'smooth', block:'start'})} : null} active={mode === 'train'} icon={TrainFront} title="Train"
+        lead={destHubs.stations.length ? `Stations near ${stayLabel}` : 'No mainline station found within 25 km.'}
+        onSave={schedule ? () => track('train', `Train ${fromStation.code} → ${toStation.code}`, schedule) : null}
+        saved={saved.train}
+        actions={<>
+          {schedule && <SourcePill url={schedule} label={`Trains ${fromStation.code} → ${toStation.code}`}/>}
+          {country === 'India' && <SourcePill url="https://www.irctc.co.in/eticket/train-search" label="Book on IRCTC"/>}
+          {country !== 'India' && <SourcePill url="https://www.omio.com/trains" label="Search trains"/>}
+        </>}>
+        {destHubs.stations.length > 0 && <ul className="tt-hubs">{destHubs.stations.slice(0, 2).map(hub => <Hub key={hub.name} hub={hub} to={stayLabel}/>)}</ul>}
+        {originHubs.stations.some(station => station.code) && <p className="tt-note">Stations in {origin?.name}: {originHubs.stations.filter(station => station.code).slice(0, 3)
+          .map(station => `${station.name} (${station.code})`).join(', ')}. Check which one your train uses.</p>}
+        {schedule && <small>The schedule link lists trains between these two codes. Seats and fares are on IRCTC.</small>}
+      </ModeCard>
+
+      <ModeCard id="tt-bus" onUse={onSaveDraft && arrival ? () => {setStartMode('bus'); document.getElementById('tt-journey')?.scrollIntoView({behavior:'smooth', block:'start'})} : null} active={mode === 'bus'} icon={Bus} title="Bus" lead={route.origin ? `Search ${route.origin} to ${name}${draft.region && draft.region !== name ? ' or ' + draft.region : ''}.` : 'Add your departure city to search buses.'}
+        onSave={route.origin && country === 'India' ? () => track('bus', `Bus ${route.origin} → ${name}`, 'https://www.redbus.in/') : null}
+        saved={saved.bus}
+        actions={country === 'India' ? <><SourcePill url="https://www.redbus.in/" label="Search redBus"/><SourcePill url="https://www.abhibus.com/" label="Search AbhiBus"/></>
+          : <SourcePill url="https://www.omio.com/buses" label="Search coaches"/>}>
+        <small>Bus sites need the cities and date entered on their page. Compare boarding points and seat types there.</small>
+      </ModeCard>
+
+      <ModeCard id="tt-drive" onUse={onSaveDraft && arrival ? () => {setStartMode('drive'); document.getElementById('tt-journey')?.scrollIntoView({behavior:'smooth', block:'start'})} : null} active={mode === 'drive'} icon={Car} title="Drive or hire a cab"
+        lead={data?.road ? `${Math.round(data.road.kilometres)} km · about ${hours(data.road.minutes)} without traffic` : route.origin ? 'Road distance unavailable right now.' : 'Add your departure city for road distance.'}
+        onSave={route.origin && arrivalCoords ? () => track('drive', `Drive ${route.origin} → ${name}`, mapsDirections(route.origin, arrivalCoords, 'driving')) : null}
+        saved={saved.drive}
+        actions={route.origin && arrivalCoords && <SourcePill url={mapsDirections(route.origin, arrivalCoords, 'driving')} label={`Directions to ${stayLabel}`}/>}>
+        {data?.road && <FuelEstimator kilometres={data.road.kilometres} travelers={route.travelers}/>}
+      </ModeCard>
+    </div>}
+
+    {nearbyIntercity && arrivalCoords && <p className="tt-status">{route.origin} is close to {name}. <SourcePill url={mapsDirections(route.origin, arrivalCoords, 'driving')} label="Directions"/></p>}
+
+    {(compareProviders.length > 0 || onAsk) && <div className="tt-actions tt-more">
+      {compareProviders.map(provider => <SourcePill key={provider.url} url={provider.url} label={provider.action}/>)}
+      {onAsk && <Button icon="chat" onClick={() => onAsk(`Compare flights, trains and buses from ${route.origin || 'my city'} to ${name}${route.departure ? ' on ' + route.departure : ''} for ${route.travelers} travellers.`)}>Ask YatraBuddy to compare</Button>}
+    </div>}
+    {guidePoint(guide.data, 'Getting there')}
+    {data?.sources && <small className="tt-sources">Distances and hubs from {data.sources.map((source, index) => <React.Fragment key={source.url}>{index ? ' and ' : ''}<a href={source.url} target="_blank" rel="noreferrer">{source.name}</a></React.Fragment>)}. Fares and seats are only shown by providers.</small>}
+
+    <section className="tt-around" aria-label="Getting around">
+      <h3><MapPin size={17} aria-hidden="true"/> Getting around, day by day</h3>
+      {localModes.length > 0 && <p className="tt-note">Suggestions follow your preferred modes: {localModes.join(', ')}.</p>}
+      {days.every(day => !day.legs.length) && <p>Add stops to your itinerary to see each day’s journeys.</p>}
+      {days.map((day, index) => day.legs.length > 0 && <details key={day.day} className="tt-day" open={index === 0}>
+        <summary><strong>Day {day.day}</strong><span>{day.legs.length} {day.legs.length === 1 ? 'journey' : 'journeys'}
+          {day.kilometres ? ` · ${day.kilometres} km · about ${hours(day.minutes)}` : ''}</span></summary>
+        <ol>{day.legs.map((leg, legIndex) => <LegRow key={legIndex} leg={leg} preferred={localModes}/>)}</ol>
+      </details>)}
+      <small>Suggested modes are based on distance: walk up to about 1 km, auto or cab for short hops, cab for longer ones.</small>
+      {(localProviders.length > 0 || hyderabad) && <div className="tt-local">
+        <h4>Local apps and services</h4>
+        <div className="tt-actions">{localProviders.map(provider => <SourcePill key={provider.url} url={provider.url} label={provider.action || provider.name}/>)}</div>
+        {hyderabad && <p className="tt-note">{fares.data?.passes?.length ? fares.data.passes.map(pass => `${pass.name} · ${money(pass.amount)} per person for 24 hours`).join(' · ') : 'City bus day passes are available.'}{' '}
+          <SourcePill url={passSource} label="TGSRTC passes and fares"/></p>}
+      </div>}
+      {guidePoint(guide.data, 'Getting around')}
+    </section>
   </section>
 }

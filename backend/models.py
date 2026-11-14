@@ -198,6 +198,100 @@ class TripParty(BaseModel):
         return self
 
 
+LedgerCategory = Literal["Transport", "Stay", "Food", "Attractions", "Shopping", "Local travel", "Miscellaneous"]
+LedgerNote = Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)]
+LedgerName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
+
+
+class LedgerExpense(BaseModel):
+    """One amount the group actually paid (or got back) during the trip."""
+
+    id: UUID
+    kind: Literal["expense", "refund"] = "expense"
+    category: LedgerCategory
+    amount: int = Field(ge=1, le=10_000_000)
+    date: CalendarDate | None = None
+    note: LedgerNote = ""
+    payer: LedgerName | None = None
+    split: list[LedgerName] = Field(default_factory=list, max_length=8)
+    bookingId: Annotated[str, StringConstraints(max_length=36)] | None = None
+
+
+class TripLedger(BaseModel):
+    """Planned category budgets and actual spending for one trip, in whole rupees."""
+
+    categoryBudgets: dict[LedgerCategory, int] = Field(default_factory=dict)
+    contingency: int = Field(default=0, ge=0, le=10_000_000)
+    members: list[LedgerName] = Field(default_factory=list, max_length=8)
+    expenses: list[LedgerExpense] = Field(default_factory=list, max_length=150)
+
+    @model_validator(mode="after")
+    def validate_ledger(self):
+        if any(not 0 <= value <= 10_000_000 for value in self.categoryBudgets.values()):
+            raise ValueError("Category budgets must be between 0 and 10,000,000.")
+        if len({name.casefold() for name in self.members}) != len(self.members):
+            raise ValueError("Use each traveller name once.")
+        names = {name.casefold() for name in self.members}
+        for expense in self.expenses:
+            people = [expense.payer, *expense.split] if expense.payer else expense.split
+            if names and any(person.casefold() not in names for person in people):
+                raise ValueError("Expenses can only name travellers on this trip.")
+        if len({str(expense.id) for expense in self.expenses}) != len(self.expenses):
+            raise ValueError("Each expense needs its own id.")
+        return self
+
+
+JourneyMode = Literal["flight", "train", "bus", "drive", "cab", "other"]
+ClockText = Annotated[str, StringConstraints(pattern=r"^([01][0-9]|2[0-3]):[0-5][0-9]$")]
+JourneyText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=300)]
+
+
+class JourneyPoint(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+    code: Annotated[str, StringConstraints(strip_whitespace=True, max_length=8)] | None = None
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lon: float | None = Field(default=None, ge=-180, le=180)
+
+
+class JourneyTransfer(BaseModel):
+    """Road estimate between home or the stay and a station or airport."""
+
+    kilometres: float = Field(ge=0, le=5000)
+    minutes: int = Field(ge=0, le=6000)
+
+
+class JourneyLeg(BaseModel):
+    """One way of the trip between home and the destination. Times are entered by the traveller."""
+
+    mode: JourneyMode
+    date: CalendarDate | None = None
+    departTime: ClockText | None = None
+    arriveTime: ClockText | None = None
+    arriveNextDay: bool = False
+    fromHub: JourneyPoint | None = None
+    toHub: JourneyPoint | None = None
+    firstTransfer: JourneyTransfer | None = None
+    lastTransfer: JourneyTransfer | None = None
+    mainKilometres: float | None = Field(default=None, ge=0, le=40000)
+    mainMinutes: int | None = Field(default=None, ge=0, le=6000)
+    service: Annotated[str, StringConstraints(strip_whitespace=True, max_length=80)] = ""
+    estimatedCost: int | None = Field(default=None, ge=0, le=10_000_000)
+    bookingId: Annotated[str, StringConstraints(max_length=36)] | None = None
+    notes: JourneyText = ""
+
+
+class TripJourney(BaseModel):
+    home: JourneyPoint
+    outbound: JourneyLeg | None = None
+    returnLeg: JourneyLeg | None = None
+
+    @model_validator(mode="after")
+    def validate_journey(self):
+        if self.outbound and self.returnLeg and self.outbound.date and self.returnLeg.date                 and self.returnLeg.date < self.outbound.date:
+            raise ValueError("The journey home cannot be before the journey out.")
+        return self
+
+
 class WorldwideDraft(BaseModel):
     id: UUID
     cityId: int = Field(gt=0)
@@ -227,6 +321,8 @@ class WorldwideDraft(BaseModel):
     weather: list[WorldwideWeatherDay] = Field(default_factory=list, max_length=5)
     weatherStatus: Literal["not_requested", "ready", "partial", "unavailable"] = "not_requested"
     weatherNote: str | None = Field(default=None, max_length=240)
+    ledger: TripLedger | None = None
+    journey: TripJourney | None = None
 
     @model_validator(mode="after")
     def validate_draft(self):

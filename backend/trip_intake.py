@@ -328,6 +328,47 @@ def ranked_places(places, preferences, city="", weather=None):
     return distinct
 
 
+def has_point(place):
+    return all(isinstance(place.get(axis), (int, float)) for axis in ("lat", "lon"))
+
+
+FAR_FROM_BASE = 7_000
+CLUSTER_GAP = 5_000
+MEAL_NEAR_SIGHT = 4_000
+
+
+def sight_clusters(sights, base):
+    """Sights far enough from the base that a day there should eat locally, farthest first, one per area."""
+    anchors = []
+    far = sorted((place for place in sights if distance_metres(base, place) > FAR_FROM_BASE),
+                 key=lambda place: -distance_metres(base, place))
+    for place in far:
+        if all(distance_metres(place, anchor) > CLUSTER_GAP for anchor in anchors):
+            anchors.append(place)
+    return anchors
+
+
+def pick_meals(meals, sights, base, count):
+    """Choose meal stops so a day spent away from the base gets a meal near its sights.
+
+    Meals are taken in ranked order; for each distant cluster of sights the best-ranked meal within
+    a short drive is reserved first, so lunch does not mean driving back to town.
+    """
+    if count <= 0:
+        return []
+    chosen = []
+    for anchor in sight_clusters(sights, base)[:count]:
+        nearby = [meal for meal in meals if meal not in chosen and distance_metres(anchor, meal) <= MEAL_NEAR_SIGHT]
+        if nearby:
+            chosen.append(nearby[0])
+    for meal in meals:
+        if len(chosen) >= count:
+            break
+        if meal not in chosen:
+            chosen.append(meal)
+    return chosen
+
+
 async def draft_from_sources(location, places, intake, *, ranked=None, weather=None, weather_status="not_requested",
                              weather_note=None):
     days = intake.get("days") or 2
@@ -337,7 +378,10 @@ async def draft_from_sources(location, places, intake, *, ranked=None, weather=N
     sights = [place for place in ranked if place["category"] != "Food"]
     meals = [place for place in ranked if place["category"] == "Food"]
     meal_count = min(days, len(meals), max(0, limit - min(days, len(sights))))
-    stops = [place["url"] for place in [*sights[:limit - meal_count], *meals[:meal_count]]]
+    chosen_sights = sights[:limit - meal_count]
+    chosen_meals = pick_meals(meals, [place for place in chosen_sights if has_point(place)],
+                              location, meal_count) if has_point(location) else meals[:meal_count]
+    stops = [place["url"] for place in [*chosen_sights, *chosen_meals]]
     if not stops:
         return None
     stay_terms = {"Hotels": "hotel", "Boutique stays": "boutique", "Resorts": "resort", "Vacation rentals": "apartment", "Hostels": "hostel", "Homestays": "homestay"}

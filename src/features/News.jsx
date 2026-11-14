@@ -31,6 +31,7 @@ function NewsCard({article,images=[]}){
     </div>}
     <div className="eyebrow"><Icon name="globe" size={15}/> {article.publisher||'TRAVEL COVERAGE'}</div><h3>{article.title}</h3>
     {article.date&&<p className="form-note">{article.dateKind} {new Date(article.date).toLocaleDateString()}</p>}
+    {article.travelImpact&&<p className="news-impact"><strong>{article.travelImpact.group}:</strong> {article.travelImpact.advice}</p>}
     <SourcePill url={article.url} label="Read story"/>
   </article>
 }

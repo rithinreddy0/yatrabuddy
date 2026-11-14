@@ -61,3 +61,22 @@ class PlaceIntentTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MealPlacementTest(unittest.TestCase):
+    def test_distant_sight_cluster_gets_a_meal_nearby(self):
+        from .trip_intake import pick_meals, sight_clusters
+
+        base = {"lat": 15.59, "lon": 73.81}  # Mapusa
+        old_goa = {"name": "Basilica of Bom Jesus", "lat": 15.5009, "lon": 73.9116}
+        colva = {"name": "Colva Beach", "lat": 15.2799, "lon": 73.9220}
+        near_base = {"name": "Mapusa Market", "lat": 15.592, "lon": 73.812}
+        town_cafe = {"name": "Town cafe", "lat": 15.591, "lon": 73.811}
+        old_goa_lunch = {"name": "Old Goa lunch", "lat": 15.503, "lon": 73.909}
+        self.assertEqual([item["name"] for item in sight_clusters([old_goa, colva, near_base], base)],
+                         ["Colva Beach", "Basilica of Bom Jesus"])
+        meals = pick_meals([town_cafe, old_goa_lunch], [old_goa, near_base], base, 2)
+        self.assertEqual(meals[0]["name"], "Old Goa lunch")
+        self.assertEqual(len(meals), 2)
+        self.assertEqual(pick_meals([town_cafe], [near_base], base, 1), [town_cafe])
+        self.assertEqual(pick_meals([town_cafe], [old_goa], base, 0), [])

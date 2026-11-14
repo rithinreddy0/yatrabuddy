@@ -1,110 +1,87 @@
-.trip-transport {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
+.trip-transport { display:grid; gap:12px; min-width:0; }
+.trip-transport h2 { margin:0; font-size:1.15rem; font-weight:800; }
+.trip-transport h3 { display:flex; align-items:center; gap:7px; margin:0; font-size:1rem; }
+.trip-transport h4 { margin:0; font-size:.98rem; }
+.trip-transport p { margin:0; }
+.trip-transport small { color:var(--muted); }
+
+.tt-route { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.tt-route-line { font-size:1.05rem; font-weight:750; overflow-wrap:anywhere; }
+.tt-route-meta, .tt-status, .tt-note { color:var(--muted); }
+.tt-route-form { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap:8px; align-items:end;
+  padding:12px; border:1px solid var(--line); border-radius:12px; }
+.tt-route-form label { display:grid; gap:4px; min-width:0; font-weight:700; }
+.tt-route-form input { min-width:0; min-height:42px; }
+.tt-route-form > .btn { justify-self:start; }
+.tt-wide { grid-column:1 / -1; }
+
+.tt-facts { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
+.tt-facts > :is(p, .tt-wide) { grid-column:1 / -1; }
+.tt-facts > div { display:flex; gap:8px; align-items:flex-start; padding:9px 12px; border:1px solid var(--line); border-radius:12px; background:var(--glass-strong); }
+.tt-facts > div span { display:grid; }
+.tt-facts > div svg { margin-top:3px; color:var(--forest); }
+.tt-advice { padding:9px 12px; border-radius:12px; background:var(--mint); }
+.tt-facts > div { min-width:0; }
+
+.tt-modes { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap:10px; }
+.tt-mode { display:grid; align-content:start; gap:8px; min-width:0; padding:12px; border:1px solid var(--line); border-radius:14px; background:var(--white); }
+.tt-mode > header { display:flex; gap:10px; align-items:flex-start; }
+.tt-mode > header p { color:var(--muted); }
+.tt-mode-icon { display:grid; place-items:center; flex:none; width:34px; height:34px; border-radius:50%; background:var(--mint); color:var(--forest); }
+.tt-hubs { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
+.tt-hubs li { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; }
+.tt-hubs small { flex-basis:100%; }
+.tt-code { padding:1px 7px; border-radius:6px; background:var(--mint); color:var(--deep); font-size:.8rem; font-weight:800; letter-spacing:.04em; }
+.tt-actions { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.tt-more { padding-top:2px; }
+
+.tt-fuel { display:grid; gap:6px; padding:10px; border-radius:10px; background:var(--glass-strong); border:1px solid var(--line); }
+.tt-fuel p { display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
+.tt-fuel-inputs { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
+.tt-fuel-inputs label { display:grid; gap:3px; min-width:0; font-size:.85rem; font-weight:700; }
+.tt-fuel-inputs input { min-width:0; min-height:40px; }
+
+.tt-live { display:grid; gap:8px; }
+.tt-sources a { color:inherit; }
+
+.tt-around { display:grid; gap:10px; padding-top:12px; border-top:1px solid var(--line); }
+.tt-day { border:1px solid var(--line); border-radius:12px; background:var(--white); }
+.tt-day > summary { display:flex; flex-wrap:wrap; gap:4px 10px; align-items:baseline; min-height:44px; padding:10px 12px; cursor:pointer; }
+.tt-day > summary span { color:var(--muted); font-size:.9rem; }
+.tt-day ol { display:grid; gap:0; margin:0; padding:0 12px 6px; list-style:none; }
+.tt-leg { display:grid; gap:6px; padding:10px 0; border-top:1px solid var(--line); }
+.tt-leg-main { display:grid; gap:2px; min-width:0; }
+.tt-leg-mode { display:inline-flex; align-items:center; gap:5px; width:fit-content; padding:2px 8px; border-radius:999px;
+  background:var(--mint); color:var(--deep); font-size:.8rem; font-weight:800; }
+.tt-leg-route { font-weight:700; overflow-wrap:anywhere; }
+.tt-local { display:grid; gap:6px; }
+
+.trip-transport-guide summary { cursor:pointer; min-height:36px; display:flex; align-items:center; font-weight:700; }
+.trip-transport-guide p { margin:6px 0; color:var(--muted); }
+
+.tt-inline { padding:0; border:0; background:none; color:var(--primary); font:inherit; font-weight:700; text-decoration:underline; cursor:pointer; min-height:32px; }
+:root:not([data-theme="light"]) .tt-inline { color:var(--accent); }
+.tt-mode-tabs { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:6px; }
+.tt-mode-tabs button { display:flex; flex-direction:column; align-items:center; gap:3px; min-width:0; min-height:58px; padding:8px 4px;
+  border:1px solid var(--line); border-radius:12px; background:var(--white); color:var(--ink); cursor:pointer; text-align:center; }
+.tt-mode-tabs button span { display:grid; min-width:0; }
+.tt-mode-tabs button small { font-size:.72rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tt-mode-tabs button[aria-pressed="true"] { border-color:var(--primary); background:var(--mint); box-shadow:inset 0 0 0 1px var(--primary); }
+.tt-mode[data-active] { border-color:color-mix(in srgb, var(--primary) 55%, var(--line)); }
+/* Phones show one way of travelling at a time; wider screens compare all four side by side. */
+@media (max-width:760px) {
+  .tt-mode:not([data-active]) { display:none; }
 }
 
-.trip-transport h2 {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 800;
-}
-
-.trip-transport-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.trip-transport-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 255px), 1fr));
-  gap: 10px;
-}
-
-.trip-transport-card {
-  display: grid;
-  align-content: start;
-  gap: 9px;
-  min-width: 0;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--white);
-}
-
-.trip-transport-card h3,
-.trip-transport-card p {
-  margin: 0;
-}
-
-.trip-transport-card h3,
-.trip-transport-route {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-  font-size: .94rem;
-  font-weight: 800;
-  overflow-wrap: anywhere;
-}
-
-.trip-transport-card h3 svg,
-.trip-transport-route svg {
-  flex: none;
-  align-self: center;
-  color: var(--deep);
-}
-
-.trip-transport-card > p:not(.trip-transport-route),
-.trip-transport-guide p {
-  color: var(--muted);
-  font-size: .85rem;
-  line-height: 1.45;
-}
-
-.trip-transport-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.trip-transport-fares,
-.trip-transport-guide {
-  border-top: 1px solid var(--line);
-  padding-top: 8px;
-  font-size: .84rem;
-}
-
-.trip-transport-fares ul {
-  padding-inline-start: 18px;
-  margin-block: 5px;
-  color: var(--muted);
-}
-
-.trip-transport-fares > .source-pill {
-  display: inline-flex;
-  margin-top: 6px;
-}
-
-.trip-transport-guide summary {
-  padding-block: 3px;
-  cursor: pointer;
-  color: var(--deep);
-  font-weight: 750;
-}
-
-.trip-transport-guide p {
-  margin-block: 5px 8px;
-}
-
-.trip-transport-action {
-  justify-self: start;
-}
-.transport-quote-list { display:grid; gap:8px; }
-.transport-quote-list:empty { display:none; }
-.transport-quote { display:grid; gap:6px; padding:10px; border:1px solid var(--line); border-radius:12px; }
-.transport-quote-summary { display:flex; align-items:baseline; flex-wrap:wrap; gap:6px 12px; }
-.transport-quote small { color:var(--muted); }
-.transport-quote ol { display:grid; gap:7px; margin:0; padding-inline-start:18px; }
-.transport-quote li > small { display:block; }
+/* Home-to-home journey planner */
+.jp { display:grid; gap:10px; padding:12px; border:1px solid color-mix(in srgb, var(--primary) 40%, var(--line)); border-radius:14px; background:var(--glass-strong); }
+.jp-head { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:8px; }
+.jp-head p { color:var(--muted); margin-top:3px; }
+.jp-leg { display:grid; gap:8px; min-width:0; margin:0; padding:10px; border:1px solid var(--line); border-radius:12px; }
+.jp-leg legend { padding:0 4px; font-weight:800; }
+.jp-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap:8px; }
+.jp-grid label { display:grid; gap:4px; min-width:0; font-weight:700; font-size:.88rem; }
+.jp-grid :is(input:not([type=checkbox]), select) { min-width:0; min-height:42px; }
+.jp-grid .jp-check { display:flex; align-items:center; gap:8px; min-height:42px; align-self:end; }
+.jp-preview { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap:12px; }
+.jp-preview h4 { margin:0 0 4px; }

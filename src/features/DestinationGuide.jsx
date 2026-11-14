@@ -8,6 +8,7 @@ import {GoogleMapsLink} from '../components/GoogleMapsLink.jsx'
 import {revealMapCard} from '../components/revealMapPlace.mjs'
 import {Button, Dialog, Icon, Pill, SourcePill} from '../components/UI.jsx'
 import {PlaceDetails} from './PlaceDetails.jsx'
+import {GuideEssentials} from './GuideEssentials.jsx'
 import {JourneyMap, mapPlaceId} from './JourneyMap.jsx'
 import {useNearbyDiscovery} from './DiscoveryFeed.jsx'
 import {fetchResearch, researchTopics} from '../research.mjs'
@@ -60,7 +61,8 @@ export function DestinationGuide({catalog, initialDestination, profile, initialT
     return () => controller.abort()
   }, [place, topic, profile, attempt])
 
-  const stories = (updates?.articles || []).slice().sort((a, b) => Boolean(b.images?.length) - Boolean(a.images?.length)).slice(0, 3)
+  // The server already puts disruptions first, then newest; keep that order.
+  const stories = (updates?.articles || []).slice(0, 3)
   const categories = {stays:['Stay'], food:['Food'], experiences:['Sight','Nature','Activity','Shopping']}
   const places = (report?.places || []).filter(item => !categories[topic] || categories[topic].includes(item.category))
   const featured = [...places].sort((a,b) => Number(Boolean(b.photo?.url && b.photo.kind !== 'nearby')) -
@@ -89,6 +91,7 @@ export function DestinationGuide({catalog, initialDestination, profile, initialT
         <Pill key={id} active={id === topic} icon={icon} onClick={() => setTopic(id)}>{label}</Pill>)}
     </div>
     {place.image && <div className="guide-cover"><img src={`/images/${place.image}.jpg`} alt=""/><strong>{place.name}</strong></div>}
+    {topic === 'overview' && <GuideEssentials place={place} point={canMap ? center : null} report={report} profile={profile} onAsk={onAsk}/>}
     <DestinationBrief location={place} topic={topic} destination attempt={attempt}/>
     {research?.weather && <p className="guide-weather"><Icon name="globe" size={17}/> {research.weather.temperature}°C · {research.weather.conditions}{research.airQuality && ` · US AQI ${research.airQuality.index}`}</p>}
     {['overview','experiences'].includes(topic) && collections.some(([, items]) => items.length) && <section className="panel guide-panel">
@@ -110,13 +113,14 @@ export function DestinationGuide({catalog, initialDestination, profile, initialT
         <SourcePill url={item.url} label={item.provider}/></li>)}</ul>
     </details>}
     <section className="guide-updates">
-      <div className="section-heading"><h2>Recent updates</h2><Button icon="refresh" disabled={loading} onClick={() => setAttempt(value => value + 1)}>Refresh</Button></div>
+      <div className="section-heading"><h2>Recent updates</h2><Button disabled={loading} onClick={() => setAttempt(value => value + 1)}>Refresh</Button></div>
       {loading && <p role="status">Checking for recent updates…</p>}
-      {!loading && !stories.length && <p className="form-note">{updates && updates.status !== 'unavailable' ? 'No recent updates for this topic.' : 'Recent updates are temporarily unavailable.'}</p>}
+      {!loading && !stories.length && <p className="form-note">{updates && updates.status !== 'unavailable' ? 'No recent travel-relevant updates for this topic. General news is left out.' : 'Recent updates are temporarily unavailable.'}</p>}
       {!!stories.length && <div className="guide-stories">{stories.map(story => <article className="panel" key={story.url}>
         {story.images?.[0] && <a className="place-photo-open" href={story.url} target="_blank" rel="noreferrer" aria-label={`Read ${story.title}`}><img alt="" src={story.images[0]} loading="lazy" referrerPolicy="no-referrer" onError={event => {event.currentTarget.parentElement.hidden = true}}/></a>}
         <div><small>{[story.publisher, story.date && new Date(story.date).toLocaleDateString()].filter(Boolean).join(' · ')}</small>
-          <h3>{story.title}</h3><SourcePill url={story.url} label="Read update"/></div>
+          <h3>{story.title}</h3>{story.travelImpact && <p className="news-impact"><strong>{story.travelImpact.group}:</strong> {story.travelImpact.advice}</p>}
+          <SourcePill url={story.url} label="Read update"/></div>
       </article>)}</div>}
     </section>
     <div className={'discovery-layout' + (canMap && mapOpen ? ' discovery-with-map' : '')}>

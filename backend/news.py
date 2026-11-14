@@ -57,12 +57,14 @@ def rss_images(item):
 
 
 TRAVEL_SIGNALS = {
+    "Disruptions": r"\b(?:bandh|strikes?|curfew|shutdown|protests?|blockades?|suspended|cancell?ed|landslides?|evacuat\w*|section 144)\b",
     "Getting around": r"\b(?:traffic|diversions?|closures?|airport|flights?|metro|railway|trains?|buses?|runway|roadworks?)\b",
     "Events and culture": r"\b(?:festival|exhibition|concert|mela|carnival|museum|heritage|celebrations?|performance|show|tour)\b",
     "Local conditions": r"\b(?:weather|advisory|rain|heatwave|flood|cyclone|storm|warning|forecast)\b",
     "Stays and attractions": r"\b(?:hotels?|tourism|attractions?|tourists?|resorts?|visitor|sightseeing)\b",
 }
 IMPACT = {
+    "Disruptions": "Services or roads may be closed. Check official notices and keep your plans flexible on the affected days.",
     "Getting around": "Check current road or service notices for your travel date.",
     "Events and culture": "Confirm the date, venue and opening hours before making plans.",
     "Local conditions": "Check the latest official forecast or notice before leaving.",
@@ -70,11 +72,37 @@ IMPACT = {
 }
 
 
+# General news a traveller cannot act on. Kept only when the same headline also reports a disruption.
+NOT_TRAVEL = re.compile(
+    r"\b(?:elections?|polls?|minister|MLAs?|MPs?|BJP|Congress|AAP|chief minister|cabinet|assembly|court|bail|"
+    r"arrest(?:ed)?|murder|police case|FIR|stocks?|sensex|nifty|cricket|IPL|box office|celebrity|actor|actress)\b",
+    re.IGNORECASE)
+
+
+def travel_group(title):
+    group = next((label for label, pattern in TRAVEL_SIGNALS.items() if re.search(pattern, title, re.I)), None)
+    if group and group != "Disruptions" and NOT_TRAVEL.search(title):
+        return None
+    return group
+
+
+def travel_relevant(articles):
+    """Keep stories with a travel signal, most practically important first, then newest."""
+    kept = []
+    for article in articles:
+        group = travel_group(article["title"])
+        if group:
+            kept.append({**article, "travelImpact": {"group": group, "advice": IMPACT[group]}})
+    kept.sort(key=lambda item: item.get("date") or "", reverse=True)
+    kept.sort(key=lambda item: item["travelImpact"]["group"] != "Disruptions")
+    return kept
+
+
 def travel_highlights(articles):
     groups = {}
     for article in articles:
         title = article["title"]
-        group = next((label for label, pattern in TRAVEL_SIGNALS.items() if re.search(pattern, title, re.I)), None)
+        group = travel_group(title)
         if not group:
             continue
         words = set(re.findall(r"[^\W\d_]{4,}", title.casefold()))
@@ -157,10 +185,12 @@ async def travel_news(destination, topic, days, *, city_name=None):
             except (httpx.HTTPError, KeyError, TypeError, ValueError, ElementTree.ParseError):
                 provider, status = label, "unavailable"
     deduped = {item["url"]: item for item in entries if item["url"] and item["title"]}
-    articles = sorted(deduped.values(), key=lambda item: item["date"] or "", reverse=True)
-    report = {"provider": provider, "status": "ready" if deduped else status,
+    newest = sorted(deduped.values(), key=lambda item: item["date"] or "", reverse=True)
+    articles = travel_relevant(newest)
+    report = {"provider": provider, "status": "ready" if articles else status,
+              "filtered": len(newest) - len(articles),
               "retrievedAt": datetime.now(timezone.utc).isoformat(), "articles": articles,
-              "highlights": travel_highlights(articles)}
+              "highlights": travel_highlights(newest)}
     if status != "unavailable":
         if len(CACHE) >= 160 and cache_key not in CACHE:
             CACHE.pop(next(iter(CACHE)))
