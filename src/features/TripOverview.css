@@ -242,6 +242,19 @@
   .trip-overview-preferences { grid-template-columns: minmax(0, 1fr); }
   .trip-overview-current-stay { align-items: start; flex-direction: column; }
 }
+.trip-overview-places {display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;border:1px solid var(--line);border-radius:16px;background:var(--white)}
+.trip-overview-places header {display:grid;gap:10px;padding:14px;border-bottom:1px solid var(--line)}
+.trip-overview-places header h2 {margin:0;font-size:1.1rem}
+.trip-overview-places header small {color:var(--muted)}
+.trip-overview-place-search {display:flex;align-items:center;gap:8px;margin:12px;border:1px solid var(--line);border-radius:12px;padding:7px 10px}
+.trip-overview-place-search input {min-width:0;width:100%;border:0;background:transparent;color:var(--ink);font:inherit}
+.trip-overview-place-list {overflow:auto;overscroll-behavior:contain;max-height:360px;padding:6px 10px 12px}
+.trip-overview-place-list button {display:flex;align-items:center;gap:10px;width:100%;padding:9px 5px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);text-align:left}
+.trip-overview-place-list button:hover,.trip-overview-place-list button:focus-visible {background:var(--mint)}
+.trip-overview-place-list button > span {display:grid;gap:3px;min-width:0}
+.trip-overview-place-list small {color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trip-overview-place-thumb {width:46px;height:46px;flex:none;overflow:hidden;border-radius:50%}
+.trip-overview-place-thumb img {width:100%;height:100%;object-fit:cover}
 @media (prefers-reduced-motion: reduce) {
   .trip-overview *, .trip-overview *::before, .trip-overview *::after { animation-duration: 0s; transition-duration: 0s; }
 }

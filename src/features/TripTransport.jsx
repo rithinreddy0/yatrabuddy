@@ -2,13 +2,15 @@ import React, {useEffect, useId, useState} from 'react'
 import {MapPin, Plane, TrainFront} from 'lucide-react'
 import {request} from '../api.mjs'
 import {Button, SourcePill, TravelArtwork} from '../components/UI.jsx'
+import {GoogleMapsLink} from '../components/GoogleMapsLink.jsx'
 import {money} from '../planner.mjs'
 import {TransportQuotes} from './TransportSources.jsx'
+import {JourneyMap} from './JourneyMap.jsx'
 import './TripTransport.css'
 
 const dateFormat = new Intl.DateTimeFormat(undefined, {dateStyle: 'medium', timeZone: 'UTC'})
 const passSource = 'https://www.tgsrtc.telangana.gov.in/reservation-marketing-schemes'
-const intercityModes = [['Flights', 'Flights'], ['Rail', 'Trains'], ['Intercity bus', 'Buses']]
+const intercityModes = [['Flights', 'Flights'], ['Rail', 'Trains'], ['Intercity bus', 'Buses'], ['Driving','Driving'], ['Ride-hail','Private rides']]
 
 function RouteSearch({draft, result, onSearch, onAsk, quotes, searching}) {
   const [mode, setMode] = useState('All')
@@ -38,14 +40,16 @@ function RouteSearch({draft, result, onSearch, onAsk, quotes, searching}) {
     </div>
     {searching && <p role="status">Checking schedules and fares…</p>}
     {quotes?.unavailable && <p role="status">Timed options are temporarily unavailable.</p>}
-    <TransportQuotes quotes={quotes?.data?.quotes} kind={mode==='All'?undefined:mode==='Flights'?'flights':'transit'}/>
+    {['All','Flights','Rail','Intercity bus'].includes(mode) && <TransportQuotes quotes={quotes?.data?.quotes} kind={mode==='All'?undefined:mode==='Flights'?'flights':'transit'}/>}
     {result?.unavailable && <p role="status">Operator links are temporarily unavailable. Submit the route to retry.</p>}
     {result?.data && <div className="trip-transport-comparison">{modes.map(([value, label]) => {
       const options = providers.filter(provider => provider.mode === value)
       return <article className="trip-transport-card" key={value}>
         <h3>{label}</h3>
         {options.length ? options.map(option => <div key={option.url}>
-          <strong>{option.name}</strong><p>{option.summary}</p><SourcePill url={option.url} label={option.action}/>
+          <strong>{option.name}</strong><p>{result.data.arrival.arrivalTips?.[value] || option.summary}</p>
+          {option.name==='Google Maps' ? <GoogleMapsLink origin={result.data.arrival.origin} destination={result.data.arrival.destination} mode="driving" label="Driving in Google Maps"/> :
+            <SourcePill url={option.url} label={option.action}/>}
           <Button variant="text-btn" icon="pin" aria-pressed={pinned.includes(option.url)} onClick={() =>
             setPinned(previous => previous.includes(option.url) ? previous.filter(url => url !== option.url) : [...previous, option.url])}>
             {pinned.includes(option.url) ? 'Unpin' : 'Pin to compare'}
@@ -81,7 +85,7 @@ function itineraryLegs(draft) {
       const origin = coordinates(from)
       const destination = coordinates(place)
       if (origin && destination && origin !== destination) {
-        legs.push({origin, destination, from: from.name, to: place.name, day: dayIndex+1,
+        legs.push({origin, destination, from: from.name, to: place.name, endpoints: [from, place], day: dayIndex+1,
           leg: draft.routes?.[dayIndex]?.[index - (draft.stay ? 0 : 1)]})
       }
     }
@@ -121,6 +125,7 @@ export function TripTransport({draft, onAsk}) {
   const [attempt, setAttempt] = useState(0)
   const [localIndex,setLocalIndex] = useState(0)
   const [localLookup,setLocalLookup] = useState(null)
+  const [transitLookup,setTransitLookup] = useState(null)
   const {name, country, cityId, origin, departure, travelers, localModes} = draft || {}
   const hyderabad = country === 'India' && /^(?:hyderabad|secunderabad)$/i.test(name || '')
   const route = search || {origin, name, departure, travelers}
@@ -158,6 +163,13 @@ export function TripTransport({draft, onAsk}) {
   }, [localLookup])
 
   useEffect(() => {
+    if (!transitLookup) return
+    const controller = new AbortController()
+    openResource(transitLookup, 'transitous', 'transit/plan?' + transitLookup, controller.signal, setResources)
+    return () => controller.abort()
+  }, [transitLookup])
+
+  useEffect(() => {
     if (!cityId) return
     const controller = new AbortController()
     const {signal} = controller
@@ -173,6 +185,10 @@ export function TripTransport({draft, onAsk}) {
   const fares = resources.fares?.state === cityId ? resources.fares?.data : null
   const legs = itineraryLegs(draft)
   const preview = legs[localIndex] || legs[0]
+  const routePreview = preview ? [{
+    day: preview.day, approximate: true, label: 'Straight-line preview',
+    points: preview.endpoints.map(({lat, lon}) => [lat, lon]),
+  }] : []
   const localRoute = preview ? {origin: preview.origin, destination: preview.destination} : null
   const city = destinationQuery(draft)
   const arrivalDate = departure ? new Date(departure + 'T12:00:00Z') : null
@@ -208,8 +224,9 @@ export function TripTransport({draft, onAsk}) {
         {origin && <>
           <p>Compare routes, then confirm fares and availability with the provider.</p>
           <div className="trip-transport-links">
+            <GoogleMapsLink origin={origin} destination={city} mode="driving" label="Driving in Google Maps"/>
+            <GoogleMapsLink origin={origin} destination={city} mode="transit" label="Transit in Google Maps"/>
             {!search && providerButtons(providers?.data?.arrival?.providers, provider => !intercityModes.some(([mode]) => mode === provider.mode))}
-            {providers?.unavailable && <SourcePill label="Find travel routes" url={mapsUrl('dir', {origin, destination: city})}/>}
           </div>
         </>}
         {guidePoint(guide, 'Getting there')}
@@ -231,18 +248,29 @@ export function TripTransport({draft, onAsk}) {
           if(value)query.set('depart_at',new Date(value).toISOString())
           setLocalLookup(query.toString())
         }}>
-          <label>Itinerary leg<select value={legs.indexOf(preview)} onChange={event=>{setLocalIndex(Number(event.target.value));setLocalLookup(null)}}>
+          <label>Itinerary leg<select value={legs.indexOf(preview)} onChange={event=>{setLocalIndex(Number(event.target.value));setLocalLookup(null);setTransitLookup(null)}}>
             {legs.map((leg,index)=><option key={index} value={index}>Day {leg.day} · {leg.from} → {leg.to}</option>)}</select></label>
           <label>Depart at (device time)<input name="depart" type="datetime-local"/></label>
           <Button type="submit" icon="search">Check local schedules</Button>
         </form>}
+        {preview && <Button icon="search" onClick={() => {
+          const query = new URLSearchParams({origin:preview.origin, destination:preview.destination})
+          setTransitLookup(query.toString())
+        }}>Find free transit routes</Button>}
+        {transitLookup && resources.transitous?.state !== transitLookup && <p role="status">Checking Transitous schedules…</p>}
+        {transitLookup && resources.transitous?.state === transitLookup && (resources.transitous.unavailable
+          ? <p>Transitous schedules are temporarily unavailable.</p>
+          : <TransportQuotes quotes={{transit:resources.transitous.data}}/>)}
+        {preview && <div className="trip-transport-map">
+          <JourneyMap center={{name: preview.from + ' to ' + preview.to}} places={preview.endpoints} routes={routePreview} compactControls/>
+        </div>}
         {localLookup && resources.localQuotes?.state!==localLookup && <p role="status">Checking local schedules…</p>}
         {localLookup && resources.localQuotes?.state===localLookup && (resources.localQuotes.unavailable
           ? <p>Local schedules are temporarily unavailable.</p> : <TransportQuotes quotes={resources.localQuotes.data.quotes}/>)}
         <div className="trip-transport-links">
-          <SourcePill label={localRoute ? 'Transit directions' : 'Find local transit'} url={localRoute ?
+          <GoogleMapsLink label={localRoute ? 'Transit in Google Maps' : 'Find transit in Google Maps'} href={localRoute ?
             mapsUrl('dir', {...localRoute, travelmode: 'transit'}) : mapsUrl('search', {query: `Public transit in ${city}`})}/>
-          {localRoute && <SourcePill label="Walking directions" url={mapsUrl('dir', {...localRoute, travelmode: 'walking'})}/>}
+          {localRoute && <GoogleMapsLink label="Walk in Google Maps" href={mapsUrl('dir', {...localRoute, travelmode: 'walking'})}/>}
           {route.name === name && providerButtons(providers?.data?.local?.providers, provider => provider.name !== 'Google Maps')}
           {providers?.unavailable && <SourcePill label="Check Uber prices" url="https://www.uber.com/global/en/price-estimate/"/>}
         </div>

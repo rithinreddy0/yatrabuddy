@@ -10,6 +10,8 @@ import {DestinationBrief} from '../components/CityBrief.jsx'
 import {PlaceSummary} from '../components/PlaceSummary.jsx'
 import {summarizePlaces} from './travelSummary.mjs'
 import {revealResult} from '../components/revealResult.mjs'
+import {revealMapCard} from '../components/revealMapPlace.mjs'
+import {GoogleMapsLink} from '../components/GoogleMapsLink.jsx'
 import {
   discoveryPlaceKey, placeInterestScores, rankDiscoveryPlaces, toggleDiscoverySaved,
   toggleDiscoveryShortlist, useDiscoveryShortlist, useSavedDiscoveryPlaces,
@@ -28,13 +30,14 @@ export function DiscoveryCard({place, saved, selected, onOpen, onSave, onSelect}
     ? `${(place.distanceMetres / 1000).toLocaleString(undefined, {maximumFractionDigits: 1})} km from center` : ''
   const rating = Number.isFinite(place.rating) ? place.rating.toFixed(1) : null
   const [interest, score] = Object.entries(placeInterestScores(place)).sort((a, b) => b[1] - a[1])[0]
-  return <article className="discovery-card">
+  return <article className="discovery-card" data-map-place={mapPlaceId(place)} tabIndex={-1}>
     <div className="discovery-card-media"><PlacePhoto place={place} lookup hideUnavailable onOpen={onOpen}/></div>
     <div className="discovery-card-caption">
       <h4><button type="button" onClick={onOpen}>{place.name}</button></h4>
       {rating && <strong className="discovery-rating" aria-label={`${rating} out of 5 traveler rating`}>★ {rating}</strong>}
       <p>{place.category === 'Stay' ? 'Stay' : place.category}{distance && ` · ${distance}`}</p>
-      <p>{place.publishedPrice || (score > 0 ? `${interest} match ${score}/5` : place.discoveryCity?.name)}</p>
+      <p>{place.publishedPrice ? <strong className="travel-price">{place.publishedPrice}</strong> : score > 0 ? `${interest} match ${score}/5` : place.discoveryCity?.name}</p>
+      <GoogleMapsLink place={place} region={place.discoveryCity?.name}/>
     </div>
     {(onSave || onSelect) && (
       <div className="discovery-card-actions">
@@ -130,6 +133,7 @@ export function DiscoveryFeed({location, profile, onPlan, onAsk, onRequireAccoun
   const [placeKey, setPlaceKey] = useState('')
   const [status, setStatus] = useState('')
   const collectionStart=useRef(null)
+  const feed = useRef(null)
   const mapToggle=useRef(null)
   const cityId = String(location.id).replace(/^geo:/, '')
   const {report, error, photosPending} = useNearbyDiscovery(cityId, attempt)
@@ -158,7 +162,7 @@ export function DiscoveryFeed({location, profile, onPlan, onAsk, onRequireAccoun
       saved={!onRequireAccount&&saved.some(item => discoveryPlaceKey(item) === key)} onSave={() => onRequireAccount?onRequireAccount():toggleDiscoverySaved(place, location)}
       selected={shortlist.some(item => discoveryPlaceKey(item) === key)} onSelect={() => toggle(place)}/>
   }
-  return <section className="discovery-feed" aria-label={`Places near ${location.name}`}>
+  return <section ref={feed} className="discovery-feed" aria-label={`Places near ${location.name}`}>
     <div className="discovery-feed-controls">
       <div className="discovery-filters" role="group" aria-label="Nearby categories">
         <Pill active={category === 'all'} onClick={() => {setCategory('all');revealResult(collectionStart.current)}}>All places</Pill>
@@ -176,7 +180,7 @@ export function DiscoveryFeed({location, profile, onPlan, onAsk, onRequireAccoun
         <summary>{shortlist.length} {shortlist.length === 1 ? 'place' : 'places'} for this trip</summary>
         <ul>{shortlist.map(place => <li key={discoveryPlaceKey(place)}>{place.name}<Button icon="minus" variant="text-btn" onClick={() => toggle(place)} aria-label={`Remove ${place.name} from trip shortlist`}>Remove</Button></li>)}</ul>
       </details>
-      <Button icon="arrow" variant="primary" onClick={() => onPlan('', location.id, location, false, {selected: shortlist})}>Build itinerary</Button>
+      <Button icon="chat" variant="primary" onClick={() => onPlan('', location.id, location, false, {selected: shortlist})}>Plan these places</Button>
     </div>}
     <span className="yatra-sr-only" role="status">{status}</span>
     <div ref={collectionStart} className="result-scroll-anchor"/>
@@ -201,7 +205,11 @@ export function DiscoveryFeed({location, profile, onPlan, onAsk, onRequireAccoun
         </p>}
       </div>
       {mapOpen && <div className="discovery-map-panel"><JourneyMap center={report?.location || location} places={visible} selectedId={mapFocus && mapPlaceId(mapFocus)}
-        onSelect={place => place && selectPlace(place)} onClose={() => {setMapOpen(false); mapToggle.current?.focus()}}/></div>}
+        onSelect={place => {
+          if (!place) return
+          setMapFocus(place)
+          if (!revealMapCard(feed.current,mapPlaceId(place))) selectPlace(place)
+        }} onClose={() => {setMapOpen(false); mapToggle.current?.focus()}}/></div>}
     </div>
     {category==='all'&&<DestinationBrief location={location} compact/>}
     {activePlace && <Dialog label={activePlace.name} className="discovery-details-dialog" onClose={() => setPlaceKey('')}>

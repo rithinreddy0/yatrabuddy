@@ -1,5 +1,6 @@
 import React, {useEffect, useEffectEvent, useState} from 'react'
 import {Check, CircleAlert, Copy, LoaderCircle} from 'lucide-react'
+import {HighlightPrice} from '../components/TravelHighlights.jsx'
 import './AgentMessage.css'
 
 const inlinePattern = /(!?\[([^\]\n]+)\]\(([^()\s]+)\))|(\*\*([^*\n]+)\*\*)|(`([^`\n]+)`)|(\*([^*\n]+)\*)/g
@@ -11,9 +12,9 @@ function inline(line) {
   let cursor = 0
   for (const match of line.matchAll(inlinePattern)) {
     const [raw, link, label, url, , bold, , code, , italic] = match
-    parts.push(line.slice(cursor, match.index))
+    parts.push(<HighlightPrice key={`text-${cursor}`} text={line.slice(cursor, match.index)}/>)
     const key = match.index
-    if (bold) parts.push(<strong key={key}>{bold}</strong>)
+    if (bold) parts.push(<strong key={key}><HighlightPrice text={bold}/></strong>)
     else if (code) parts.push(<code key={key}>{code}</code>)
     else if (italic) parts.push(<em key={key}>{italic}</em>)
     else if (link && !raw.startsWith('!') && /^https?:\/\//i.test(url)) {
@@ -21,7 +22,7 @@ function inline(line) {
     } else parts.push(label)
     cursor = match.index + raw.length
   }
-  parts.push(line.slice(cursor))
+  parts.push(<HighlightPrice key={`text-${cursor}`} text={line.slice(cursor)}/>)
   return parts
 }
 

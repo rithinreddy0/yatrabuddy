@@ -1,5 +1,7 @@
 import React from 'react'
 import {ExternalLink} from 'lucide-react'
+import {TravelHighlights} from '../components/TravelHighlights.jsx'
+import {GoogleMapsLink} from '../components/GoogleMapsLink.jsx'
 
 function ExternalSource({url, children}) {
   let href
@@ -23,11 +25,12 @@ function dateLabel(value) {
 }
 
 const quoteStatus = {
-  unconfigured:'Live provider connection is not configured.',
   need_airports:'Enter departure and arrival airport codes and a date to look up flight offers.',
+  need_date:'Choose a departure date to check flight offers.',
+  need_group_search:'Check fares for groups of this size directly with the airline.',
   need_time:'Choose a future departure date or time to check schedules.',
   empty:'The provider returned no options for this search.',
-  unavailable:'The provider could not return schedules right now.',
+  unavailable:'Live options couldn’t be checked. Use the operator links below.',
 }
 
 function displayTime(value, timeZone) {
@@ -52,14 +55,16 @@ function displayDuration(value) {
 
 export function TransportQuotes({quotes, kind}) {
   if (!quotes) return null
-  return <div className="transport-quote-list">{Object.entries(quotes).filter(([id])=>!kind||id===kind).map(([id, group])=>
+  const groups = Object.entries(quotes).filter(([id,group]) => id !== 'driving' && group.status !== 'unconfigured' && (!kind || id === kind))
+  if (!groups.length) return null
+  return <div className="transport-quote-list">{groups.map(([id, group])=>
     <section key={id} className="trip-transport-card">
-      <h4>{id==='flights'?'Flight offers':'Scheduled transit'} · {group.source}</h4>
+      <h4>{id==='flights'?'Flight offers':'Scheduled transit'} · {group.source==='Google Routes'?'Google Maps':group.source}</h4>
       {group.searchedAt && <small>Search departure · {displayTime(group.searchedAt)}</small>}
       {group.checkedAt && <small>Checked · {new Date(group.checkedAt).toLocaleString()}</small>}
       {group.status!=='ready' && <p>{quoteStatus[group.status]}</p>}
       {(group.options||[]).map((option,index)=><article className="transport-quote" key={index}>
-        <div className="transport-quote-summary"><strong>{option.price
+        <div className="transport-quote-summary"><strong className={option.price ? 'travel-price' : undefined}>{option.price
           ? `${option.price.currency} ${option.price.amount}${option.partyTotal?' total for the group':''}`
           : 'Fare unavailable'}</strong>
           <small>{[displayDuration(option.duration), option.metres!=null&&`${(option.metres/1000).toFixed(1)} km`].filter(Boolean).join(' · ')}</small></div>
@@ -77,14 +82,15 @@ export function TransportQuotes({quotes, kind}) {
 
 export function TravelProviderSources({result, answerFirst = false}) {
   if (!result) return null
-  const {title = 'Travel providers', route, date, checkout, travelers, notes = [], providers = [], detail, guide, error} = result
+  const {title = 'Travel providers', route, origin, destination, date, checkout, travelers, notes = [], providers = [], detail, guide, error, arrivalTips = {}} = result
   const guideSections = guide?.sections || []
   const dates = [dateLabel(date), dateLabel(checkout)].filter(Boolean).join(' – ')
   const context = [route, dates, travelers && `${travelers} ${travelers === 1 ? 'traveller' : 'travellers'}`].filter(Boolean).join(' · ')
-  const providerList = <ul className="agent-place-results">
-      {providers.map(({name, mode, url, sourceUrl, summary, action}) => <li key={`${name}-${mode}`}>
+  const primaryProviders = providers.filter(provider => provider.name !== 'Google Maps' && provider.name !== 'Rome2Rio')
+  const providerList = <ul className="agent-place-results transport-provider-list">
+      {primaryProviders.map(({name, mode, url, sourceUrl, summary, action}) => <li key={`${name}-${mode}`}>
         <h4>{name} <small>· {mode}</small></h4>
-        <p>{summary}</p>
+        <p>{arrivalTips[mode] || summary}</p>
         <div className="agent-place-links">
           <ExternalSource url={url}>{action || `Open ${name}`}</ExternalSource>
           {sourceUrl !== url && <ExternalSource url={sourceUrl}>
@@ -94,27 +100,31 @@ export function TravelProviderSources({result, answerFirst = false}) {
       </li>)}
     </ul>
   return <section className="agent-source-answer" aria-label={title}>
-    <h3>{title}</h3>
+    <h3>{title === 'Transport sources' ? 'Transport options' : title}</h3>
     {context && <strong>{context}</strong>}
     {error && <p>{error}</p>}
     {result.lookupPrompt && <p>{result.lookupPrompt}</p>}
-    <TransportQuotes quotes={result.quotes}/>
-    {result.road && <p><strong>{result.road.kilometres.toLocaleString()} km</strong>
+    {result.kind === 'transport' && destination && <div className="transport-map-links">
+      {origin && <GoogleMapsLink origin={origin} destination={destination} mode="driving" label="Driving in Google Maps"/>}
+      {origin ? <GoogleMapsLink origin={origin} destination={destination} mode="transit" label="Transit in Google Maps"/> :
+        <GoogleMapsLink place={{name:destination}}/>}
+    </div>}
+    {result.quotes?.driving?.status === 'ready' ? <p><strong>{(result.quotes.driving.metres / 1000).toLocaleString(undefined,{maximumFractionDigits:1})} km</strong> · {displayDuration(result.quotes.driving.duration)} by car · Google Maps traffic estimate</p>
+      : result.road && <p><strong>{result.road.kilometres.toLocaleString()} km</strong>
       {result.road.minutes != null && ` · about ${Math.floor(result.road.minutes / 60)} h ${result.road.minutes % 60} min by car`} · {result.road.estimated}</p>}
-    {!!result.passes?.length && <div><h4>Published transit passes</h4><ul>{result.passes.map(pass => <li key={pass.name}>{pass.name} · ₹{pass.amount} <ExternalSource url={pass.url}>Operator details</ExternalSource></li>)}</ul></div>}
+    <TransportQuotes quotes={result.quotes}/>
+    {!!result.passes?.length && <div><h4>Published transit passes</h4><ul>{result.passes.map(pass => <li key={pass.name}>{pass.name} · <strong className="travel-price">₹{pass.amount}</strong> <ExternalSource url={pass.url}>Operator details</ExternalSource></li>)}</ul></div>}
     {answerFirst && result.local && !result.passes?.length && <p>A day pass price could not be verified for this city.</p>}
-    {!answerFirst && providers.length > 0 && providerList}
-    {guideSections.map(section => {
-      const words = section.text?.trim().split(/\s+/) || []
-      return <details key={section.title} open={answerFirst || undefined}>
-        <summary>{section.title}</summary>
-        <p>{answerFirst ? section.text : words.slice(0, 25).join(' ') + (words.length > 25 ? '…' : '')}</p>
-        <ExternalSource url={section.sourceUrl}>{section.source || 'Destination guide'}</ExternalSource>
-      </details>
-    })}
+    {primaryProviders.length > 0 && <><h4>Check fares and availability</h4>{providerList}</>}
+    {guideSections.map(section => <article className="journey-research-result" key={section.title}>
+      <h4>{section.title}</h4>
+      <TravelHighlights text={section.text} points={section.points} limit={answerFirst ? 3 : 1} preferPrices/>
+      <ExternalSource url={section.sourceUrl}>{section.source || 'Destination guide'}</ExternalSource>
+    </article>)}
+    {!!guideSections.length && <small className="travel-source-note">Guide fares can change. Confirm with the operator.</small>}
     {answerFirst && !error && !result.lookupPrompt && !result.places && !guideSections.length && !result.road && !Object.values(result.quotes || {}).some(group=>group.status==='ready') && <p>Route details and schedules could not be verified from the available sources.</p>}
     {!error && detail && <p><small>{detail}</small></p>}
     {notes.map(note => <p key={note}><small>{note}</small></p>)}
-    {answerFirst && providers.length > 0 && <details><summary>Operators and booking references</summary>{providerList}</details>}
+    {providers.find(item=>item.name==='Rome2Rio') && <ExternalSource url={providers.find(item=>item.name==='Rome2Rio').url}>Compare routes on Rome2Rio</ExternalSource>}
   </section>
 }

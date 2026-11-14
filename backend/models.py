@@ -215,6 +215,11 @@ class WorldwideDraft(BaseModel):
     mealPreference: MealPreference = "No preference"
     localModes: list[LocalMode] = Field(default_factory=list, max_length=5)
     pace: Pace = "Balanced"
+    mobility: Literal["No preference", "Less walking", "Step-free when possible"] | None = None
+    transportPreference: Transport | None = None
+    interests: list[Short] = Field(default_factory=list, max_length=8)
+    stayPreferences: list[Short] = Field(default_factory=list, max_length=6)
+    notes: str | None = Field(default=None, max_length=500)
     routes: list[list[WorldwideLeg]] = Field(default_factory=list, max_length=5)
     routeGeometry: list[list[tuple[float, float]]] = Field(default_factory=list, max_length=5)
     routeAdvice: str | None = Field(default=None, max_length=600)

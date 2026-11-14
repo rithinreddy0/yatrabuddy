@@ -1,0 +1,29 @@
+.journey-editor-dialog { width:min(34rem,calc(100vw - 28px)); }
+.journey-editor { background:var(--white); color:var(--ink); padding:clamp(17px,4vw,28px); display:grid; gap:16px; }
+.journey-editor-heading { display:flex; gap:13px; align-items:flex-start; padding-right:37px; }
+.journey-editor-heading>span { display:grid; place-items:center; flex:0 0 42px; height:42px; color:var(--deep); background:var(--mint); border-radius:12px; }
+.journey-editor-heading h2 { margin:0 0 4px; font-size:clamp(19px,4vw,25px); letter-spacing:-.025em; line-height:1.2; }
+.journey-editor-heading p { color:var(--muted); font-size:.88rem; margin:0; }
+.journey-editor-current { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:4px 12px; padding:9px 0; border-block:1px dashed var(--line); }
+.journey-editor-current small { color:var(--muted); }
+.journey-editor-current strong { font-size:.88rem; overflow-wrap:anywhere; }
+.journey-editor-fields { min-width:0; display:grid; gap:12px; margin:0; padding:0; border:0; }
+.journey-editor-fields label { font-size:.86rem; font-weight:600; }
+.journey-editor-fields input:not([type=checkbox]),.journey-editor-fields select,.journey-editor-fields textarea {
+  width:100%; min-width:0; min-height:43px; margin-top:4px; padding:8px 10px; color:var(--ink);
+  background:var(--paper); border:1px solid var(--line); border-radius:9px; font:inherit; font-weight:400;
+}
+.journey-editor-fields .destination-search-input input { min-height:34px; margin:0; border:0; background:transparent; }
+.journey-editor-dates { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr)); gap:10px; }
+.journey-editor-toggle { display:flex; align-items:center; gap:8px; min-height:32px; }
+.journey-editor-toggle input { accent-color:var(--deep); }
+.journey-currency-field { display:flex; align-items:baseline; gap:8px; }
+.journey-editor-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; border-top:1px solid var(--line); padding-top:13px; }
+.journey-editor .form-error { margin:0; }
+.journey-trip-chip { position:relative; }
+.journey-trip-chip small { padding-right:16px; }
+.journey-trip-chip svg { position:absolute; right:7px; top:7px; color:var(--muted); }
+.agent-header .agent-delete { color:var(--danger,#a3283c); }
+.journey-delete-confirm { background:#a3283c !important; color:#fff !important; border-color:#a3283c !important; }
+.journey-chat [data-map-place],.destination-guide [data-map-place] { scroll-margin-block-start:12px; }
+[data-map-place]:focus { outline:2px solid var(--deep); outline-offset:-2px; border-radius:8px; }

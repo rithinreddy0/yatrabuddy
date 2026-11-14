@@ -1,0 +1,73 @@
+[1mdiff --git a/src/App.jsx b/src/App.jsx[m
+[1mindex 5896887..dea6a6d 100644[m
+[1m--- a/src/App.jsx[m
+[1m+++ b/src/App.jsx[m
+[36m@@ -192,6 +192,23 @@[m [mexport default function App(){[m
+   function newTripChat(query=''){[m
+     ask(query,'new-'+Date.now())[m
+   }[m
+[32m+[m[32m  function planWithChat(query='',id,city,_voice=false,tripRequest){[m
+[32m+[m[32m    const named=city?.name||catalog?.find(item=>item.id===id)?.name||''[m
+[32m+[m[32m    const picks=(tripRequest?.selected||[]).map(item=>item?.name).filter(Boolean).slice(0,6)[m
+[32m+[m[32m    const profile=library.profile[m
+[32m+[m[32m    let text=(query||'').trim()[m
+[32m+[m[32m    if(!text){[m
+[32m+[m[32m      const parts=[named?`Plan a trip to ${named}`:'Help me plan a trip'][m
+[32m+[m[32m      if(profile?.tripDays)parts.push(`for ${profile.tripDays} days`)[m
+[32m+[m[32m      if(profile?.travelers)parts.push(`with ${profile.travelers} travelers`)[m
+[32m+[m[32m      if(profile?.budget)parts.push(`around ₹${Number(profile.budget).toLocaleString('en-IN')}`)[m
+[32m+[m[32m      if(profile?.pace&&profile.pace!=='Balanced')parts.push(`at a ${profile.pace.toLowerCase()} pace`)[m
+[32m+[m[32m      text=parts.join(' ')[m
+[32m+[m[32m      if(picks.length)text+=`. Include ${picks.join(', ')}`[m
+[32m+[m[32m      text+='. Ask only if something essential is still missing, then build a day-by-day itinerary.'[m
+[32m+[m[32m    }[m
+[32m+[m[32m    newTripChat(text)[m
+[32m+[m[32m  }[m
+   async function signOut(){[m
+     await state.logout()[m
+     navigate('home')[m
+[36m@@ -283,8 +300,8 @@[m [mexport default function App(){[m
+     case 'stays':[m
+     case 'attractions':[m
+     case 'food':[m
+[31m-      content=<WorldSearch key={route.page} initialCategory={route.page==='discover'?'all':route.page} profile={library.profile} onPlan={start} onSaveDraft={saveDraft}/>;break[m
+[31m-    case 'saved':content=<Discover {...common} key="saved" savedOnly onPlan={start}/>;break[m
+[32m+[m[32m      content=<WorldSearch key={route.page} initialCategory={route.page==='discover'?'all':route.page} profile={library.profile} onPlan={planWithChat} onSaveDraft={saveDraft}/>;break[m
+[32m+[m[32m    case 'saved':content=<Discover {...common} key="saved" savedOnly onPlan={planWithChat}/>;break[m
+     case 'chat':{[m
+       const contextDraft=library.drafts.find(item=>item.id===route.id)[m
+       const freshSession=route.id?.startsWith('new-')?route.id.slice(4):route.id==='new'?true:false[m
+[36m@@ -315,14 +332,14 @@[m [mexport default function App(){[m
+     case 'join':content=<div className="page inner-page"><TripWorkspace key={route.id} inviteCode={route.id} onJoined={id=>navigate('workspace/'+id)}/></div>;break[m
+     case 'itinerary':[m
+     case 'budget':[m
+[31m-    case 'trip':content=!ready?<div className="page inner-page" role="status">Loading your saved trip...</div>:trip&&place?<Trip key={trip.id} view={route.page==='budget'?'budget':'itinerary'} trip={trip} place={place} profile={library.profile} onUpdate={updateTrip} onEdit={editIndex=>setModal({type:'plan',initial:trip.brief,editIndex})} onMessage={message} history={history} onUndo={()=>restore('undo')} onRedo={()=>restore('redo')}/>:<div className="page inner-page"><Empty title="Trip unavailable" description="Create and save a trip in chat, then its itinerary and budget will appear here." action={<Button onClick={()=>start()}>Create a trip</Button>}/></div>;break[m
+[32m+[m[32m    case 'trip':content=!ready?<div className="page inner-page" role="status">Loading your saved trip...</div>:trip&&place?<Trip key={trip.id} view={route.page==='budget'?'budget':'itinerary'} trip={trip} place={place} profile={library.profile} onUpdate={updateTrip} onEdit={editIndex=>setModal({type:'plan',initial:trip.brief,editIndex})} onMessage={message} history={history} onUndo={()=>restore('undo')} onRedo={()=>restore('redo')}/>:<div className="page inner-page"><Empty title="Trip unavailable" description="Create and save a trip in chat, then its itinerary and budget will appear here." action={<Button onClick={()=>newTripChat()}>Create a trip</Button>}/></div>;break[m
+     case 'guide':content=<DestinationGuide key={route.id||'overview'} catalog={catalog} initialTopic={route.id} profile={library.profile}[m
+[31m-      initialDestination={homeDestination||catalog.find(item=>library.saved.includes(item.id))?.id}/>;break[m
+[32m+[m[32m      initialDestination={homeDestination||catalog.find(item=>library.saved.includes(item.id))?.id} onPlan={planWithChat} onAsk={ask}/>;break[m
+     case 'account':[m
+     case 'preferences':content=<Preferences key={route.page} initialTab={route.page==='account'?'account':'travel'} user={user} theme={theme} onThemeChange={changeTheme} style={library.profile?.style||library.style} profile={library.profile}[m
+       onIdentity={state.updateIdentity} onSignOut={signOut} onEditProfile={()=>{if(mustSignIn&&!user)requireSignIn('preferences');else setModal({type:'onboarding'})}}[m
+       onResetProfile={()=>setModal({type:'clear-profile'})} onChange={style=>{if(mustSignIn&&!user){requireSignIn('preferences');return}change(data=>({...data,style,profile:data.profile?{...data.profile,style}:null}));message('Travel style saved.')}} onAccount={()=>requireSignIn('account')}/>;break[m
+[31m-    default:content=<Home catalog={catalog} library={user||!mustSignIn?library:{trips:[],drafts:[],profile:null}} destination={homeDestination} onPlan={start} onAsk={ask} onNavigate={navigate} onResearch={topic=>navigate('guide/'+topic)}[m
+[32m+[m[32m    default:content=<Home catalog={catalog} library={user||!mustSignIn?library:{trips:[],drafts:[],profile:null}} destination={homeDestination} onPlan={planWithChat} onAsk={ask} onNavigate={navigate} onResearch={topic=>navigate('guide/'+topic)}[m
+       onRequireAccount={mustSignIn&&!user?()=>requireSignIn('saved'):undefined}/>[m
+   }[m
+   const close=()=>setModal(null)[m
+[36m@@ -376,13 +393,13 @@[m [mexport default function App(){[m
+     </nav>[m
+     {(state.status||loadError)&&<div className="sync-notice" role="status">{state.status||loadError}</div>}[m
+     <main id="main" tabIndex={-1}>{trip&&<div className="page trip-workspace-nav"><label>Working on<select aria-label="Active trip" value={trip.id} onChange={event=>navigate((route.page==='budget'?'budget':'itinerary')+'/'+event.target.value)}>{library.trips.map(item=><option key={item.id} value={item.id}>{catalog?.find(place=>place.id===item.brief.destination)?.name||item.brief.destination} · {item.brief.days} days · {item.brief.people} travellers</option>)}</select></label><nav aria-label="Active trip views"><Button variant={route.page!=='budget'?'primary':'outline'} onClick={()=>navigate('itinerary/'+trip.id)}>Itinerary & map</Button><Button variant={route.page==='budget'?'primary':'outline'} onClick={()=>navigate('budget/'+trip.id)}>Budget</Button><Button icon="chat" onClick={()=>navigate('chat/'+trip.id)}>Discuss this trip</Button></nav></div>}{content}</main></div>[m
+[31m-    {modal?.type==='buddy'&&<Buddy catalog={catalog} profile={library.profile} defaultDestination={preferredDestination(library,catalog)} trip={trip} onClose={close} onPlan={start} onDesk={()=>navigate('desk')} onTrip={close} reminders={reminders}/>}[m
+[32m+[m[32m    {modal?.type==='buddy'&&<Buddy catalog={catalog} profile={library.profile} defaultDestination={preferredDestination(library,catalog)} trip={trip} onClose={close} onPlan={planWithChat} onDesk={()=>navigate('desk')} onTrip={close} reminders={reminders}/>}[m
+     {modal?.type==='account'&&<Account user={user} onClose={close} onLogin={async (user,isNew,welcomeEmail)=>{await state.login(user);setModal(isNew?{type:'onboarding'}:null);message(welcomeEmail==='scheduled'?'Account created. Check your inbox shortly.':welcomeEmail==='unavailable'?'Account created. Email delivery is unavailable.':'Signed in.')}} onLogout={async()=>{try{await state.logout();navigate('home');message('Signed out.')}catch(error){message(error.message)}}}/>}[m
+     {modal?.type==='onboarding'&&<ProfileWizard name={user?.name} catalog={catalog||[]} isEditing={Boolean(library.profile)} initial={{style:library.style||'Balanced',...library.profile}} onClose={close} onDone={profile=>{change(data=>({...data,style:profile.style,profile}));close();message('Travel profile saved.')}}/>}[m
+     {modal?.type==='clear-profile'&&<Dialog onClose={close} label="Clear travel profile"><div className="dialog-content"><h2>Clear your travel profile?</h2><p>Wayfarer will use the standard defaults for new trips.</p><div className="dialog-buttons"><Button onClick={close}>Cancel</Button><Button variant="danger" onClick={()=>{change(data=>({...data,style:'',profile:null}));close();message('Travel profile cleared.')}}>Clear profile</Button></div></div></Dialog>}[m
+     {modal?.type==='plan'&&<TripBrief catalog={catalog} initial={modal.initial} query={modal.query} editIndex={modal.editIndex} selection={modal.selection} voice={modal.voice} onClose={close} onDone={finishPlan}/>}[m
+     {modal?.type==='destination'&&<Dialog onClose={close} label={modal.place.name} className="destination-modal">[m
+[31m-      <div className="destination-modal-image"><img src={'/images/'+modal.place.image+'.jpg'} alt=""/></div><div className="dialog-content"><div className="eyebrow"><span/> {modal.place.region.toUpperCase()}</div><h2>{modal.place.name}</h2><p>{modal.place.tagline}. Typical visiting season {modal.place.season}.</p><h3>Highlights</h3><ul className="highlight-list">{modal.place.places.slice(0,4).map(item=><li key={item.name}><Icon name="pin" size={15}/> {item.name}</li>)}</ul><div className="dialog-buttons"><Button variant="primary" icon="arrow" onClick={()=>start('',modal.place.id)}>Plan this trip</Button><Button icon="heart" onClick={()=>toggleSaved(modal.place.id)}>{library.saved.includes(modal.place.id)?'Unsave':'Save'}</Button></div></div></Dialog>}[m
+[32m+[m[32m      <div className="destination-modal-image"><img src={'/images/'+modal.place.image+'.jpg'} alt=""/></div><div className="dialog-content"><div className="eyebrow"><span/> {modal.place.region.toUpperCase()}</div><h2>{modal.place.name}</h2><p>{modal.place.tagline}. Typical visiting season {modal.place.season}.</p><h3>Highlights</h3><ul className="highlight-list">{modal.place.places.slice(0,4).map(item=><li key={item.name}><Icon name="pin" size={15}/> {item.name}</li>)}</ul><div className="dialog-buttons"><Button variant="primary" icon="chat" onClick={()=>planWithChat('',modal.place.id,modal.place)}>Plan in chat</Button><Button icon="heart" onClick={()=>toggleSaved(modal.place.id)}>{library.saved.includes(modal.place.id)?'Unsave':'Save'}</Button></div></div></Dialog>}[m
+     {modal?.type==='delete'&&<Dialog onClose={close} label="Delete trip"><div className="dialog-content"><h2>Delete this trip?</h2><p>This itinerary will be removed from your library.</p><div className="dialog-buttons"><Button onClick={close}>Cancel</Button><Button variant="danger" icon="trash" onClick={()=>{change(data=>({...data,trips:data.trips.filter(item=>item.id!==modal.trip.id)}));close();message('Trip deleted.')}}>Delete trip</Button></div></div></Dialog>}[m
+     {modal?.type==='delete-draft'&&<Dialog onClose={close} label="Delete draft"><div className="dialog-content"><h2>Delete this draft?</h2><p>{modal.draft.name} will be removed from My trips.</p><div className="dialog-buttons"><Button onClick={close}>Cancel</Button><Button variant="danger" icon="trash" onClick={()=>{change(data=>({...data,drafts:data.drafts.filter(item=>item.id!==modal.draft.id)}));close();message('Draft deleted.')}}>Delete draft</Button></div></div></Dialog>}[m
+     <div id="toast" className={notice?'shown':''} role="status" aria-live="polite">{notice&&<><Icon name="info"/> {notice.value}</>}</div>[m

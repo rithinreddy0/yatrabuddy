@@ -1,4 +1,4 @@
-"""Find named places in OpenStreetMap through the Photon read-only service."""
+"""Find named OpenStreetMap places through Photon and Overpass."""
 
 import asyncio
 from math import isfinite
@@ -11,7 +11,9 @@ from .source_cache import SourceCache
 
 
 PHOTON = "https://photon.komoot.io"
+OVERPASS = "https://overpass-api.de/api/interpreter"
 OBJECT_TYPES = {"N": "node", "W": "way", "R": "relation"}
+OSM_TYPE_CODES = {value: key for key, value in OBJECT_TYPES.items()}
 STAYS = ("tourism:hotel", "tourism:guest_house", "tourism:hostel", "tourism:apartment",
          "tourism:chalet", "tourism:motel")
 FOOD = ("amenity:restaurant", "amenity:cafe", "amenity:fast_food", "amenity:ice_cream", "amenity:food_court")
@@ -102,6 +104,37 @@ def place_from_feature(feature):
     }
 
 
+async def overpass_features(client, lat, lon, tags, radius):
+    groups = {}
+    for tag in tags:
+        key, value = tag.split(":", 1)
+        groups.setdefault(key, []).append(value)
+    selection = "".join(
+        f'nwr(around:{radius},{lat:.5f},{lon:.5f})["name"]["{key}"~"^({"|".join(values)})$"];'
+        for key, values in groups.items()
+    )
+    async with asyncio.timeout(3.5):
+        response = await client.post(OVERPASS, data={"data": f"[out:json][timeout:3];({selection});out center 60;"},
+                                     follow_redirects=False)
+        response.raise_for_status()
+        elements = response.json()["elements"]
+    features = []
+    for element in elements:
+        extra = element.get("tags", {})
+        tag = next((tag for tag in tags if extra.get(tag.split(":", 1)[0]) == tag.split(":", 1)[1]), None)
+        if not tag:
+            continue
+        key, value = tag.split(":", 1)
+        center = element.get("center", element)
+        features.append({
+            "geometry": {"type": "Point", "coordinates": [center.get("lon"), center.get("lat")]},
+            "properties": {"osm_type": OSM_TYPE_CODES.get(element.get("type")), "osm_id": element.get("id"),
+                           "osm_key": key, "osm_value": value, "name": extra.get("name"),
+                           "street": extra.get("addr:street"), "city": extra.get("addr:city"), "extra": extra},
+        })
+    return features
+
+
 async def osm_places(client, city, category=None, query=None):
     """Search within a limited radius of the geocoded location and cache nearby results."""
     lat, lon = city["lat"], city["lon"]
@@ -118,21 +151,37 @@ async def osm_places(client, city, category=None, query=None):
         params["zoom"] = 10 if city.get("kind") == "region" else 13
     else:
         params["radius"] = radius
+    source_errors = (TimeoutError, httpx.HTTPError, KeyError, ValueError, TypeError)
+    photon_error = None
     try:
-        async with asyncio.timeout(4):
+        async with asyncio.timeout(4 if query else 2.5):
             response = await client.get(f"{PHOTON}/{endpoint}", params=params, follow_redirects=False)
             response.raise_for_status()
             features = response.json()["features"]
-    except (TimeoutError, httpx.HTTPError, KeyError, ValueError, TypeError):
+    except source_errors as error:
+        photon_error = error
         stale = cache.get(key, 86400)
         if stale is not None:
             return stale
-        raise
+        if query:
+            raise
+        features = []
     from .nearby import distance_metres
 
-    places = {}
-    for feature in features:
-        place = place_from_feature(feature)
-        if place and distance_metres(city, place) <= radius * 1000:
-            places.setdefault(place["url"], place)
+    def collect(features, limit_metres):
+        places = {}
+        for feature in features:
+            place = place_from_feature(feature)
+            if place and distance_metres(city, place) <= limit_metres:
+                places.setdefault(place["url"], place)
+        return places
+
+    places = collect(features, radius * 1000)
+    if not places and not query:
+        fallback_radius = 3500 if city.get("kind") == "region" else 1800
+        try:
+            places = collect(await overpass_features(client, lat, lon, tags, fallback_radius), fallback_radius)
+        except source_errors:
+            if photon_error:
+                raise
     return cache.put(key, list(places.values()))

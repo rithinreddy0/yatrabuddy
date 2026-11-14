@@ -1,7 +1,10 @@
 import {useMapPanel} from './useMapPanel.mjs'
 import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react'
-import {ArrowDown, ArrowUp, Bookmark, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Ellipsis, ExternalLink, Heart, MapPin, Minus, Pencil, Plus, RotateCcw, Sparkles, Square, Volume2, X} from 'lucide-react'
+import {ArrowDown, ArrowUp, Bookmark, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Ellipsis, ExternalLink, Heart, MapPin, Minus, Pencil, Plus, RotateCcw, Sparkles, Square, Trash2, Volume2, X} from 'lucide-react'
 import {PlacePhoto} from '../components/PlacePhoto.jsx'
+import {HighlightPrice, TravelHighlights} from '../components/TravelHighlights.jsx'
+import {GoogleMapsLink} from '../components/GoogleMapsLink.jsx'
+import {revealMapCard} from '../components/revealMapPlace.mjs'
 import {PhotoRail} from '../components/PhotoRail.jsx'
 import {AgentProgress, Button, Dialog, Pill, TravelArtwork, WikivoyageSource} from '../components/UI.jsx'
 import {usePopoverDismiss} from '../components/usePopoverDismiss.mjs'
@@ -13,13 +16,14 @@ import {AgentOptions} from './AgentOptions.jsx'
 import {GroqResearchResult} from './GroqResearch.jsx'
 import {useVoiceInput} from './useVoiceInput.mjs'
 import {DictationControl} from './DictationControl.jsx'
-import {JourneyMap, draftMapData} from './JourneyMap.jsx'
+import {JourneyMap, draftMapData, mapPlaceId} from './JourneyMap.jsx'
 import {PlaceDetails, placeMapUrl} from './PlaceDetails.jsx'
 import {TripWorkspace} from './TripWorkspace.jsx'
 import {draftSchedule, visitTime} from './draftSchedule.mjs'
 import {draftBudget} from './tripOverview.mjs'
 import {isWikivoyage, visibleSource} from '../components/sourceUrl.mjs'
 import {TravelProviderSources} from './TransportSources.jsx'
+import {TripSettingsDialog} from './TripSettingsDialog.jsx'
 import {discoveryPlaceKey, isSaveableDiscoveryPlace, toggleDiscoverySaved, useSavedDiscoveryPlaces} from './discoveryPlaces.mjs'
 import './JourneyChat.css'
 
@@ -111,8 +115,7 @@ function resultStatus(result) {
 
 function JourneyPlacePhoto({place, onPlace}) {
   return <div className="journey-place-photo">
-    <PlacePhoto key={place.url || place.name} place={place} lookup hideUnavailable onOpen={onPlace ? () => onPlace(place) : undefined}
-      placeholder={<span className="journey-photo-placeholder"><MapPin size={20} aria-hidden="true"/><small>No verified photo</small></span>}/>
+    <PlacePhoto key={place.url || place.name} place={place} lookup hideUnavailable onOpen={onPlace ? () => onPlace(place) : undefined}/>
   </div>
 }
 
@@ -130,7 +133,7 @@ function PlaceAnswer({result, images, onUseStay, activeStay, busy, onPlace, onAd
     const added = shortlist?.some(entry => entry.url === item.url)
     const saveable = isSaveableDiscoveryPlace(item)
     const likedPlace = liked.some(place => discoveryPlaceKey(place) === discoveryPlaceKey(item))
-    return <li key={item.id || `${item.url || item.name}-${index}`} className={card ? 'journey-place-card' : 'journey-place-row'}>
+    return <li key={item.id || `${item.url || item.name}-${index}`} data-map-place={mapPlaceId(item)} tabIndex={-1} className={card ? 'journey-place-card' : 'journey-place-row'}>
       {card && <div className="journey-card-media"><PlacePhoto place={item} lookup hideUnavailable onOpen={onPlace ? () => onPlace(item) : undefined}/></div>}
       {!card && <JourneyPlacePhoto place={item} onPlace={onPlace}/>}
       {(saveable || map && onAdd && item.category) && <div className="journey-card-actions">
@@ -141,9 +144,10 @@ function PlaceAnswer({result, images, onUseStay, activeStay, busy, onPlace, onAd
       <div className="journey-card-meta"><small>{item.category || (images ? 'Photo' : 'Place')}{Number.isFinite(item.distanceMetres) ? ` · ${(item.distanceMetres / 1000).toFixed(1)} km from centre` : ''}</small>{Number.isFinite(item.rating) && <small title={item.source}>★ {item.rating.toFixed(1)}{item.reviewCount > 0 ? ` (${item.reviewCount})` : ''}</small>}</div>
       {(item.description || item.address) && <p>{item.description || item.address}</p>}
       {item.openingHours && <small>{item.openingHours}</small>}
-      {item.publishedPrice && <small>{item.publishedPrice} · published by the source</small>}
+      {item.publishedPrice && <small><strong className="travel-price">{item.publishedPrice}</strong> · published by the source</small>}
       {item.website && <SourceLink url={item.website}>Official website</SourceLink>}
       <div className="agent-place-links">
+        <GoogleMapsLink place={item} region={result.location?.name || query}/>
         <SourceLink url={item.url}>{item.source || 'Place source'}<span className="yatra-sr-only"> for {item.name}</span></SourceLink>
         {onUseStay && category === 'stays' && <Button disabled={busy || activeStay === item.url} onClick={() => onUseStay(item)}>{activeStay === item.url ? 'In your plan' : 'Use this stay'}</Button>}
       </div>
@@ -224,18 +228,19 @@ function PlannerTimeline({draft, catalog, onPlace, onSave, onEdit, saved, onAdd,
     </div>}
     <div className="journey-itinerary-facts">
       <div><small>Group budget</small><strong>{draft.budget == null ? 'Undecided' : money(draft.budget)}</strong><small>{entered ? `${money(entered)} entered` : 'No costs entered'}{unpriced > 0 && ` · ${unpriced} unpriced ${unpriced === 1 ? 'stop' : 'stops'}`}</small></div>
-      {draft.stay && <div className="journey-stay-fact"><div><small>Suggested stay</small><button type="button" className="journey-inline journey-stop-title" onClick={() => onPlace(draft.stay)}>
+      {draft.stay && <div className="journey-stay-fact" data-map-place={mapPlaceId(draft.stay)} tabIndex={-1}><div><small>Suggested stay</small><button type="button" className="journey-inline journey-stop-title" onClick={() => onPlace(draft.stay)}>
         {draft.stay.name}</button><small>Check rates and availability</small></div><JourneyPlacePhoto place={draft.stay} onPlace={onPlace}/></div>}
     </div>
     <div className="journey-itinerary-days">
       {draft.days.map((stops, index) => <details className="journey-itinerary-day" key={index} open={index === 0 ? true : undefined}>
         <summary><div><strong>Day {index + 1}{dateLabel(index) && ` · ${dateLabel(index)}`}</strong><small>{stops.length ? stops.map(place => place.name).slice(0, 2).join(' · ') : 'Free time'}</small></div><span>{stops.length} {stops.length === 1 ? 'stop' : 'stops'}</span><ChevronDown size={16}/></summary>
-        {stops.length > 0 && <ol>{draftSchedule(draft, index).map(({place, leg, start, end}) => <li key={place.url} className="journey-itinerary-stop">
+        {stops.length > 0 && <ol>{draftSchedule(draft, index).map(({place, leg, start, end}) => <li key={place.url} className="journey-itinerary-stop" data-map-place={mapPlaceId(place)} data-map-day={index+1} tabIndex={-1}>
           <div className="journey-stop-time"><small>{visitTime(start)} – {visitTime(end)}</small></div>
           <div className="journey-stop-info">
             {leg && <small className="journey-stop-leg">{leg.kilometres} km · {leg.minutes} min {leg.method === 'road' ? 'by road' : 'estimated'}</small>}
             <button type="button" className="journey-stop-title" onClick={() => onPlace(place)}>{place.name}</button>
-            <div className="journey-stop-meta"><span>{place.category}</span>{Number.isFinite(place.rating) && <span className="trip-room-rating">★ {place.rating.toFixed(1)} / 5{place.reviewCount ? ` · ${place.reviewCount} reviews` : ''}</span>}{place.publishedPrice && <span>{place.publishedPrice}</span>}<SourceLink url={place.url}>{place.source || 'Source'}</SourceLink></div>
+            <div className="journey-stop-meta"><span>{place.category}</span>{Number.isFinite(place.rating) && <span className="trip-room-rating">★ {place.rating.toFixed(1)} / 5{place.reviewCount ? ` · ${place.reviewCount} reviews` : ''}</span>}{place.publishedPrice && <strong className="travel-price">{place.publishedPrice}</strong>}<SourceLink url={place.url}>{place.source || 'Source'}</SourceLink></div>
+            <GoogleMapsLink place={place} region={draft.name}/>
             {place.openingHours && <small>Published hours · {place.openingHours}</small>}
             {stopReasons(place).length > 0 && <small className="journey-stop-why">Why this stop: {stopReasons(place).join(' · ')}</small>}
           </div>
@@ -250,17 +255,25 @@ function PlannerTimeline({draft, catalog, onPlace, onSave, onEdit, saved, onAdd,
 
 function GuideAnswer({result}) {
   const sections = result.sections || []
-  const overview = sections.find(entry => entry.title === 'Overview')
+  const preferred = ['Overview', 'Why visit', 'What to plan around', 'Festivals and traditions', 'Nature and outdoors', 'Adventure and activities', 'Getting around']
+  const ordered = preferred.flatMap(title => sections.filter(entry => entry.title === title))
+  ordered.push(...sections.filter(entry => !preferred.includes(entry.title)))
+  const renderNote = entry => <><TravelHighlights text={entry.text} points={entry.points} limit={2} preferPrices/>
+    <SourceLink url={entry.sourceUrl}>Wikivoyage</SourceLink></>
   return <section className="agent-source-answer journey-guide">
     <h3>{result.query ? `${result.query} travel guide` : 'Travel guide'}</h3>
     {result.error ? <p>{result.error}</p> : <>
       {result.location && <JourneyPlacePhoto place={{...result.location, category:'Sight'}}/>}
-      {overview && <p>{overview.text.split(/\n\s*\n/)[0]}</p>}
-      {sections.filter(entry => entry !== overview).map((entry, index) => <details key={entry.title} open={index === 0}>
-        <summary>{entry.title}</summary>{entry.text.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
-        <SourceLink url={entry.sourceUrl}>Wikivoyage</SourceLink>
-      </details>)}
-      {overview && <SourceLink url={overview.sourceUrl}>Wikivoyage destination guide</SourceLink>}
+      {result.location && <GoogleMapsLink place={result.location} region={result.location.region || result.location.country}/>}
+      {ordered.slice(0, 3).map(entry => <article key={entry.title} className="journey-research-result">
+        <h4>{entry.title}</h4>{renderNote(entry)}
+      </article>)}
+      {ordered.length > 3 && <details><summary>More guide highlights</summary>
+        {ordered.slice(3).map(entry => <article key={entry.title} className="journey-research-result">
+          <h4>{entry.title}</h4>{renderNote(entry)}
+        </article>)}
+      </details>}
+      {!!ordered.length && <small className="travel-source-note">Confirm published prices and hours before you go.</small>}
     </>}
   </section>
 }
@@ -273,7 +286,7 @@ function SourceAnswer({tool, onRetry, ...actions}) {
     {result.error ? <p>{result.error}</p> : <>
       {result.location && <JourneyPlacePhoto place={{...result.location, category:'Sight'}}/>}
       <small className="agent-source-status">{resultStatus(result)}</small>{result.findings?.map(item => <article className="journey-research-result" key={item.url}>
-      <h4>{item.title}</h4><p>{item.excerpt}</p><SourceLink url={item.url}>Read on {item.publisher}</SourceLink>
+      <h4>{item.title}</h4><TravelHighlights text={item.excerpt} limit={2} preferPrices/><SourceLink url={item.url}>Read on {item.publisher}</SourceLink>
     </article>)}</>}
     {result.error && onRetry && <Button onClick={onRetry} disabled={actions.busy}>Retry lookup</Button>}
   </section>
@@ -316,7 +329,7 @@ function DraftPreview({draft, busy, onReview, onSave}) {
   return <section className="agent-draft agent-review" aria-label="Provisional itinerary">
     <div><h3>Draft itinerary</h3><small>SIMULATED · based on your current trip details</small></div>
     <ol>{draft.days.map((day, index) => <li key={index}><strong>Day {index + 1}</strong><span>{day.stops.join(' · ') || 'Free time'}</span></li>)}</ol>
-    {Number.isFinite(draft.total) && <p>{money(draft.total)} estimated for the group{draft.unpriced?.length ? `, excluding ${draft.unpriced.join(' and ').toLowerCase()}` : ''}.</p>}
+    {Number.isFinite(draft.total) && <p><HighlightPrice text={money(draft.total)}/> estimated for the group{draft.unpriced?.length ? `, excluding ${draft.unpriced.join(' and ').toLowerCase()}` : ''}.</p>}
     {Array.isArray(draft.unverifiedPreferences) && draft.unverifiedPreferences.length > 0 && <p>Check separately: {draft.unverifiedPreferences.join(', ')}.</p>}
     {onSave && <div className="agent-pills">
       <Button variant="primary" disabled={busy} onClick={onSave}>Save this draft</Button>
@@ -353,6 +366,9 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
   const [pendingAnswer, setPendingAnswer] = useState(null)
   const [revealVersion, setRevealVersion] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+  const [pinnedPlace, setPinnedPlace] = useState(null)
   const [tripToolsOpen, setTripToolsOpen] = useState(false)
   const [mapOpen, setMapOpen] = useMapPanel()
   const [selectedPlace, setSelectedPlace] = useState(null)
@@ -366,7 +382,9 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [roomDraftId, setRoomDraftId] = useState(null)
   const transcript = useRef(null)
-  const followLatest = useRef(true)
+  const pendingReply = useRef(null)
+  const replyScroll = useRef(null)
+  const openedTranscript = useRef(false)
   const sidebarToggle = useRef(null)
   const mapToggle = useRef(null)
   const chatMenu = useRef(null)
@@ -377,7 +395,6 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
   const promptTrigger = useRef(null)
   const replyHeading = useRef(null)
   const focusNextReply = useRef(false)
-  const revealNextReply = useRef(false)
   const composer = useRef(null)
   const active = useRef(null)
   const lock = useRef(false)
@@ -391,7 +408,7 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
   usePopoverDismiss({open:promptMenu,panel:promptList,trigger:promptTrigger,onDismiss:()=>setPromptMenu(false)})
 
   function jumpToLatest(smooth = false) {
-    followLatest.current = true
+    replyScroll.current = null
     setJumpVisible(false)
     const node = transcript.current
     if (node) node.scrollTo({top:node.scrollHeight, behavior:smooth && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 'smooth' : 'instant'})
@@ -400,13 +417,8 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
   function updateScroll() {
     const node = transcript.current
     const nearLatest = node.scrollHeight - node.scrollTop - node.clientHeight < 96
-    followLatest.current = nearLatest
     setJumpVisible(!nearLatest)
   }
-
-  useLayoutEffect(() => {
-    if (followLatest.current) jumpToLatest()
-  }, [model?.version, busy, error, tools, pendingAnswer, revealVersion, sidebarOpen, resumePlanning])
 
   useEffect(() => {
     const update = () => setConnected(navigator.onLine)
@@ -491,8 +503,7 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
   async function send(action) {
     if (lock.current || (token && !model) || (contextId && !contextReady)) return false
     lock.current = true
-    followLatest.current = true
-    revealNextReply.current = true
+    replyScroll.current = {version:model?.version, start:null}
     stoppedByUser.current = false
     const controller = new AbortController()
     active.current = controller
@@ -570,7 +581,8 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
           if (event.type === 'done') {
             setModel(validateSession(event))
             const reply = event.events.at(-1)
-            if (!streamed && replyTextFor(reply) && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            if (!streamed && replyTextFor(reply) && !reply.tools?.some(tool => tool.result) && !reply.liveDraft &&
+                !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
               setRevealVersion(event.version)
             }
             finished = true
@@ -636,7 +648,9 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
   }
 
   async function remove() {
-    if (!token || busy || !window.confirm('Delete this planning conversation?')) return
+    if (!token || lock.current || busy) return
+    lock.current = true
+    setDeleteError('')
     setBusy(true)
     try {
       await request('planning-agent/sessions/' + token, {method: 'DELETE'})
@@ -649,6 +663,9 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
       setRoomOpen(false)
       setShortlist([])
       setSelectedPlace(null)
+      setPinnedPlace(null)
+      setDeleteOpen(false)
+      openedTranscript.current = false
       setToken('')
       setModel(null)
       setTools([])
@@ -659,8 +676,8 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
         setContextReady(false)
         setResumeAttempt(value => value + 1)
       }
-    } catch (failure) {setError(plannerError(failure))}
-    finally {setBusy(false)}
+    } catch (failure) {setDeleteError(plannerError(failure))}
+    finally {lock.current = false; setBusy(false)}
   }
 
   const brief = model?.state.brief || {}
@@ -691,15 +708,16 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
     return {center, places: [...places.values()], routes: lookup ? [] : itinerary.routes}
   }, [itineraryRequest, liveDraft, model, selectedPlace, shortlist, tools])
   const [preferenceField, setPreferenceField] = useState(null)
-  const [party, setParty] = useState(null)
-  const [interestSelection, setInterestSelection] = useState([])
-  const [interestsOpen, setInterestsOpen] = useState(false)
-  const latestIntake = itineraryRequest || (contextDraft ? {destination: contextDraft.name, days: contextDraft.days.length, people: contextDraft.travelers, date: contextDraft.departure, budget: contextDraft.budget, diet: contextDraft.mealPreference, pace: contextDraft.pace, party:contextDraft.party} : {})
+  const latestIntake = itineraryRequest || (contextDraft ? {destination:contextDraft.name, origin:contextDraft.origin, localStart:!contextDraft.origin,
+    days:contextDraft.days.length, people:contextDraft.travelers, date:contextDraft.departure, flexibleDates:!contextDraft.departure,
+    budget:contextDraft.budget, budgetOpen:contextDraft.budget==null, diet:contextDraft.mealPreference, pace:contextDraft.pace,
+    party:contextDraft.party, mobility:contextDraft.mobility, interests:contextDraft.interests,
+    notes:contextDraft.notes, transport:contextDraft.transportPreference, stayPreferences:contextDraft.stayPreferences} : {})
   const hasMap = Boolean(!contextId && (mapData.places.length || mapData.center || selectedPlace))
   const plannerLabel = liveDraft && !activeIntake?.needsBuild ? 'Edit itinerary' : activeIntake ? 'Continue planning' : 'Plan a trip'
   const validDraft = drafts?.some(item => item.id === liveDraft?.id)
   const roomDraft = drafts?.find(item => item.id === roomDraftId) || (liveDraft?.id === roomDraftId ? liveDraft : null)
-  const editableMessage = recent?.kind === 'message' && recent.text?.trim() ? recent.text : ''
+  const editableMessage = recent?.kind === 'message' && !recent.settingsChange && recent.text?.trim() ? recent.text : ''
   const revealing = revealVersion !== null && revealVersion === model?.version
   const recentResults = (recent?.tools || []).map(placeToolResult).findLast(result => result?.places?.length)
   const followUpCity = recentResults?.location?.name || recentResults?.query || liveDraft?.name || itineraryRequest?.destination ||
@@ -726,6 +744,14 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
   function openPlace(item) {
     setRoomOpen(false)
     setSelectedPlace(mapPlace(item))
+  }
+
+  function revealMapPlace(item) {
+    if (!item) return
+    const id = mapPlaceId(item)
+    setPinnedPlace(id)
+    replyScroll.current = null
+    if (!revealMapCard(transcript.current, id, item.day)) openPlace(item)
   }
 
   function saveMedia(item) {
@@ -807,12 +833,6 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
     ? catalog.find(item => item.id === value)?.name || value
     : field === 'budget' ? money(Number(value)) : String(value)
   function editIntakeField(field) {
-    if (field === 'interests') {
-      setInterestSelection(Array.isArray(latestIntake.interests) ? latestIntake.interests : [])
-      setInterestsOpen(true)
-      return
-    }
-    if (field === 'people') setParty(latestIntake.party || {adults:latestIntake.people || 1, children:0, infants:0, pets:0})
     setPreferenceField(field)
   }
   const edit = (field, value) => {
@@ -838,21 +858,35 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
   const latestBuildIndex = latestBuildTool ? liveBuildStages.indexOf(latestBuildTool.name) : -1
   const buildProgressStep = runningBuildTool ? liveBuildStages.indexOf(runningBuildTool.name)
     : latestBuildIndex >= 0 && ['done','fallback'].includes(latestBuildTool.status) ? latestBuildIndex + 1 : null
-  useEffect(() => {
-    if (busy || !model?.version) return
-    const heading=replyHeading.current
-    const thread=transcript.current
-    if(revealNextReply.current&&heading&&thread){
-      const y=heading.getBoundingClientRect().top-thread.getBoundingClientRect().top+thread.scrollTop-9
-      thread.scrollTo({top:Math.max(0,y),behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})
-      setJumpVisible(false)
+  useLayoutEffect(() => {
+    const thread = transcript.current
+    if (!thread) return
+    const anchor = node => {
+      if (node) thread.scrollTo({top:thread.scrollTop + node.getBoundingClientRect().top -
+        thread.getBoundingClientRect().top - 9, behavior:'instant'})
     }
-    revealNextReply.current=false
-    if (focusNextReply.current || document.activeElement === document.body) {
-      replyHeading.current?.focus({preventScroll: true})
+    const turn = replyScroll.current
+    if (busy && turn && turn.start === null && pendingReply.current) {
+      anchor(pendingReply.current)
+      turn.start = thread.scrollTop
+    } else if (!busy && turn) {
+      const answered = model?.version > (turn.version ?? 0)
+      const stillReadingReply = turn.start === null || Math.abs(turn.start - thread.scrollTop) < 2
+      if (answered && stillReadingReply) anchor(replyHeading.current)
+      if (answered && stillReadingReply && focusNextReply.current) replyHeading.current?.focus({preventScroll:true})
+      replyScroll.current = null
+      focusNextReply.current = false
+      openedTranscript.current ||= Boolean(model?.version)
+    } else if (!busy && model && !openedTranscript.current) {
+      openedTranscript.current = true
+      anchor(replyHeading.current)
     }
-    focusNextReply.current = false
-  }, [model?.version, busy])
+    setJumpVisible(thread.scrollHeight - thread.scrollTop - thread.clientHeight >= 96)
+  }, [model, busy, pendingAnswer, error, tools, revealVersion])
+
+  useLayoutEffect(() => {
+    if (resumePlanning) replyHeading.current?.focus()
+  }, [resumePlanning])
 
   async function checkExchange() {
     setExchangePending(true)
@@ -1003,7 +1037,8 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
     {voice.error && <small role="status">{voice.error}</small>}
   </form>
 
-  const preferenceLabels = {destination:'Destination', origin:'Departure city', days:'Length', date: 'Dates', people: 'Travellers', budget: 'Budget', diet: 'Food', pace:'Pace', preferences:'Preferences'}
+  const preferenceLabels = {destination:'Destination', origin:'Departure city', days:'Trip length', date:'Travel dates', people:'Travellers', budget:'Budget',
+    diet:'Food', pace:'Pace', interests:'Interests', transport:'Transport', stayPreferences:'Stays', mobility:'Accessibility', notes:'Trip notes'}
   const preferenceValues = {
     destination: latestIntake.location?.name || latestIntake.destination,
     origin: latestIntake.localStart ? 'Starting at destination' : latestIntake.origin || 'Choose departure city',
@@ -1013,14 +1048,17 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
     budget: latestIntake.budgetOpen ? 'Undecided' : latestIntake.budget ? money(latestIntake.budget) : 'Choose budget',
     diet: latestIntake.diet || 'No food preference', pace: latestIntake.pace || 'Choose pace',
     interests: latestIntake.interests?.length ? latestIntake.interests.join(' · ') : 'Choose interests',
+    transport: latestIntake.transport || 'Any mode', mobility: latestIntake.mobility || 'No preference',
+    stayPreferences: latestIntake.stayPreferences?.join(' · ') || 'Any stay type',
+    notes: latestIntake.notes ? 'View or edit notes' : 'Add a note',
   }
   const showMapPanel = hasMap && mapOpen && !(roomOpen && roomDraft)
   const tripDetails = latestIntake.destination && <div className="journey-trip-chips">
-    {Object.entries(preferenceLabels).filter(([field]) => field !== 'preferences' && preferenceValues[field]).map(([field, label]) =>
+    {Object.entries(preferenceLabels).filter(([field]) => preferenceValues[field]).map(([field, label]) =>
       <button type="button" className="journey-trip-chip" key={field} disabled={busy || !ready} onClick={() => {
         setDetailsOpen(false)
         editIntakeField(field)
-      }}><small>{label}</small><strong>{preferenceValues[field]}</strong></button>)}
+      }}><small>{label}</small><strong>{preferenceValues[field]}</strong><Pencil size={12} aria-hidden="true"/></button>)}
   </div>
   return <div className="page inner-page agent-workspace journey-chat" data-network-offline={!connected || undefined}>
     <div className="agent-header"><div className="journey-chat-heading"><h1>{contextTrip ? `Discuss ${catalog.find(item => item.id === contextTrip.brief.destination)?.name || 'this trip'}` : latestIntake.destination ? `Trip to ${placeTitle(latestIntake.location) || liveDraft?.name || latestIntake.destination}` : 'AI Assistant'}</h1></div>
@@ -1033,6 +1071,8 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
         </Button>}
         {tripDetails && <Button className={showMapPanel ? 'journey-details-mobile-toggle' : ''} icon="info" aria-label="Trip details" onClick={() => setDetailsOpen(true)}><span className="agent-header-label">Trip details</span></Button>}
         {hasTripPanel && <Button ref={sidebarToggle} icon="wallet" aria-label={sidebarOpen ? 'Hide trip budget' : 'Trip budget'} aria-expanded={sidebarOpen} aria-controls="agent-trip-panel" onClick={() => setSidebarOpen(open => !open)}><span className="agent-header-label">{sidebarOpen ? 'Hide trip budget' : 'Trip budget'}</span></Button>}
+      {token && model && <Button className="agent-delete" aria-label="Delete chat" title="Delete chat" disabled={busy}
+          onClick={() => {setDeleteError('');setDeleteOpen(true)}}><Trash2 size={17}/><span className="agent-header-label">Delete chat</span></Button>}
         <details className="agent-chat-menu" ref={chatMenu} open={settingsOpen}>
           <summary ref={settingsTrigger} title="Conversation settings" onClick={event=>{event.preventDefault();setSettingsOpen(open=>!open)}}><Ellipsis size={21}/><span className="yatra-sr-only">Conversation settings</span></summary>
           <div onClick={event=>{if(event.target.closest('button'))setSettingsOpen(false)}}>
@@ -1042,7 +1082,6 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
                 <Button onClick={() => exportConversation('json')}>Download JSON</Button></>}
               <Button disabled={busy || (contextId ? model.version === 0 : !model.canUndoItinerary)} onClick={() => send({kind: 'undo'})}>Undo last change</Button>
               <Button disabled={busy || (contextId ? model.version === 0 : !model.canRedoItinerary)} onClick={() => send({kind: 'redo'})}>Redo last change</Button>
-              <Button disabled={busy} onClick={remove}>Delete planning conversation</Button>
             </>}
           </div>
         </details>
@@ -1055,7 +1094,7 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
         onOpenTrip={() => onOpenDraft?.(roomDraft.id)} onAsk={askFollowUp}
         onClose={() => setRoomOpen(false)} onPlaceSelect={openPlace} onEdit={() => openBuilder(roomDraft)}/></div>
       : showMapPanel && <aside className="journey-side journey-map-side" aria-label="Trip map panel">
-        <JourneyMap key={mapData.center?.name} {...mapData} compactControls onSelect={openPlace} onClose={() => {setMapOpen(false);mapToggle.current?.focus()}}/>
+        <JourneyMap key={mapData.center?.name} {...mapData} selectedId={pinnedPlace} compactControls onSelect={revealMapPlace} onClose={() => {setMapOpen(false);mapToggle.current?.focus()}}/>
         {tripDetails && <section className="journey-trip-summary" aria-label="Your trip so far">
           <h2>Your trip so far</h2>
           {tripDetails}
@@ -1145,7 +1184,7 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
           {resuming && <Button onClick={() => {setError(''); setResumeAttempt(value => value + 1)}}>Retry opening conversation</Button>}
           {!resuming && retryAction && !busy && <Button disabled={offline} onClick={() => {setError(''); void send(retryAction)}}>Retry</Button>}
         </div>}
-        {busy && <section className="agent-reply agent-pending" aria-label="YatraBuddy’s response in progress">
+        {busy && <section className="agent-reply agent-pending" ref={pendingReply} aria-label="YatraBuddy’s response in progress">
           <span className="agent-avatar" aria-hidden="true"><Sparkles size={18}/></span>
           <div className="agent-answer">
             {!pendingAnswer && <AgentProgress assistant
@@ -1216,10 +1255,7 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
         <div className="agent-composer-dock">
         {!contextId && latestIntake.destination && !busy && <details ref={tripTools} className="journey-trip-tools" open={tripToolsOpen}>
           <summary ref={tripToolsTrigger} onClick={event=>{event.preventDefault();setTripToolsOpen(open=>!open)}}>Trip tools <ChevronRight size={15}/></summary><div className="journey-trip-pills" aria-label="Trip preferences and follow-ups" onClick={event=>{if(event.target.closest('button'))setTripToolsOpen(false)}}>
-          {Object.entries(preferenceLabels).map(([field, label]) => <Button key={field} onClick={() => {
-            if (field === 'people') setParty(latestIntake.party || {adults:latestIntake.people || 1, children:0, infants:0, pets:0})
-            setPreferenceField(field)
-          }}>{preferenceValues[field] || label}</Button>)}
+          {Object.entries(preferenceLabels).map(([field, label]) => <Button key={field} onClick={() => editIntakeField(field)}>{label}</Button>)}
           <Button onClick={() => askFollowUp(`Find hotels in ${latestIntake.destination}`)}>Stays</Button>
           <Button onClick={() => askFollowUp(`Find ${latestIntake.diet && !['No restrictions','No preference'].includes(latestIntake.diet) ? latestIntake.diet + ' ' : ''}restaurants in ${latestIntake.destination}`)}>Restaurants</Button>
           <Button onClick={() => askFollowUp(`Things to do in ${latestIntake.destination}`)}>Things to do</Button>
@@ -1229,7 +1265,7 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
         </div></details>}
         {jumpVisible && <Button className="agent-jump" onClick={() => jumpToLatest(true)}><ArrowDown size={16}/> Jump to latest</Button>}
         {interrupted && hasTrip && !busy && !messageEdit && <div className="agent-follow-ups">
-          <Button onClick={() => {followLatest.current = true; setResumePlanning(true)}}>Continue trip planning</Button>
+          <Button onClick={() => setResumePlanning(true)}>Continue trip planning</Button>
         </div>}
         {editableMessage && !busy && !messageEdit && (showPlanning || showQuestion) && !recent.answer && !recent.notice &&
           !(recent.tools || []).some(tool => sourceTools.includes(tool.name) && tool.result) &&
@@ -1284,54 +1320,17 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
         </section>}
       </aside>}
     </div>
-    {preferenceField && <Dialog label={preferenceLabels[preferenceField]} onClose={() => setPreferenceField(null)}>
-      <form className="stack journey-preference-form" onSubmit={event => {
-        event.preventDefault()
-        const fields = new FormData(event.currentTarget)
-        const value = fields.get('value')
-        const end = fields.get('end')
-        const text = {date:value ? `Travel on ${value}${end ? ` through ${end}` : ''}` : `${fields.get('days')} days with flexible dates`,
-          people:party && `${party.adults} adults, ${party.children} children, ${party.infants} infants, ${party.pets} pets`,
-          budget:`Budget ₹${value}`, diet:value, preferences:`Trip preferences: ${value}`,
-          destination:`Plan a trip to ${value}`, origin:`Plan a trip to ${latestIntake.destination} from ${value}`,
-          days:`Plan a trip to ${latestIntake.destination} for ${value} days`, pace:`Trip preferences: ${value}`}[preferenceField]
-        setPreferenceField(null)
-        askFollowUp(text)
-      }}>
-        <h2>{preferenceLabels[preferenceField]}</h2>
-        {preferenceField === 'people' && party ? <div className="journey-party">
-          {[['adults','Adults','Ages 13 and up'],['children','Children','Ages 2–12'],['infants','Infants','Under 2'],['pets','Pets','Check provider policies']].map(([key,label,description]) => <div key={key}>
-            <span><strong>{label}</strong><small>{description}</small></span>
-            <Button aria-label={`Remove ${key}`} disabled={party[key] <= (key==='adults'?1:0)} onClick={() => setParty({...party,[key]:party[key]-1})}><Minus size={16}/></Button>
-            <output aria-label={label}>{party[key]}</output>
-            <Button aria-label={`Add ${key}`} disabled={key==='pets' ? party.pets >= 8 : party.adults + party.children + party.infants >= 8} onClick={() => setParty({...party,[key]:party[key]+1})}><Plus size={16}/></Button>
-          </div>)}
-        </div> : <label>{preferenceField === 'date' ? 'Departure date (optional)' : preferenceField === 'budget' ? 'Total budget in INR' : preferenceLabels[preferenceField]}
-          {preferenceField === 'diet' ? <select name="value" defaultValue={latestIntake.diet || 'No preference'}>
-            {['No preference','Vegetarian','Non-vegetarian','Vegan','Jain','Halal'].map(diet => <option key={diet}>{diet}</option>)}
-          </select> : preferenceField === 'preferences' ? <textarea name="value" required maxLength={450} rows={3} defaultValue={latestIntake.notes || ''} placeholder="For example: relaxed pace, museums, vegan meals"/>
-            : <input name="value" required={preferenceField !== 'date'} defaultValue={latestIntake[preferenceField] || ''}
-              type={preferenceField === 'date' ? 'date' : ['budget','days'].includes(preferenceField) ? 'number' : 'text'}
-              min={preferenceField === 'budget' ? 1000 : preferenceField === 'days' ? 1 : undefined}
-              max={preferenceField === 'budget' ? 10000000 : preferenceField === 'days' ? 5 : undefined} maxLength={preferenceField === 'destination' || preferenceField === 'origin' ? 110 : undefined}/>}
-        </label>}
-        {preferenceField === 'date' && <><label>Last day (optional)<input name="end" type="date" defaultValue={latestIntake.endDate || ''}/></label><label>Duration when dates are flexible<select name="days" defaultValue={latestIntake.days || 2}>{[1,2,3,4,5].map(day => <option key={day} value={day}>{day} {day === 1 ? 'day' : 'days'}</option>)}</select></label></>}
-        <Button variant="primary" type="submit">Update trip</Button>
-      </form>
+    {deleteOpen && <Dialog label="Delete this chat?" className="journey-editor-dialog" onClose={() => !busy && setDeleteOpen(false)}>
+      <div className="journey-editor">
+        <div className="journey-editor-heading"><span><Trash2 size={20}/></span><div><h2>Delete this chat?</h2><p>This removes the conversation. Trips you’ve already saved stay in My Trips.</p></div></div>
+        {deleteError && <p className="form-error" role="alert">{deleteError}</p>}
+        <div className="journey-editor-actions"><Button disabled={busy} onClick={() => setDeleteOpen(false)}>Cancel</Button>
+          <Button className="journey-delete-confirm" disabled={busy} onClick={remove}>{busy ? 'Deleting…' : 'OK, delete chat'}</Button></div>
+      </div>
     </Dialog>}
-    {interestsOpen && <Dialog label="Choose trip interests" onClose={() => setInterestsOpen(false)}>
-      <form className="stack journey-preference-form" onSubmit={event => {
-        event.preventDefault()
-        setInterestsOpen(false)
-        void send({kind:'message', text:'Update my trip interests', preferences:{interests:interestSelection}, replace_interests:true})
-      }}>
-        <div><h2>What do you enjoy?</h2><p>Choose everything you’d like me to consider. I’ll rank verified places around these interests.</p></div>
-        <div className="journey-interest-options" aria-label="Trip interests">
-          {['Nature','Culture','Food','Adventure','Relaxation','Shopping','Arts & design','Nightlife'].map(interest => <Pill key={interest} active={interestSelection.includes(interest)} onClick={() => setInterestSelection(current => current.includes(interest)
-            ? current.filter(item => item !== interest) : [...current, interest])}>{interest}</Pill>)}
-        </div>
-        <Button variant="primary" type="submit" disabled={busy}>Done</Button>
-      </form>
-    </Dialog>}
+    {preferenceField && <TripSettingsDialog key={preferenceField} field={preferenceField} label={preferenceLabels[preferenceField]}
+      intake={latestIntake} catalog={catalog} valueLabel={preferenceValues[preferenceField]} onClose={() => setPreferenceField(null)}
+      onSave={patch => send({kind:'message',text:`Update ${preferenceLabels[preferenceField].toLowerCase()}`,trip_settings:patch})}/>}
+
   </div>
 }

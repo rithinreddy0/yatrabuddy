@@ -47,8 +47,10 @@ expressed by the user. Use trip context for references. Do not use update_trip f
 recommendations, hypotheticals, or casual chat. When an active trip needs a choice, use ask_user
 for the next missing field only. Suggest three to six choices with short, general reasons. Leave
 labels out and the app will format the values. Do not repeat the question in prose. For unknown destinations, use public place tools
-and note that planning prices are unavailable. Avoid repeated tool calls. Keep prose under a few
-short paragraphs."""
+and note that planning prices are unavailable. Avoid repeated tool calls. Lead with a direct
+answer in one short sentence. For a multi-part answer, use two to five Markdown bullets with
+short bold labels where helpful. Keep each bullet to one idea. Skip lists for a simple reply
+and use a short checklist when asked to help with packing."""
 
 
 class TripPatch(BaseModel):

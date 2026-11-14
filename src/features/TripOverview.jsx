@@ -1,4 +1,3 @@
-import {useMapPanel} from './useMapPanel.mjs'
 import React, {useEffect, useMemo, useRef, useState} from 'react'
 import {Camera, ClipboardList, NotebookPen} from 'lucide-react'
 import {request} from '../api.mjs'
@@ -6,7 +5,7 @@ import {PlacePhoto} from '../components/PlacePhoto.jsx'
 import {PhotoRail} from '../components/PhotoRail.jsx'
 import {DestinationBrief} from '../components/CityBrief.jsx'
 import {revealResult} from '../components/revealResult.mjs'
-import {AgentProgress, Button, Dialog, Icon, IconButton, Pill, SourcePill, TravelArtwork} from '../components/UI.jsx'
+import {AgentProgress, Button, Icon, IconButton, Pill, SourcePill, TravelArtwork} from '../components/UI.jsx'
 import {money} from '../planner.mjs'
 import {draftSchedule, visitTime} from './draftSchedule.mjs'
 import {draftMapData, JourneyMap, mapPlaceId} from './JourneyMap.jsx'
@@ -24,17 +23,17 @@ const mealOptions = ['No preference', 'Vegetarian', 'Non-vegetarian', 'Vegan', '
 const paceOptions = ['Relaxed', 'Balanced', 'Packed']
 const transportModes = ['Walk', 'Bus', 'Metro', 'Auto', 'Cab']
 const shortcuts = [
-  ['overview', 'Overview', 'trip'],
   ['itinerary', 'Itinerary', 'map'],
-  ['bookings', 'Bookings', 'trip'],
+  ['bookings', 'Bookings & tickets', 'trip'],
   ['chat', 'Group chat', 'chat'],
   ['media', 'Memories', Camera],
   ['ideas', 'Ideas', 'heart'],
   ['calendar', 'Calendar', 'calendar'],
   ['transport', 'Transport', 'plane'],
+  ['budget', 'Costs', 'wallet'],
   ['stays', 'Find a stay', 'bed'],
   ['packing', 'Packing list', ClipboardList],
-  ['journal', 'Trip journal', NotebookPen],
+  ['journal', 'Journal & notes', NotebookPen],
   ['preferences', 'Trip preferences', 'settings'],
 ]
 
@@ -247,12 +246,13 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
     if (initialSection === 'invite') return 'chat'
     if (initialSection === 'travel' || shortcuts.some(([id]) => id === initialSection)) return initialSection
     try { if (localStorage.getItem(modeKey)) return 'travel' } catch {}
-    return 'overview'
+    return 'itinerary'
   })
   const [invite, setInvite] = useState(initialSection === 'invite' ? 1 : 0)
-  const [mapOpen, setMapOpen] = useMapPanel()
+  const [mapOpen, setMapOpen] = useState(true)
   const [selection, setSelection] = useState(null)
   const [query, setQuery] = useState('')
+  const [placeQuery, setPlaceQuery] = useState('')
   const voice = useVoiceInput({continuous:false, onTranscript:text => setQuery(current => [current.trim(), text].filter(Boolean).join(' ').slice(0,600))})
   const [status, setStatus] = useState('')
   const [nearby, setNearby] = useState({})
@@ -262,11 +262,13 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
   const mediaSaving = useRef(new Set())
   const sectionHeading = useRef(null)
   const mapToggle = useRef(null)
+  const placePanel = useRef(null)
+  const placeTrigger = useRef(null)
   const active = roomDraft?.updated > draft.updated ? roomDraft : draft
   const stops = active.days.flat()
   const cover = [active.stay, ...stops].find(place => place?.photo?.url) || stops[0]
   const title = section === 'travel' ? 'Travel Mode' : shortcuts.find(([id]) => id === section)?.[1]
-  const mapVisible = mapOpen && (['overview', 'itinerary'].includes(section) || Boolean(selection))
+  const mapVisible = mapOpen && section === 'itinerary'
   const findPlaces = section === 'stays' || section === 'ideas'
   const map = useMemo(() => draftMapData(active), [active])
   const pin = selection ? map.places.find(place => place.url === selection.url) || selection : null
@@ -298,7 +300,28 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
   }
 
   function select(place) {
+    if (place && !selection) placeTrigger.current = document.activeElement
     setSelection(place)
+    if (place && section === 'itinerary') setMapOpen(true)
+    if (place) revealResult(() => placePanel.current, {focus:true})
+  }
+
+  function closePlace() {
+    setSelection(null)
+    placeTrigger.current?.focus({preventScroll:true})
+  }
+
+  function placeDetails() {
+    if (!selection) return null
+    return <div key={mapPlaceId(selection)} className="trip-overview-place-panel" ref={placePanel} tabIndex={-1}
+      onKeyDown={event => {
+        if (event.key === 'Escape') {
+          event.stopPropagation()
+          closePlace()
+        }
+      }}>
+      <PlaceDetails place={selection} onClose={closePlace} onSaveMedia={saveMedia} savedMedia={savedMedia}/>
+    </div>
   }
 
   function sync(next) {
@@ -355,21 +378,19 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
   return <article className="page trip-overview" data-section={section}>
     <header className="trip-overview-header trip-overview-glass">
       <div className="trip-overview-heading">
+        {onBack && <IconButton icon="back" label="My trips" onClick={onBack}/>}
         {cover && <PlacePhoto place={cover} compact lookup className="trip-overview-cover"/>}
         <div>
-        {onBack && <Button variant="text-btn" icon="back" onClick={onBack}>My trips</Button>}
-        <h1>Trip to {active.name}</h1>
-        <p>{[active.region !== active.name && active.region, active.country].filter(Boolean).join(' · ')}</p>
+          <h1>Trip to {active.name}</h1>
+          <p>{[active.region !== active.name && active.region, active.country].filter(Boolean).join(' · ')}</p>
         </div>
       </div>
       <div className="trip-overview-actions">
-        {section !== 'travel' && <Button ref={mapToggle} icon="map" aria-pressed={mapVisible} onClick={() => {
-          if (!mapVisible && !selection && !['overview', 'itinerary'].includes(section)) open('itinerary')
-          setMapOpen(!mapVisible)
-        }}>{mapVisible ? 'Hide map' : 'Show map'}</Button>}
+        {section === 'itinerary' && <Button ref={mapToggle} icon="map" aria-pressed={mapVisible}
+          onClick={() => {setMapOpen(!mapVisible); if (mapVisible) setSelection(null)}}>{mapVisible ? 'Hide map' : 'Show map'}</Button>}
         <Button icon="download" onClick={() => window.print()}>Print / PDF</Button>
         {section !== 'travel' && <Button icon="users" onClick={() => open('chat', true)}>Invite teammates</Button>}
-        <Button icon="compass" variant="primary" aria-pressed={section === 'travel'} onClick={() => open(section === 'travel' ? 'overview' : 'travel')}>
+        <Button icon="compass" variant="primary" aria-pressed={section === 'travel'} onClick={() => open(section === 'travel' ? 'itinerary' : 'travel')}>
           {section === 'travel' ? 'Exit Travel Mode' : 'Travel Mode'}
         </Button>
       </div>
@@ -382,32 +403,16 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
         </button>)}
       </nav>}
       <section className="trip-overview-main" aria-label="Trip planning tools">
+        {section !== 'itinerary' && placeDetails()}
         {!['travel', 'itinerary'].includes(section) && <header className="trip-section-title" key={section} tabIndex={-1} ref={sectionHeading}>
           <h2>{section === 'media' ? 'Photos, videos & memories' : title}</h2>
           {section === 'calendar' && <Button icon="download" disabled={!active.departure}
             title={!active.departure ? 'Set a departure date in trip preferences' : undefined} onClick={() => exportCalendar(active)}>Export calendar</Button>}
         </header>}
-        {section === 'overview' && <>
-          <section className="trip-overview-glass trip-overview-intro">
-            <h2>{active.days.length} {active.days.length === 1 ? 'day' : 'days'} in {active.name}</h2>
-            <p>{stops.length} planned {stops.length === 1 ? 'stop' : 'stops'}{active.origin ? ' · Departing from ' + active.origin : ''}</p>
-            {active.stay && <button type="button" className="trip-overview-stay-preview" onClick={() => select(active.stay)}>
-              <PlacePhoto place={active.stay} compact lookup className="trip-overview-stay-thumb"/>
-              <span><small>Suggested stay</small><strong>{active.stay.name}</strong>
-                {Number.isFinite(active.stay.rating) && <small>★ {active.stay.rating.toFixed(1)} / 5{active.stay.reviewCount ? ` · ${active.stay.reviewCount} reviews` : ''}</small>}
-                {active.stay.publishedPrice && <small>{active.stay.publishedPrice}</small>}</span>
-            </button>}
-            <div className="trip-overview-actions">
-              <Button variant="primary" icon="map" onClick={() => open('itinerary')}>View itinerary</Button>
-              <Button icon="heart" onClick={() => open('ideas')}>Find more ideas</Button>
-              {onEdit && <Button icon="edit" onClick={onEdit}>Edit plan</Button>}
-            </div>
-          </section>
-          <TravelBudget draft={active}/>
-          <DestinationBrief location={active} compact/>
-          <TripPhotoReferences key={active.id} draft={active} stops={stops} onSelect={select}/>
-        </>}
-        {section === 'preferences' && <PreferencesEditor key={active.id + ':' + active.updated} draft={active} save={updatePreferences} onClose={() => open('overview')}/>}
+        {section === 'media' && <TripPhotoReferences key={active.id} draft={active} stops={stops} onSelect={select}/>}
+        {section === 'ideas' && <DestinationBrief location={active} compact/>}
+        {section === 'budget' && <TravelBudget draft={active}/>}
+        {section === 'preferences' && <PreferencesEditor key={active.id + ':' + active.updated} draft={active} save={updatePreferences} onClose={() => open('itinerary')}/>}
         {section === 'transport' && <div className="trip-overview-glass trip-overview-section"><TripTransport draft={active} onAsk={onAsk && (text => onAsk(text, active.id))}/></div>}
         {section === 'stays' && <StayOptions draft={active} nearby={nearby} onSelect={select} onEdit={onEdit} retry={() => setAttempt(value => value + 1)}/>}
         {['packing', 'journal'].includes(section) && <PersonalList key={section} kind={section} tripId={active.id}/>}
@@ -421,7 +426,7 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
             ideas={suggestedIdeas} onPlaceSelect={select} onEdit={onEdit} onDraftUpdate={sync}/>
         </div>}
         </div>
-        {onAsk && ['overview','itinerary'].includes(section) && <form className="trip-overview-composer" onSubmit={event => {
+        {onAsk && section === 'itinerary' && <form className="trip-overview-composer" onSubmit={event => {
           event.preventDefault()
           const text = query.trim()
           if (text) {voice.stop();onAsk(text, active.id)}
@@ -438,15 +443,22 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
       {mapVisible && <aside className="trip-overview-context" aria-label="Trip map panel">
         <div className="trip-overview-map-frame">
           <JourneyMap center={map.center} places={mapPlaces} routes={map.routes} selectedId={pin && mapPlaceId(pin)}
-            compactControls onSelect={select} onClose={() => {setMapOpen(false);mapToggle.current?.focus({preventScroll:true})}}/>
+            compactControls onSelect={select} onClose={() => {setMapOpen(false);setSelection(null);mapToggle.current?.focus({preventScroll:true})}}/>
+          {placeDetails()}
+        </div>
+      </aside>}
+      {section === 'itinerary' && <aside className="trip-overview-places" aria-label="Trip places">
+        <header><h2>Places <small>{stops.length}</small></h2><Button icon="plus" onClick={() => open('ideas')}>Find places</Button></header>
+        <label className="trip-overview-place-search"><Icon name="search" size={17}/><input aria-label="Search trip places" placeholder="Search trip places" value={placeQuery} onChange={event => setPlaceQuery(event.target.value)}/></label>
+        <div className="trip-overview-place-list">{stops.filter(place => `${place.name} ${place.category} ${place.address || ''}`.toLowerCase().includes(placeQuery.trim().toLowerCase())).map((place, index) =>
+          <button type="button" key={`${place.url}-${index}`} onClick={() => select(place)}>
+            <PlacePhoto place={place} compact lookup className="trip-overview-place-thumb"/>
+            <span><strong>{place.name}</strong><small>{place.category}{place.address ? ` · ${place.address}` : ''}</small></span>
+          </button>)}
+          {stops.length === 0 && <p>Add a place to begin planning this trip.</p>}
         </div>
       </aside>}
     </div>
-    {selection && <Dialog label={selection.name} className="discovery-details-dialog" onClose={() => setSelection(null)}>
-      <PlaceDetails key={mapPlaceId(selection)} place={selection}
-        onShowMap={() => {if (!['overview', 'itinerary'].includes(section)) open('itinerary'); setMapOpen(true); setSelection(null)}}
-        onSaveMedia={saveMedia} savedMedia={savedMedia}/>
-    </Dialog>}
     <PrintItinerary draft={active}/>
   </article>
 }

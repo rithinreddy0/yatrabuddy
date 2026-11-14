@@ -21,7 +21,7 @@
 .journey-side{grid-column:2;grid-row:1;min-width:0;min-height:0;overflow:hidden;border-radius:23px;background:var(--journey-glass);border:1px solid var(--line);box-shadow:var(--shadow);animation:journey-in var(--journey-motion) ease-out both}
 .journey-chat .agent-chat{grid-column:1;grid-row:1}
 .journey-side>.journey-map{height:100%;min-height:0;border:0;border-radius:0}
-.journey-chat .agent-thread{padding:12px 8px 14px;gap:17px;scrollbar-width:none}
+.journey-chat .agent-thread{padding:12px 8px 14px;gap:17px;scrollbar-width:none;overflow-anchor:none}
 .journey-chat .agent-reply{gap:9px}
 .journey-chat .agent-reply .agent-avatar{width:32px;height:32px}
 .journey-chat .agent-answer-content{min-width:0}

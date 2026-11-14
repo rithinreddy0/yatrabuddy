@@ -17,6 +17,15 @@
 .city-brief-reading ul{display:grid;gap:8px;padding:0 0 0 19px;margin:0}
 .city-brief-reading li{padding:4px 0}
 .city-brief-license{margin-left:8px;opacity:.85}
+.travel-shell .city-brief-destination .city-brief-points,.guide-quick-places{grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));gap:10px}
+.city-brief-destination .city-brief-points article{padding:12px}
+.city-brief-points .travel-highlights{color:var(--muted);font-size:clamp(12px,1.05vw,15px)}
+.city-brief-more>summary,.guide-panel>summary{cursor:pointer;font-weight:600}
+.city-brief-more[open]>summary{margin-bottom:8px}
+.guide-quick-places{display:grid;margin-top:10px}
+.guide-quick-places>div{min-width:0;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.guide-quick-places h3{margin:0;font-size:15px}
+.guide-quick-places .travel-price{margin-inline-start:5px}
 .city-brief-advisories{display:flex;gap:7px;flex-wrap:wrap;margin-top:7px}
 .city-brief-advisories a{font-size:13px;color:var(--deep);text-decoration:underline;text-underline-offset:3px}
 .news-summary-image{width:100%;aspect-ratio:1.8;object-fit:cover;border-radius:11px;margin-bottom:8px}

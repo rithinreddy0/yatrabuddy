@@ -24,14 +24,15 @@ from . import agents, auth, conversation, gemini_planning, groq_planning
 from .catalog import DESTINATIONS
 from .db import Base, transaction
 from .destination_images import destination_images
-from .models import Brief, MealPreference, Pace, SourcedStay, Style, Transport, Trip, WorldwideDraft
+from .models import Brief, MealPreference, Pace, SourcedStay, Style, Transport, Trip, TripParty, WorldwideDraft
 from .nearby import add_meal_results, distance_metres, estimate_day_route, nearby_report, transit_passes
 from .locations import compact, destination_guide, find_destinations, is_settlement, lookup
+from .city_briefing import concise_points, destination_notes, read_guide
 from .place_search import lookup_places, public_url
 from .planner_commands import command_reply, trip_snapshot
 from .public_answers import contextual_query, factual_answer, research_intent, venue_subject, video_answer
 from .source_cache import SourceCache, source_result
-from .trip_intake import draft_from_sources, next_intake_question, update_intake
+from .trip_intake import draft_from_sources, next_intake_question, trip_dates, update_intake
 from .wikivoyage import wikivoyage_document
 
 router = APIRouter(prefix="/api/planning-agent")
@@ -94,6 +95,57 @@ class PlanningPreferences(BaseModel):
     notes: str | None = Field(default=None, max_length=500)
 
 
+CalendarDate = date
+
+
+class TripSettings(BaseModel):
+    model_config = {"extra": "forbid"}
+    destination: str | None = Field(default=None, min_length=2, max_length=100)
+    origin: str | None = Field(default=None, min_length=2, max_length=100)
+    date: CalendarDate | None = None
+    endDate: CalendarDate | None = None
+    days: int | None = Field(default=None, ge=1, le=5)
+    budget: int | None = Field(default=None, ge=1000, le=10_000_000)
+    party: TripParty | None = None
+    diet: MealPreference | None = None
+    pace: Pace | None = None
+    transport: Transport | None = None
+    mobility: Literal["No preference", "Less walking", "Step-free when possible"] | None = None
+    notes: str | None = Field(default=None, max_length=500)
+    stayPreferences: list[Literal["Hotels", "Boutique stays", "Resorts", "Vacation rentals", "Hostels", "Homestays"]] | None = Field(default=None, max_length=6)
+    interests: list[Literal["Nature", "Culture", "Food", "Adventure", "Relaxation", "Shopping", "Arts & design", "Nightlife"]] | None = Field(default=None, max_length=8)
+
+    def apply(self, previous):
+        changes = self.model_dump(exclude_unset=True, mode="json")
+        result = dict(previous)
+        for field, value in changes.items():
+            if field in {"origin", "budget", "endDate", "date"} and value is None:
+                result.pop(field, None)
+            elif value is not None:
+                result[field] = value
+        if "destination" in changes and result.get("destination") != previous.get("destination"):
+            result.pop("location", None)
+        if "origin" in changes:
+            result["localStart"] = changes["origin"] is None
+        if "budget" in changes:
+            result.pop("budgetPerPerson", None)
+            result["budgetOpen"] = changes["budget"] is None
+        if self.party:
+            result["people"] = self.party.adults + self.party.children + self.party.infants
+        if "date" in changes or "endDate" in changes:
+            start, end = result.get("date"), result.get("endDate")
+            if end and not start:
+                raise ValueError("Choose a departure date before adding a last day.")
+            if start:
+                dates = trip_dates(" ".join(filter(None, (start, end))), date.today())
+                if end:
+                    result["days"] = (dates[-1] - dates[0]).days + 1
+            result["flexibleDates"] = not start
+        elif "days" in changes and changes["days"] != previous.get("days"):
+            result.pop("endDate", None)
+        return result
+
+
 class Turn(BaseModel):
     version: int = Field(ge=0)
     kind: Literal["message", "edit", "select", "undo", "redo", "save", "continue", "use_stay", "review_draft", "save_draft"]
@@ -107,6 +159,7 @@ class Turn(BaseModel):
     replace_interests: bool = False
     preferences: PlanningPreferences | None = None
     live_context: WorldwideDraft | None = None
+    trip_settings: TripSettings | None = None
 
 
 class TripContext(BaseModel):
@@ -883,9 +936,11 @@ async def guide_answer(query, sections=None):
         return {"query": query, "sections": [], "error": "I couldn’t match that destination. Try adding its country or region."}
     name = query.split(",", 1)[0].strip().casefold()
     location = next((item for item in matches if item["name"].casefold() == name), matches[0])
-    guide = await destination_guide(location)
+    guide = await read_guide(location)
     if sections:
         guide["sections"] = [item for item in guide["sections"] if item["title"] in sections]
+    else:
+        guide["sections"] = destination_notes(guide, location, "overview")
     if not guide["sections"]:
         guide["error"] = "I couldn’t find a guide for that topic. Try the nearest city or region."
     return {**guide, "query": location["name"], "location": location}
@@ -919,8 +974,10 @@ async def enrich_transport(result, origin, destination, local, known=None):
         return_exceptions=True,
     )
     if isinstance(guide, dict):
-        result["guide"] = {**guide, "sections": [item for item in guide.get("sections", [])
-                                                if item["title"] in {"Getting there", "Getting around"}]}
+        result["guide"] = {**guide, "sections": [
+            {**item, "points": concise_points(item["text"], "transport", limit=3, prefer_price=True)}
+            for item in guide.get("sections", []) if item["title"] in {"Getting there", "Getting around"}
+        ]}
     if isinstance(road, dict):
         result["road"] = road
     if isinstance(passes, dict):
@@ -1265,9 +1322,11 @@ async def turn_stream(token: str, turn: Turn, request: Request):
         raise HTTPException(409, "This conversation is full. Delete it to begin a new trip.")
     replaces = None
     active_events = events
+    if turn.trip_settings is not None and (not turn.live_only or turn.kind != "message" or turn.replace):
+        raise HTTPException(422, "Trip settings can only be changed from a live trip conversation.")
     if turn.replace:
         if (turn.kind != "message" or not turn.text.strip() or not events
-                or events[-1]["kind"] != "message" or not events[-1].get("text")):
+                or events[-1]["kind"] != "message" or events[-1].get("settingsChange") or not events[-1].get("text")):
             raise HTTPException(422, "Only the latest conversational turn can be replaced.")
         replaces = len(events) - 1
         active_events = events[:replaces]
@@ -1295,13 +1354,15 @@ async def turn_stream(token: str, turn: Turn, request: Request):
         context_intake = ({"destination": context.name, "origin": context.origin, "days": len(context.days),
                            "people": context.travelers, "date": context.departure, "budget": context.budget,
                            "flexibleDates": not context.departure, "localStart": not context.origin, "budgetOpen": context.budget is None,
-                           "diet": context.mealPreference, "pace": context.pace,
+                           "diet": context.mealPreference, "pace": context.pace, "mobility": context.mobility,
+                           "interests": context.interests, "stayPreferences": context.stayPreferences,
+                           "notes": context.notes, "transport": context.transportPreference,
                            "party": context.party.model_dump() if context.party else None} if context else {})
         previous = current["request"] if current else {k: str(v) if k == "date" else v for k, v in context_intake.items() if v is not None}
         current_draft = (current or {}).get("draft")
         if context and (not current or current_draft and str(context.id) == current_draft["id"] and context.updated > current_draft["updated"]):
             current_draft = context.model_dump(mode="json")
-        if message:
+        if message and not turn.trip_settings:
             trip = trip_snapshot(current_draft, previous, state.get("plan"), state["brief"])
             stop_change = itinerary_change(turn.text) if turn.live_only else None
             if stop_change and re.match(r"^(?:the )?(?:trip|itinerary|departure|travel dates?|budget|dates?|origin)\b",
@@ -1341,7 +1402,7 @@ async def turn_stream(token: str, turn: Turn, request: Request):
             direct_lookup = ("More places", previous_places)
         provider_intent = None
         guide_query = None
-        if turn.live_only and message:
+        if turn.live_only and message and not turn.trip_settings:
             try:
                 from .transport_sources import source_intent
             except ImportError:
@@ -1374,7 +1435,8 @@ async def turn_stream(token: str, turn: Turn, request: Request):
             direct_lookup = ("Notice", note)
             public_research = None
         intake = None
-        if turn.live_only and message and public_research is None and not (direct_lookup or provider_intent or guide_query):
+        if turn.live_only and message and (turn.trip_settings is not None or
+                public_research is None and not (direct_lookup or provider_intent or guide_query)):
             try:
                 details = extract(turn_text, live=True)
             except ValueError:
@@ -1407,8 +1469,8 @@ async def turn_stream(token: str, turn: Turn, request: Request):
                 if turn.replace_interests and (not turn.preferences or turn.preferences.interests is None):
                     yield event_line({"type": "error", "message": "Choose interests before saving your preference changes."})
                     return
-                intake = update_intake(turn_text, previous, preferences, details,
-                                       replace_interests=turn.replace_interests)
+                intake = (turn.trip_settings.apply(previous) if turn.trip_settings is not None else
+                          update_intake(turn_text, previous, preferences, details, replace_interests=turn.replace_interests))
             except ValueError as error:
                 reason = str(error)
                 yield event_line({"type": "error", "message": reason if reason.startswith(("Choose", "Tell me")) else "Enter a valid calendar date."})
@@ -1416,12 +1478,17 @@ async def turn_stream(token: str, turn: Turn, request: Request):
             proposal = re.match(r"^(?:how about|what if (?:we|i))\b", message)
             informational = not proposal and re.match(r"^(?:what|where|when|why|which|who|how|is|are|will|does|do|any|tell me|show|find|recommend|suggest)\b", message)
             changed = intake != previous
+            if turn.trip_settings is not None and not changed:
+                yield event_line({"type": "done", **view(events)})
+                return
             is_trip_update = bool(not informational and (build_now or asks_for_plan or
                                   changed and (pending_question or current_draft or intake.get("destination"))))
             if is_trip_update:
                 intake["collectTripDetails"] = True
                 observations = []
                 event = {"kind": "message", "text": turn.text, "itineraryRequest": intake}
+                if turn.trip_settings is not None:
+                    event["settingsChange"] = True
                 if replaces is not None:
                     event.update(replaces=replaces, original=events[replaces].get("original", replaces))
                 draft, choices, source_status = None, [], "empty"
@@ -1498,6 +1565,9 @@ async def turn_stream(token: str, turn: Turn, request: Request):
                             except (TimeoutError, HTTPException, ValidationError, ValueError, KeyError, TypeError):
                                 yield finish_stage(grouping_stage, "fallback", "Could not build a day plan from the verified stops.")
                 if draft:
+                    draft = draft.model_copy(update={"mobility": intake.get("mobility"), "transportPreference": intake.get("transport"),
+                                                     "interests": intake.get("interests") or [], "stayPreferences": intake.get("stayPreferences") or [],
+                                                     "notes": intake.get("notes")})
                     if same_destination and draft.cityId == current_draft["cityId"]:
                         retained_costs = {str(stop.url): current_draft.get("stopCosts", {})[str(stop.url)]
                                           for day in draft.days for stop in day if str(stop.url) in current_draft.get("stopCosts", {})}

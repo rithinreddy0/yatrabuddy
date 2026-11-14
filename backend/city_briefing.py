@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from .agents import USER_AGENT
 from .auth import limit
 from .locations import compact, destination_guide, find_destinations, location_weather, lookup
+from .official_city_notes import official_city_notes
 from .source_cache import SourceCache, source_result
 from .wikivoyage import wikivoyage_document
 
@@ -23,20 +24,21 @@ advisory_cache = SourceCache(128)
 Topic = Literal["overview", "routes", "stays", "food", "experiences", "events", "safety", "weather"]
 PRACTICAL = ("Getting around", "Safety and practical advice", "Staying healthy", "Respect and local customs")
 TOPICS = {
-    "overview": ("Overview", "Culture and local context"),
+    "overview": ("Overview", "Sightseeing", "Food", "Climate", "Culture and local context", "Getting there", "Where to stay"),
     "routes": ("Getting around", "Getting there"),
     "stays": ("Where to stay", "Getting around"),
     "food": ("Food", "Culture and local context"),
     "experiences": ("Sightseeing", "Things to do"),
     "events": ("Things to do", "Culture and local context"),
     "safety": ("Safety and practical advice", "Staying healthy", "Respect and local customs"),
-    "weather": ("Staying healthy", "Culture and local context"),
+    "weather": ("Climate", "Staying healthy", "Culture and local context"),
 }
 KINDS = {
     "Overview": "overview", "Getting around": "transport", "Getting there": "transport",
     "Safety and practical advice": "safety", "Staying healthy": "health",
     "Respect and local customs": "customs", "Culture and local context": "culture",
     "Where to stay": "stays", "Food": "food", "Sightseeing": "experiences", "Things to do": "experiences",
+    "Climate": "weather", "Shopping": "shopping", "Nearby trips": "experiences",
 }
 PRACTICAL_WORDS = {
     "transport": r"\b(?:metro|train|bus|ferr(?:y|ies)|taxi|walk|station|tram|rental|rickshaw|airport)\b",
@@ -45,7 +47,21 @@ PRACTICAL_WORDS = {
     "customs": r"\b(?:wear|cover|remove|shoes|ask|dress|customs?|temples?|photograph|etiquette)\b",
     "stays": r"\b(?:hotels?|hostels?|neighbou?rhood|stays?|resorts?|guesthouses?|district|rooms?)\b",
     "food": r"\b(?:eat|food|dish(?:es)?|cuisine|restaurants?|vegetarian|markets?|specialt(?:y|ies))\b",
+    "experiences": r"\b(?:visit|museum|monument|heritage|temple|market|trail|park|palace|fort)\b",
 }
+GUIDE_HIGHLIGHTS = (
+    ("Why visit", "pros", {"Overview", "Culture and local context", "Sightseeing", "Things to do", "Food"},
+     r"\b(?:known for|renowned for|famous for|highlights? include|popular for|(?:offers?|boasts?)\b|well worth)"),
+    ("What to plan around", "cons", {"Overview", "Culture and local context", "Climate", "Getting around", *PRACTICAL},
+     r"\b(?:crowd(?:ed|s)?|pollut\w*|gridlock|traffic jams?|congestion|extreme heat|monsoon|limited (?:access|service|parking|transport)|pickpockets?|scams?)\b"),
+    ("Festivals and traditions", "events", {"Culture and local context", "Things to do", "Overview"},
+     r"\b(?:festivals?|parades?|carnivals?|celebrations?|processions?|melas?)\b"),
+    ("Nature and outdoors", "nature", {"Sightseeing", "Things to do", "Overview", "Nearby trips"},
+     r"\b(?:national parks?|parks?|beaches|beach|gardens?|lakes?|wildlife|waterfalls?|forests?|wetlands?|birdwatching)\b"),
+    ("Adventure and activities", "adventure", {"Culture and local context", "Sightseeing", "Things to do", "Overview", "Nearby trips"},
+     r"\b(?:hiking|trekking|trails?|cycling|kayak\w*|rafting|climbing|diving|snorkel\w*|surfing|boating|safaris?|zip.lin\w*|paragliding)\b"),
+)
+PRICE = r"(?:[₹€£¥฿$]\s*\d|\b(?:INR|USD|EUR|GBP|Rs\.?)\s*\d|\b\d[\d,.]*\s+(?:rupees?|dollars?|euros?)\b)"
 UNSUPPORTED_SAFETY = re.compile(
     r"\b(?:(?:very|perfectly|generally|completely|quite) safe|safe (?:city|place|destination)|crime[- ]free|no crime|totally harmless|"
     r"nothing to worry|guaranteed safe|safest (?:city|place)|dial\s+\d|emergency (?:number|telephone))\b", re.I)
@@ -69,7 +85,7 @@ def as_guide_url(url):
     return None
 
 
-def concise_excerpt(text, kind):
+def concise_points(text, kind, limit=2, required=None, prefer_price=False):
     practical = PRACTICAL_WORDS.get(kind)
     sentences = [sentence for paragraph in text.split("\n\n")
                  for sentence in re.split(r'(?<=[.!?])\s+(?=[A-Z“"])', " ".join(paragraph.split()))]
@@ -83,54 +99,72 @@ def concise_excerpt(text, kind):
             continue
         if re.match(r"(?:However|But|These|Those|They|It|This)\b", sentence, re.I):
             continue
-        if kind in {"safety", "health"} and (
-            UNSUPPORTED_SAFETY.search(sentence) or not practical or not re.search(practical, sentence, re.I)
+        if required and not re.search(required, sentence, re.I):
+            continue
+        if kind in {"safety", "health", "cons"} and (
+            UNSUPPORTED_SAFETY.search(sentence) or (practical and not re.search(practical, sentence, re.I))
         ):
             continue
         score = len(re.findall(practical, sentence, re.I)) if practical else 0
-        candidates.append((score, -index, sentence))
-    if not candidates:
-        return None
-    return max(candidates)[2]
+        candidates.append((score + (10 if prefer_price and re.search(PRICE, sentence, re.I) else 0), index, sentence))
+    ranked = sorted(candidates, key=lambda item: (-item[0], item[1]))
+    unique = {}
+    for _, index, sentence in ranked:
+        unique.setdefault(sentence, index)
+        if len(unique) == limit:
+            break
+    return sorted(unique, key=unique.get)
 
 
-def event_excerpt(sections):
-    marker = re.compile(r"\b(?:festival|parade|carnival|celebration|fair|procession)\b", re.I)
-    for section in sections:
-        if section.get("title") not in {"Culture and local context", "Things to do", "Overview"}:
-            continue
-        text, url = section.get("text"), section.get("sourceUrl")
-        if not isinstance(text, str) or not isinstance(url, str) or not as_guide_url(url):
-            continue
-        for paragraph in text.split("\n\n"):
-            for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z])", " ".join(paragraph.split())):
-                if marker.search(sentence) and concise_excerpt(sentence, "events"):
-                    return guide_note("Festivals and traditions", sentence, "events", url)
-    return None
-
-
-def guide_note(title, text, kind, url):
-    return {"title": title, "text": text, "kind": kind, "source": "Wikivoyage", "sourceUrl": url,
+def guide_note(title, points, kind, url):
+    return {"title": title, "text": points[0], "points": points, "kind": kind, "source": "Wikivoyage", "sourceUrl": url,
             "license": "CC BY-SA 4.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"}
 
 
 def summarize(guide, topic):
-    sections = {}
-    candidates = guide.get("sections", [])
-    for section in candidates:
+    sections, candidates = {}, []
+    for section in guide.get("sections", []):
         title = section.get("title")
         text = section.get("text")
         url = section.get("sourceUrl")
         if title not in KINDS or not isinstance(text, str) or not isinstance(url, str) or not as_guide_url(url):
             continue
-        excerpt = concise_excerpt(text, KINDS[title])
-        if excerpt:
-            sections[title] = guide_note(title, excerpt, KINDS[title], url)
+        candidates.append((title, text, url))
+        if points := concise_points(text, KINDS[title], prefer_price=KINDS[title] in {"transport", "stays"}):
+            sections[title] = guide_note(title, points, KINDS[title], url)
+    themed = []
+    visible_kinds = {"overview": {"pros", "cons", "events", "nature", "adventure"},
+                     "events": {"events"}, "experiences": {"nature", "adventure"}}
+    used = set()
+    for heading, kind, source_titles, marker in GUIDE_HIGHLIGHTS:
+        if kind not in visible_kinds.get(topic, ()):
+            continue
+        for title, text, url in candidates:
+            if title in source_titles and (points := [point for point in concise_points(text, kind, required=marker) if point not in used]):
+                themed.append(guide_note(heading, points, kind, url))
+                used.update(points)
+                break
     order = dict.fromkeys((*TOPICS[topic], *PRACTICAL, "Overview", "Culture and local context"))
-    notes = [sections[title] for title in order if title in sections]
-    if topic == "events" and (note := event_excerpt(candidates)):
-        notes.insert(0, note)
-    return notes[:6]
+    notes = []
+    for title in order:
+        if title in sections:
+            note = sections[title]
+            if points := [point for point in note["points"] if point not in used]:
+                notes.append({**note, "text": points[0], "points": points})
+                used.update(points)
+    if topic == "overview":
+        priority = ("Overview", "Sightseeing", "Food", "Climate", "Getting around", "Safety and practical advice", "Where to stay", "Getting there")
+        by_title = {note["title"]: note for note in notes}
+        return themed + [by_title[title] for title in priority if title in by_title]
+    return (themed + notes)[:6]
+
+
+def destination_notes(guide, location, topic):
+    editorial = official_city_notes(location, topic)
+    sourced = summarize(guide, topic)
+    by_title = {note["title"]: note for note in (*sourced, *editorial)}
+    order = [row[0] for row in GUIDE_HIGHLIGHTS] if topic == "overview" else [note["title"] for note in editorial]
+    return [by_title[title] for title in dict.fromkeys((*order, *by_title)) if title in by_title]
 
 
 def matches_guide(guide, location):
@@ -284,7 +318,7 @@ async def city_briefing(
     if topic == "weather":
         tasks.append(location_weather(location["id"], request))
     guide, advisories, *weather_reports = await asyncio.gather(*tasks)
-    sections = summarize(guide, topic)
+    sections = destination_notes(guide, location, topic)
     weather = next(iter(weather_reports), {})
     if weather.get("status") == "ready":
         sections.insert(0, {

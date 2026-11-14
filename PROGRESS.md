@@ -1,5 +1,8 @@
 # Travel workspace update
 
+- Trip starts from Home, Explore, Saved, the destination guide, and place shortlists now open one chat with a concrete prompt (destination, profile defaults, and selected places). The structured builder stays available from inside chat when the planner hands off a draft.
+- Mobile pages no longer reserve a top gap for a menu that is not on the page. Trip actions stick under the top of the screen, and narrow widths keep filters and trip cards inside the viewport.
+
 ## Conversational itinerary
 
 - The chat collects the destination, duration, party, origin or local start, and group budget or undecided budget. It asks one missing question at a time and starts research automatically once those answers are available. Exact dates are optional and the itinerary shows when flexible dates were assumed.

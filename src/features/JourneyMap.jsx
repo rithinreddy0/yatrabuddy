@@ -9,24 +9,7 @@ import {usePopoverDismiss} from '../components/usePopoverDismiss.mjs'
 
 const empty = []
 const dayColors = ['#75baff', '#62d6bc', '#eab969', '#b9a0ff', '#f29cb3']
-const lightStyle = 'https://tiles.openfreemap.org/styles/liberty'
-const mapCredit = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
-const streetTile = import.meta.env.VITE_MAP_TILE_URL
-const rasterStyle = {
-  version: 8,
-  sources: {streets: {type: 'raster', tiles: [streetTile || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-    tileSize: 256, maxzoom: 19, attribution: mapCredit}},
-  layers: [{id: 'streets', type: 'raster', source: 'streets'}],
-}
-const satelliteStyle = {
-  version: 8,
-  sources: {satellite: {type: 'raster',
-    tiles: ['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg'],
-    tileSize: 256, maxzoom: 14,
-    attribution: '<a href="https://cloudless.eox.at">EOxCloudless</a> by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016 &amp; 2017)'}},
-  layers: [{id: 'satellite', type: 'raster', source: 'satellite'}],
-}
-
+const lightStyle = 'https://tiles.openfreemap.org/styles/positron'
 function validPoint(point) {
   return Number.isFinite(point?.lat) && Number.isFinite(point?.lon) &&
     Math.abs(point.lat) <= 90 && Math.abs(point.lon) <= 180
@@ -151,12 +134,10 @@ export function JourneyMap({
   const markers = useRef([])
   const select = useRef(onSelect)
   const [day, setDay] = useState(null)
-  const [satellite, setSatellite] = useState(true)
   const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [ready, setReady] = useState(false)
   const [styleVersion, setStyleVersion] = useState(0)
-  const [fallback, setFallback] = useState(false)
   const [unavailable, setUnavailable] = useState(false)
   const [tilesUnavailable, setTilesUnavailable] = useState(false)
   const [preview,setPreview]=useState(null)
@@ -174,7 +155,6 @@ export function JourneyMap({
   const matches = visiblePlaces.filter(place => place.name?.toLowerCase().includes(query.trim().toLowerCase()))
   const placePositions = JSON.stringify(visiblePlaces.map(lngLat))
   const centerPosition = validPoint(center) ? lngLat(center).join(',') : ''
-  const requestedStyle = satellite ? satelliteStyle : streetTile ? rasterStyle : lightStyle
   const mapName = center?.name || 'Trip'
 
   useEffect(() => { select.current = onSelect }, [onSelect])
@@ -185,35 +165,13 @@ export function JourneyMap({
     let timer
     let hasStyle = false
     let hasTiles = false
-    let triedRaster = requestedStyle === rasterStyle
     let closed = false
-    setReady(false)
-    setFallback(false)
-    setUnavailable(false)
-    setTilesUnavailable(false)
-    const tryRaster = () => {
-      if (hasTiles) return
-      if (triedRaster) {
-        if (hasStyle) setTilesUnavailable(true)
-        else setUnavailable(true)
-        return
-      }
-      triedRaster = true
-      hasStyle = false
-      setReady(false)
-      setFallback(true)
-      instance.setStyle(rasterStyle)
-      timer = window.setTimeout(() => {
-        if (!hasStyle) setUnavailable(true)
-        else if (!hasTiles) setTilesUnavailable(true)
-      }, 6000)
-    }
     import('maplibre-gl').then(({Map: VectorMap, Marker, NavigationControl, setWorkerUrl}) => {
       if (closed) return
       setWorkerUrl(workerUrl)
       markerClass.current = Marker
       instance = new VectorMap({
-        container: container.current, style: requestedStyle, center: [0, 18], zoom: 1.3,
+        container: container.current, style: lightStyle, center: [0, 18], zoom: 1.3,
         minZoom: 1, maxZoom: 19, maxPitch: 0, dragRotate: false, pitchWithRotate: false,
         touchPitch: false, scrollZoom: false, cooperativeGestures: true, attributionControl: {compact: true},
       })
@@ -227,20 +185,16 @@ export function JourneyMap({
         setStyleVersion(version => version + 1)
       })
       instance.on('sourcedata', ({sourceId, tile}) => {
-        const basemapId = triedRaster ? 'streets' : satellite ? 'satellite' : 'openmaptiles'
-        if (sourceId === basemapId && tile?.state === 'loaded') {
+        if (sourceId === 'openmaptiles' && tile?.state === 'loaded') {
           hasTiles = true
           window.clearTimeout(timer)
           setTilesUnavailable(false)
         }
       })
-      instance.on('error', ({sourceId}) => {
-        if (!sourceId && !hasStyle && !triedRaster) {
-          window.clearTimeout(timer)
-          tryRaster()
-        }
-      })
-      timer = window.setTimeout(tryRaster, 9000)
+      if (!hasTiles) timer = window.setTimeout(() => {
+        if (!hasStyle) setUnavailable(true)
+        else if (!hasTiles) setTilesUnavailable(true)
+      }, 9000)
       observer = new ResizeObserver(() => instance.resize())
       observer.observe(container.current)
     }).catch(() => {
@@ -253,7 +207,7 @@ export function JourneyMap({
       instance?.remove()
       map.current = null
     }
-  }, [requestedStyle])
+  }, [])
 
   useEffect(() => {
     if (!ready || !map.current) return
@@ -383,14 +337,10 @@ export function JourneyMap({
       {!compactControls && <div className="journey-map-title"><Icon name="map" size={18}/><div>
         <strong>{mapName}</strong><small>{visiblePlaces.length ? visiblePlaces.length + (visiblePlaces.length === 1 ? ' place' : ' places') : 'Map'}</small>
       </div></div>}
-      <div className="journey-map-controls">
+      {(mappable.length > 0 || onClose) && <div className="journey-map-controls">
         {!!mappable.length && <IconButton ref={searchTrigger} icon="search" label="Find a place on the map" aria-expanded={searchOpen} aria-controls={searchOpen ? searchId : undefined} onClick={toggleSearch}/>}
-        <button type="button" className="journey-map-basemap" aria-label={satellite ? 'Switch to street map' : 'Switch to satellite map'}
-          onClick={() => {setPreview(null);setSatellite(value => !value)}}>
-          {satellite ? 'Street map' : 'Satellite'}
-        </button>
         {onClose && <IconButton icon="close" label="Close map" onClick={onClose}/>}
-      </div>
+      </div>}
     </div>
     {dayNumbers.length > 1 && <div className="journey-map-days" role="group" aria-label="Map itinerary days">
       <button type="button" aria-pressed={!visibleDay} onClick={() => setDay(null)}>All days</button>
@@ -423,7 +373,6 @@ export function JourneyMap({
       {visibleRoutes.some(route => route.approximate && route.points?.length > 1) && <span className="journey-map-estimate">
         {visibleRoutes.find(route => route.approximate && route.label)?.label || 'Visit order'}</span>}
       {tilesUnavailable && <span>Map tiles unavailable</span>}
-      {fallback && !tilesUnavailable && <span>{satellite ? 'Satellite unavailable · Street map' : 'Street map'}</span>}
     </div>}
     {ready && <IconButton className="journey-map-fit" icon="compass" label="Fit map to places" onClick={() => fitMap(map.current, visiblePlaces, center)}/>}
   </section>

@@ -8,7 +8,7 @@ from starlette.concurrency import run_in_threadpool
 from sqlalchemy import text, update
 from sqlalchemy.exc import IntegrityError
 
-from . import agents, auth, conversation, locations, nearby, news, partners, place_search, planning_agent, trip_workspace, voice, yatra
+from . import agents, auth, conversation, locations, nearby, news, partners, place_search, planning_agent, transport_quotes, trip_workspace, voice, yatra
 from .catalog import CATALOG
 from .city_briefing import router as city_briefing_router
 from .transport_sources import router as transport_router
@@ -52,6 +52,7 @@ app.include_router(voice.router)
 app.include_router(yatra.router)
 app.include_router(planning_agent.router)
 app.include_router(trip_workspace.router)
+app.include_router(transport_quotes.router)
 app.include_router(transport_router)
 
 

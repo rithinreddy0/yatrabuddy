@@ -245,7 +245,8 @@ def _google_maps(origin=None, destination=None, travelmode=None, query=None):
 def _flight_link(origin, destination):
     # Google Flights city landing pages use provider-specific names and may not
     # exist for smaller destinations. Use the search form for other routes.
-    aliases = {"delhi": "new-delhi", "new delhi": "new-delhi", "cochin": "kochi"}
+    aliases = {"delhi": "new-delhi", "new delhi": "new-delhi", "cochin": "kochi",
+               **dict.fromkeys(GOA_NAMES, "goa")}
     endpoints = tuple(aliases.get(_base(place), _slug(_base(place))) for place in (origin, destination))
     if endpoints in {("hyderabad", "goa"), ("new-delhi", "kochi")}:
         return f"https://www.google.com/travel/flights/flights-from-{endpoints[0]}-to-{endpoints[1]}.html"
@@ -272,7 +273,7 @@ def transport_sources(origin, destination, *, date=None, travelers=None, days=No
         requested = list(dict.fromkeys("transit" if item == "bus" else item for item in requested))
     intercity = bool(origin and destination and not local)
     if not requested:
-        requested = ["ride", "transit"] if local else ["flight", "rail", "bus"]
+        requested = ["ride", "transit"] if local else ["flight", "rail", "bus", "drive", "ride"]
         if local and _goa(destination, destination_location):
             requested.append("ferry")
     all_modes = len(requested) > 1
@@ -333,11 +334,17 @@ def transport_sources(origin, destination, *, date=None, travelers=None, days=No
                 "Look up intercity coaches and verify the boarding point and luggage allowance.", "Search coaches",
             ))
     if "ride" in requested:
-        providers.append(_provider(
-            "Uber", "ride", UBER_PRICE, UBER_PRICE,
-            "Enter the exact pickup and drop-off to compare ride types and fares where available.", "Check Uber prices",
-        ))
-        if domestic_india:
+        if _goa(destination, destination_location):
+            providers.append(_provider(
+                "GoaMiles", "ride", "https://www.goamiles.com/Home/About", "https://goa-tourism.com/goa-miles-passenger/",
+                "Check pickup options and fares in the app for your arrival in Goa.", "Check Goa taxi options",
+            ))
+        else:
+            providers.append(_provider(
+                "Uber", "ride", UBER_PRICE, UBER_PRICE,
+                "Enter the exact pickup and drop-off to compare ride types and fares where available.", "Check Uber prices",
+            ))
+        if domestic_india and local and not _goa(destination, destination_location):
             rapido = "https://rapido.bike/Hyderabad/main-page" if _base(destination) == "hyderabad" else "https://www.rapido.bike/"
             providers.append(_provider(
                 "Rapido", "ride", rapido, rapido,
@@ -397,8 +404,15 @@ def transport_sources(origin, destination, *, date=None, travelers=None, days=No
         notes.append("Enter the exact pickup and drop-off to check ride prices.")
     if departure is None and any(item in requested for item in ("flight", "rail", "bus", "ferry", "cruise")):
         notes.append("Choose a travel date on the provider’s site.")
+    arrival_tips = {}
+    if intercity and _base(destination) == "old goa" and destination_india:
+        arrival_tips = {
+            "Flights": "Compare Dabolim (GOI) and Mopa (GOX). Check the onward ride to Old Goa from the airport you choose.",
+            "Rail": "Check Karmali first, then compare Madgaon if the schedule or seats work better.",
+            "Intercity bus": "Search for services to Panaji (Panjim), then arrange the onward trip to Old Goa.",
+        }
     return {
-        "kind": "transport", "title": "Transport sources", "route": route,
+        "kind": "transport", "title": "Transport options", "route": route, "arrivalTips": arrival_tips,
         "origin": origin, "destination": destination, "date": departure.isoformat() if departure else None,
         "travelers": travelers, "providers": providers, "notes": notes,
         "detail": "Check the provider for current fares, schedules and availability.",

@@ -103,10 +103,10 @@ export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onR
         </form>
         <div className="home-prompt-examples" aria-label="Example trip prompts">
           {['A weekend in Goa','A food trip to Hyderabad','Three days in Singapore'].map(example=>
-            <Pill key={example} onClick={()=>setPrompt(example)}>{example}</Pill>)}
+            <Pill key={example} onClick={()=>onAsk(example)}>{example}</Pill>)}
         </div>
         <div className="landing-actions">
-          <Button variant="primary" icon="chat" onClick={()=>onNavigate('chat')}>Start planning</Button>
+          <Button variant="primary" icon="chat" onClick={()=>prompt.trim()?onAsk(prompt.trim()):onNavigate('chat')}>{prompt.trim()?'Plan this trip':'Start planning'}</Button>
           <a className="btn secondary" href="#trips">Open My Trips <ChevronRight size={16}/></a>
         </div>
       </div>

@@ -18,6 +18,7 @@
 .journey-map-canvas {
   position: absolute;
   inset: 0;
+  container-type:inline-size;
 }
 
 .journey-pin-preview{position:absolute;z-index:4;border:1px solid var(--map-border);border-radius:12px;background:var(--map-panel);color:var(--map-text);box-shadow:0 8px 25px #08131b86;overflow:auto;overscroll-behavior-y:contain}
@@ -92,19 +93,7 @@
 }
 
 .journey-map .icon-btn:hover,
-.journey-map .icon-btn:focus-visible,
-.journey-map-basemap:is(:hover,:focus-visible) { background: #ffffff20; }
-
-.journey-map-basemap {
-  padding: 0 8px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--map-text);
-  font: 600 11px/1.2 var(--sans);
-  white-space: nowrap;
-  cursor: pointer;
-}
+.journey-map .icon-btn:focus-visible { background: #ffffff20; }
 
 .journey-map-days {
   position: absolute;
@@ -261,8 +250,8 @@
 .journey-map .journey-map-fit {
   position: absolute;
   z-index: 1;
-  right: 10px;
-  bottom: 99px;
+  right: 50px;
+  bottom: 42px;
   width: 31px;
   height: 31px;
   border: 1px solid var(--map-border);
@@ -271,26 +260,24 @@
 }
 .journey-map .journey-map-fit:hover { background: #25434e; }
 
-.journey-map .maplibregl-ctrl-bottom-right { bottom: 18px; }
+.journey-map .maplibregl-ctrl-bottom-right { bottom: 0; max-width:100%; }
 .journey-map .maplibregl-ctrl-group { border: 1px solid var(--map-border); border-radius: 8px; background: var(--map-panel); }
 .journey-map .maplibregl-ctrl-group button + button { border-color: var(--map-border); }
 .journey-map .maplibregl-ctrl-group button:hover { background: #ffffff20; }
 .journey-map .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(1); }
 .journey-map .maplibregl-ctrl-attrib {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  margin: 0;
-  padding: 1px 5px;
-  border-radius: 6px 0 0;
   background: #142630ea;
   color: var(--map-muted);
   font-size: 10px;
   line-height: 16px;
 }
 .journey-map .maplibregl-ctrl-attrib a { color: var(--map-text); }
-.journey-map .maplibregl-ctrl-attrib { max-width:calc(100% - 8px); }
-.journey-map .maplibregl-ctrl-attrib-inner { overflow-wrap:anywhere; }
+.journey-map .maplibregl-ctrl-attrib.maplibregl-compact-show {
+  width:max-content;
+  max-width:min(460px, calc(100cqw - 42px));
+  padding-right:28px;
+}
+.journey-map .maplibregl-ctrl-attrib-inner { overflow-wrap:normal; }
 
 .journey-map-loading,
 .journey-map-unavailable {
@@ -329,7 +316,7 @@
   .journey-map-title { display:none; }
   .journey-map-top { justify-content:flex-end; }
   .journey-map-days, .journey-map[data-compact-controls] .journey-map-days { left:8px; top:62px; max-width:calc(100% - 16px); }
-  .journey-map-controls .icon-btn, .journey-map-basemap { min-height:44px; min-width:44px; }
+  .journey-map-controls .icon-btn { min-height:44px; min-width:44px; }
   .journey-map-days button { padding: 4px 6px; }
   .journey-map-search-field input { font-size:16px; }
   .journey-pin-name { max-width:96px; }

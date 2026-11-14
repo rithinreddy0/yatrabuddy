@@ -334,7 +334,7 @@ function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, onRep
               : place.publishedPrice ? `Published price: ${place.publishedPrice}` : 'Price to confirm'}</small>
             {place.address && <small>{place.address}</small>}
             {place.openingHours && <small>Published hours · {place.openingHours}</small>}
-            {place.description && <p>{place.description}</p>}
+            {place.description && !onPlaceSelect && <p>{place.description}</p>}
           </div>
           <StopThumbnail place={place}/>
           <div className="trip-room-stop-actions">
@@ -409,10 +409,16 @@ function WorkspaceEntries({entries, kind, ideas, media, draft, onSave, onUpdate,
   const candidates = kind === 'idea' ? ideas.filter(place => place?.name && place.url && !entries.some(entry => entry.url === place.url)) : []
   const mediaCandidates = kind === 'media' ? media.filter(item => item?.url && !entries.some(entry => entry.url === item.url)) : []
   const noun = kind === 'idea' ? 'idea' : kind === 'booking' ? 'booking' : 'media'
+  const [bookingQuery, setBookingQuery] = useState('')
+  const matching = kind === 'booking' ? shown.filter(entry =>
+    [entry.title, entry.place, entry.notes, entry.date].some(value =>
+      value?.toLowerCase().includes(bookingQuery.trim().toLowerCase()))) : shown
   return <>
     <div className="trip-room-section-heading">
       <p className="trip-room-muted">{entries.length} {kind === 'media' ? 'media items' : noun + (entries.length === 1 ? '' : 's')}</p>
       <div className="trip-room-actions">
+        {kind === 'booking' && entries.length > 0 && <input className="trip-room-booking-search" type="search"
+          placeholder="Search bookings" aria-label="Search bookings" value={bookingQuery} onChange={event => setBookingQuery(event.target.value)}/>}
         {kind === 'media' && <Button icon="download" onClick={() => exportMemories(draft, entries)}>Download recap</Button>}
         {!showForm && <Button icon="plus" variant="primary" onClick={() => setShowForm(true)}>Add {kind === 'media' ? 'photos or videos' : noun}</Button>}
       </div>
@@ -429,12 +435,13 @@ function WorkspaceEntries({entries, kind, ideas, media, draft, onSave, onUpdate,
       <p>{kind === 'idea' ? 'Keep places you’re considering.' : kind === 'booking' ? 'Keep your confirmations and receipts together.' : 'Save photos, videos, and links for the trip.'}</p>
     </div>}
     {filter && !shown.length && <p className="trip-room-muted">No media saved for {filter}.</p>}
-    {shown.length > 0 && <ul className={'trip-room-entries ' + (kind === 'media' ? 'trip-room-media' : '')}>
-      {shown.map(entry => <li key={entry.id}>
+    {kind === 'booking' && shown.length > 0 && !matching.length && <p role="status">No bookings match your search.</p>}
+    {matching.length > 0 && <ul className={`trip-room-entries trip-room-entries-${kind}${kind === 'media' ? ' trip-room-media' : ''}`}>
+      {matching.map(entry => <li key={entry.id}>
         <div className="trip-room-entry-heading">
           <div>
             <strong>{entry.title}</strong>
-            <small>{[entry.place, entry.category, entry.date, entry.time?.slice(0, 5), entry.amount == null ? null : money(entry.amount)].filter(Boolean).join(' · ')}</small>
+            {kind !== 'booking' && <small>{[entry.place, entry.category, entry.date].filter(Boolean).join(' · ')}</small>}
           </div>
           {entry.canRemove && <div className="trip-room-actions">
             {kind === 'booking' && <IconButton icon="edit" label={'Edit ' + entry.title} disabled={busy} onClick={() => setEditing(entry.id)}/>}
@@ -443,14 +450,19 @@ function WorkspaceEntries({entries, kind, ideas, media, draft, onSave, onUpdate,
         </div>
         {editing === entry.id && <EntryForm kind={kind} places={knownPlaces} current={entry} busy={busy} onClose={() => setEditing(null)}
           onSave={async data => {if (await onUpdate(entry.id, data)) setEditing(null)}}/>}
-        {entry.notes && <p>{entry.notes}</p>}
+        {kind === 'booking' && <dl className="trip-room-booking-fields">
+          {[['Date', entry.date], ['Time', entry.time?.slice(0, 5)], ['Amount', entry.amount == null ? null : money(entry.amount)],
+            ['Location', entry.place], ['Notes', entry.notes]].filter(([, value]) => value).map(([label, value]) =>
+            <div key={label} data-wide={['Location', 'Notes'].includes(label) || undefined}><dt>{label}</dt><dd>{value}</dd></div>)}
+        </dl>}
+        {kind !== 'booking' && entry.notes && <p>{entry.notes}</p>}
         {kind === 'media' && <MediaPreview entry={entry}/>}
         {(entry.credit || entry.license) && <small>{entry.credit}{entry.credit && entry.license && ' · '}
           {entry.licenseUrl ? <a href={entry.licenseUrl} target="_blank" rel="noreferrer">{entry.license}</a> : entry.license}</small>}
         <div className="trip-room-actions">
           {entry.sourceUrl && entry.sourceUrl !== entry.url && <SourcePill label="Source and credits" url={entry.sourceUrl}/>}
           {entry.url && <SourcePill label={kind === 'media' ? 'Open original' : 'Open source'} url={entry.url}/>}
-          {entry.attachment && <a className="source-pill" href={entry.attachment} target="_blank" rel="noreferrer"><Icon name="download" size={14}/> {kind === 'booking' ? 'Open receipt' : 'Open file'}</a>}
+          {entry.attachment && <a className="source-pill" href={entry.attachment} target="_blank" rel="noreferrer"><Icon name="download" size={14}/> {kind === 'booking' ? 'Open ticket or receipt' : 'Open file'}</a>}
           {kind === 'idea' && onPlaceSelect && entry.lat != null && entry.lon != null &&
             <Button icon="pin" onClick={() => onPlaceSelect({...entry, name:entry.title})}>Show on map</Button>}
         </div>

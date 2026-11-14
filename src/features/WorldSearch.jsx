@@ -6,6 +6,7 @@ import {HotelSearch} from './TravelDesk.jsx'
 import './WorldSearch.css'
 import {JourneyMap, mapPlaceId} from './JourneyMap.jsx'
 import {PlacePhoto} from '../components/PlacePhoto.jsx'
+import {GoogleMapsLink} from '../components/GoogleMapsLink.jsx'
 import {PlaceDetails} from './PlaceDetails.jsx'
 import {DestinationBrief} from '../components/CityBrief.jsx'
 import {PlaceSummary} from '../components/PlaceSummary.jsx'
@@ -121,7 +122,6 @@ function ResultCard({place,index,active,onMapSelect,mapAvailable}){
   const url=safeSource(place.url)
   const distance=Number.isFinite(place.distanceMetres)?(place.distanceMetres/1000).toLocaleString(undefined,{maximumFractionDigits:1})+' km from city center':null
   const rating=Number.isFinite(place.rating)?place.rating.toFixed(1):null
-  const mapsLookup='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent([place.name,place.address].filter(Boolean).join(', '))
   const [gallery,setGallery]=useState(false)
   const description = place.description || place.overview || ''
   const words = description.trim().split(/\s+/)
@@ -149,9 +149,9 @@ function ResultCard({place,index,active,onMapSelect,mapAvailable}){
       {price&&<span>{place.category==='Stay'?'Price level: ':''}{price}</span>}
     </div>}
     <div className="world-result-sources">
-      {url&&<SourcePill label={place.source||'Source'} url={url}/>}
+      {url&&!google&&<SourcePill label={place.source||'Source'} url={url}/>}
       {!place.description&&place.overview&&place.overviewUrl!==place.url&&safeSource(place.overviewUrl)&&<SourcePill label="Wikipedia overview" url={place.overviewUrl}/>}
-      {!google&&<SourcePill label="Look up reviews on Google Maps" url={mapsLookup}/>}
+      <GoogleMapsLink place={place}/>
       {Array.isArray(place.attributions)&&place.attributions.map((item,index)=>{
         const attributionUrl=safeSource(item.url||item.providerUri)
         const label=item.name||item.provider
@@ -321,7 +321,7 @@ export function WorldSearch({initialCategory='all',initialQuery='',initialDestin
         {result.locations.slice(0,5).map(city=><div className="world-city" key={city.id}>
           <Icon name="pin" size={16}/><div><strong>{city.name}</strong><small>{[...new Set([city.region,city.country].filter(Boolean))].join(', ')}</small></div>
           {Number(criteria.location?.id)!==Number(city.id)&&<Button variant="text-btn" onClick={()=>submit(criteria.query,city)}>Search here</Button>}
-          {onPlan&&<Button variant="text-btn" onClick={()=>onPlan('','geo:'+city.id,{...city,id:'geo:'+city.id})}>Plan trip</Button>}
+          {onPlan&&<Button variant="text-btn" onClick={()=>onPlan('','geo:'+city.id,{...city,id:'geo:'+city.id})}>Plan in chat</Button>}
         </div>)}
       </div>}
       {ranked.length>0&&<div ref={resultsWorkspace} className={'world-workspace'+(hasMap&&mapOpen?' world-with-map':'')}>

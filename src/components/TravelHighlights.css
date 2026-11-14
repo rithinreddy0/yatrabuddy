@@ -1,0 +1,26 @@
+.travel-highlights {
+  display: grid;
+  gap: .4em;
+  margin: .35em 0 .55em;
+  padding-inline-start: 1.2em;
+  list-style: disc;
+  line-height: 1.55;
+}
+.travel-highlights li::marker { color: var(--forest); }
+.travel-price {
+  display: inline;
+  padding: .07em .32em;
+  border-radius: .35em;
+  background: var(--mint);
+  color: var(--deep);
+  font-weight: 700;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.travel-source-note { display: block; color: var(--muted); margin-bottom: .25rem; }
+.google-maps-link { display: inline-flex; align-items:center; gap:6px; width:fit-content; max-width:100%; }
+.google-maps-mark { display:grid; place-items:center; flex:none; width:18px; height:18px; }
+.google-maps-mark>* { grid-area:1/1; }
+.google-maps-link img { width:18px; height:18px; object-fit:contain; background:var(--white); }
+.google-maps-link img[hidden] { display:none; }
+.transport-map-links { display:flex; flex-wrap:wrap; gap:6px; }

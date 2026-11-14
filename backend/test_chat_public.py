@@ -67,6 +67,16 @@ class ChatPublicTest(unittest.TestCase):
             weather.assert_awaited_once_with("Hyderabad")
             self.groq.assert_not_called()
 
+    def test_structured_edit_updates_only_the_requested_preference(self):
+        _, before = self.turn("Plan a trip to Hyderabad for 3 days for 2 travellers from Mumbai under 30k", offline=True)
+        _, after = self.turn("Update trip notes", offline=True,
+                             trip_settings={"notes": "Packed lunches, vegan snacks, ₹500 cab"})
+        previous, updated = before["itineraryRequest"], after["itineraryRequest"]
+        self.assertEqual(updated, {**previous, "notes": "Packed lunches, vegan snacks, ₹500 cab"})
+        _, reset = self.turn("Update budget", offline=True, trip_settings={"budget": None})
+        self.assertNotIn("budget", reset["itineraryRequest"])
+        self.assertTrue(reset["itineraryRequest"]["budgetOpen"])
+
     def test_location_answer_then_date_budget_and_preferences_keep_the_same_trip(self):
         future = (date.today() + timedelta(days=15)).isoformat()
         _, event = self.turn("Plan a 3-day trip with a budget of 12k", offline=True)

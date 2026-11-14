@@ -2,6 +2,8 @@ import React, {useEffect, useRef, useState} from 'react'
 import {ArrowLeft, Camera, ExternalLink, MapPin, Minus, Plus} from 'lucide-react'
 import {PlacePhoto} from '../components/PlacePhoto.jsx'
 import {PhotoRail} from '../components/PhotoRail.jsx'
+import {GoogleMapsLink} from '../components/GoogleMapsLink.jsx'
+import {TravelHighlights} from '../components/TravelHighlights.jsx'
 import {AgentProgress, Button, WikivoyageSource} from '../components/UI.jsx'
 import {request} from '../api.mjs'
 import {placeInterestScores} from './discoveryPlaces.mjs'
@@ -98,30 +100,29 @@ export function PlaceDetails({place, initialTab = 'overview', onClose, onShowMap
     <PlacePhoto place={place} lookup hideUnavailable/>
     <h2>{place.name}</h2>
     {place.address && <p className="journey-detail-address"><MapPin size={15}/>{place.address}</p>}
+    <GoogleMapsLink place={place}/>
     <div className="journey-detail-tabs" aria-label="Place views">
       <Button aria-pressed={tab === 'overview'} onClick={() => show('overview')}>Overview</Button>
       {(map || place.source === 'Google Maps') && <Button aria-pressed={tab === 'media'} onClick={() => show('media')}><Camera size={16}/> Photos & videos</Button>}
     </div>
     <div ref={tabContent} className="result-scroll-anchor"/>
     {tab === 'overview' ? <>
-      {(place.description || place.overview) && <p>{place.description || place.overview}</p>}
+      {(place.description || place.overview) && <TravelHighlights text={place.description || place.overview}/>}
       {(place.openingHours || place.publishedPrice || place.rating != null) && <dl className="journey-facts">
         {place.openingHours && <div><dt>Published hours</dt><dd>{place.openingHours}</dd></div>}
-        {place.publishedPrice && <div><dt>Published price</dt><dd>{place.publishedPrice}</dd></div>}
+        {place.publishedPrice && <div><dt>Published price</dt><dd><strong className="travel-price">{place.publishedPrice}</strong></dd></div>}
         {place.rating != null && <div><dt>Rating</dt><dd>{place.rating} / 5{place.reviewCount ? ` · ${place.reviewCount} reviews` : ''}</dd></div>}
       </dl>}
       <VisitConsiderations place={place}/>
       <div className="journey-links">
         <PlaceSource url={place.url}>{place.source || 'Place source'}</PlaceSource>
         <PlaceSource url={place.website}>Official site</PlaceSource>
-        {map && <PlaceSource url={'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(`${place.name} ${place.lat},${place.lon}`)}>Check reviews</PlaceSource>}
       </div>
     </> : !media ? <AgentProgress label={`Checking photos for ${place.name}`}/> : <>
       {photos.length || videos.length ? <>
         <PhotoRail title="Place photos" count={photos.length} className="place-detail-rail">{photos.map(renderMedia)}</PhotoRail>
         <PhotoRail title="Place videos" count={videos.length} className="place-detail-rail">{videos.map(renderMedia)}</PhotoRail>
       </> : <div className="journey-links">
-        <p className="journey-detail-address">{place.photo?.url ? 'No additional verified photos found.' : 'No verified photos available for this listing.'}</p>
         {media.status === 'unavailable' && <Button onClick={() => {setMedia(null); setAttempt(value => value + 1)}}>Retry media lookup</Button>}
         <PlaceSource url={place.url}>Open place listing</PlaceSource>
       </div>}

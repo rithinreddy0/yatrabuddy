@@ -338,7 +338,7 @@ dialog[open] { animation: dialog-arrive 220ms var(--ease-ui) both; }
 
 @media (max-width: 850px) {
   .workspace-menu-anchor { display:block; }
-  .shell > main { padding-top:45px;padding-bottom:72px; }
+  .shell > main { padding-top:max(8px, env(safe-area-inset-top));padding-bottom:calc(72px + env(safe-area-inset-bottom)); }
   .chat-shell > main { padding-top:0; }
   .chat-shell .agent-header { padding-left:42px; }
   .mobile-workspace-dock {

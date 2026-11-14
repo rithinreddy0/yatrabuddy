@@ -4,11 +4,28 @@ from unittest.mock import patch
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from .city_briefing import advisory_links, city_briefing, summarize
+from .city_briefing import advisory_links, city_briefing, destination_notes, summarize
 from .wikivoyage import parse_wikivoyage_html
 
 
 class CityBriefingTests(unittest.TestCase):
+    def test_overview_uses_tourism_notes_when_the_community_guide_is_empty(self):
+        notes = destination_notes({"sections": []}, {"name": "Delhi", "country": "India"}, "overview")
+        self.assertEqual([item["kind"] for item in notes[:5]], ["pros", "cons", "events", "nature", "adventure"])
+        self.assertTrue(all(len(item["points"]) == 1 and item["sourceUrl"].startswith("https://") for item in notes))
+        self.assertEqual(destination_notes({"sections": []}, {"name": "Delhi", "country": "Canada"}, "overview"), [])
+
+    def test_extracts_activity_and_festival_highlights_from_list_items(self):
+        _, _, sections = parse_wikivoyage_html("Example", """
+            <h2 id="Do">Do</h2><ul><li><b>Mountain Walk</b>. The hiking trail starts at the visitor centre.</li>
+            <li>The River Festival takes place in the town square each spring.</li></ul>
+            <h2 id="See">See</h2><ul><li>Forest Park has wooded trails and a picnic spot near the entrance.</li></ul>
+        """)
+        notes = {note["kind"]: note for note in summarize({"sections": sections}, "overview")}
+        self.assertIn("River Festival", notes["events"]["points"][0])
+        self.assertIn("Forest Park", notes["nature"]["points"][0])
+        self.assertIn("hiking trail", notes["adventure"]["points"][0])
+
     def test_extracts_local_precautions_and_preserves_source(self):
         _, _, sections = parse_wikivoyage_html("Example", """
             <p>Example is a coastal town in India with a harbor and a central market near the station.</p>

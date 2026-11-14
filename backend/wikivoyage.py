@@ -29,7 +29,9 @@ GUIDE_SECTIONS = {
     "Get_around": "Getting around", "See": "Sightseeing", "Do": "Things to do",
     "Eat": "Food", "Sleep": "Where to stay", "Stay_safe": "Safety and practical advice",
     "Respect": "Respect and local customs", "Talk": "Language", "Stay_healthy": "Staying healthy",
+    "Climate": "Climate", "Buy": "Shopping", "Go_next": "Nearby trips",
 }
+LIST_SUMMARIES = {"See", "Do", "Eat", "Buy", "Sleep", "Go_next", "Stay_safe", "Stay_healthy", "Respect", "Get_around"}
 SECTION_GROUPS = {"See": "see", "Do": "do", "Eat": "eat", "Buy": "buy", "Sleep": "sleep"}
 MAX_DOCUMENT_BYTES = 2_500_000
 _pages = {}
@@ -54,7 +56,9 @@ class ListingsParser(HTMLParser):
         self.guide = {}
         self.paragraph = None
         self.paragraph_tag = None
+        self.paragraph_depth = 0
         self.legacy_heading = False
+        self.parent_section = ""
         self.hidden_text = False
         self.hidden_spans = 0
 
@@ -63,12 +67,25 @@ class ListingsParser(HTMLParser):
         classes = attrs.get("class", "").split()
         if tag == "h2":
             self.section = attrs.get("id", "")
+            self.parent_section = self.section
             self.legacy_heading = not self.section
+        if tag == "h3":
+            self.section = "Climate" if attrs.get("id") == "Climate" else self.parent_section
+            self.legacy_heading = not attrs.get("id")
         if self.legacy_heading and tag == "span" and "mw-headline" in classes:
-            self.section = attrs.get("id", "")
-        if self.paragraph is None and (tag == "p" or (tag == "li" and self.section in {"Stay_safe", "Stay_healthy", "Respect"})) and self.section in GUIDE_SECTIONS:
+            heading = attrs.get("id", "")
+            if self.legacy_heading == "h3":
+                self.section = "Climate" if heading == "Climate" else self.parent_section
+            else:
+                self.section = self.parent_section = heading
+        if tag in {"h2", "h3"} and self.legacy_heading:
+            self.legacy_heading = tag
+        if self.paragraph is None and (tag == "p" or (tag == "li" and self.section in LIST_SUMMARIES)) and self.section in GUIDE_SECTIONS:
             self.paragraph = []
             self.paragraph_tag = tag
+            self.paragraph_depth = 1
+        elif tag == self.paragraph_tag:
+            self.paragraph_depth += 1
         if tag in {"script", "style", "sup"}:
             self.hidden_text = True
         if tag == "span" and (self.hidden_spans or "listing-coordinates" in classes):
@@ -150,18 +167,20 @@ class ListingsParser(HTMLParser):
                 return
 
     def handle_endtag(self, tag):
-        if tag == "h2":
+        if tag in {"h2", "h3"}:
             self.legacy_heading = False
         if tag in {"script", "style", "sup"}:
             self.hidden_text = False
         if tag == "span" and self.hidden_spans:
             self.hidden_spans -= 1
         if tag == self.paragraph_tag:
+            self.paragraph_depth -= 1
+        if tag == self.paragraph_tag and self.paragraph_depth == 0:
             text = " ".join("".join(self.paragraph).split())
-            minimum = 28 if self.section in {"Stay_safe", "Stay_healthy", "Respect"} else 70
+            minimum = 28 if self.section in LIST_SUMMARIES or self.section == "Climate" else 55
             if len(text) >= minimum and not text.startswith(("For other places", "This article")):
                 section = self.guide.setdefault(self.section, [])
-                if len(section) < 8:
+                if len(section) < 24:
                     section.append(text[:800])
             self.paragraph = None
             self.paragraph_tag = None

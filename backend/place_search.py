@@ -259,7 +259,7 @@ async def matched_venue_photo(client, key, name, lat, lon):
         location = raw.get("location") or {}
         position = coordinates(location.get("latitude"), location.get("longitude"))
         if (raw.get("id") and position and title_key((raw.get("displayName") or {}).get("text", "")) == title_key(name)
-                and distance_metres(point, position) <= 80):
+                and distance_metres(point, position) <= 120):
             matches.append(raw)
     if len(matches) != 1:
         return None
@@ -560,13 +560,13 @@ async def place_media(
                 nearby_media(client, lat, lon, name, radius, type, exact=exact), landmark_photo(),
             )
             if photo and not result["items"]:
-                return {**result, "status": "live", "items": [{**photo, "type": "photo", "title": name}]}
+                result = {**result, "status": "live", "items": [{**photo, "type": "photo", "title": name}]}
         else:
             result = await nearby_media(client, lat, lon, name, radius, type, exact=exact)
         key = os.getenv("GOOGLE_PLACES_API_KEY")
-        if (exact and venue and type != "video" and name and key and os.getenv("ENABLE_GOOGLE_PLACE_PHOTOS") == "1"
+        if (exact and type != "video" and name and key and os.getenv("ENABLE_GOOGLE_PLACE_PHOTOS") == "1"
                 and (not google_required() or await asyncio.to_thread(current_user, request))):
-            if result["items"] and type == "photo":
+            if any(item.get("type") == "photo" for item in result["items"]):
                 return result
             try:
                 photo = await matched_venue_photo(client, key, name, lat, lon)

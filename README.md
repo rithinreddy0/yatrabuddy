@@ -31,6 +31,16 @@ The local API launcher loads the ignored root `.env` without overriding process 
 
 The Travel Profile sets trip length, group size, INR budget, home city, interests, food preferences, pace, transport, and mobility defaults. Users can change the profile or override those defaults for each trip. Guest preferences stay in the browser and registered profiles sync to the API.
 
+## Live transport and place photos
+
+Set these credentials on the **FastAPI service** (in the ignored root `.env` locally, or in the Render service environment). Restart the API after updating them.
+
+- `GOOGLE_ROUTES_API_KEY`: enable [Google Routes](https://developers.google.com/maps/documentation/routes) for traffic-aware driving estimates and scheduled rail/bus routes where Google has coverage. These schedules do not confirm seats or ticket availability.
+- `DUFFEL_ACCESS_TOKEN`: a [Duffel production token](https://duffel.com/docs/api/offer-requests/create-offer-request) enables dated flight offers. Test offers are never shown to travelers. Enter an IATA code where the app cannot map a city to an airport. Hyderabad → Old Goa searches HYD to both GOI and GOX.
+- `GOOGLE_PLACES_API_KEY` with `ENABLE_GOOGLE_PLACE_PHOTOS=1`: enable [Google Places photos](https://developers.google.com/maps/documentation/places/web-service/place-photos). The app uses credited photos where available and labels illustrations when a place has no match.
+
+Without these credentials, Google Maps links, the key-free road estimate, and operator links still work. IRCTC, intercity bus inventory and in-app private ride quotes need separate authorized provider access. The app sends travelers to operators for live booking and private ride quotes; it does not collect operator sign-in credentials.
+
 ## Modules
 
 - `src/features` contains discovery, global city lookup, onboarding, account, research, travel news, provider handoffs, buddy, trip brief, itinerary, map, and library sync components.
