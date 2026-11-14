@@ -12,6 +12,7 @@ from . import agents, auth, conversation, locations, nearby, news, partners, pla
 from .catalog import CATALOG
 from .city_briefing import router as city_briefing_router
 from .climate import router as climate_router
+from .trip_transport import router as trip_transport_router
 from .transport_sources import router as transport_router
 from .db import Base, Library, engine, transaction
 from .source_cache import SourceCache, source_result
@@ -47,6 +48,7 @@ app.include_router(partners.router)
 app.include_router(locations.router)
 app.include_router(city_briefing_router)
 app.include_router(climate_router)
+app.include_router(trip_transport_router)
 app.include_router(nearby.router)
 app.include_router(place_search.router)
 app.include_router(conversation.router)
