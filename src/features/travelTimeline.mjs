@@ -1,4 +1,5 @@
 import {draftSchedule} from './draftSchedule.mjs'
+import {legSteps} from './journey.mjs'
 
 export function tripDate(departure, offset) {
   if (!departure) return ''
@@ -23,11 +24,24 @@ export function travelTimeline(draft, bookings, selectedDay) {
     const day = booking.date && draft.departure ? (Date.parse(booking.date) - Date.parse(draft.departure)) / 86_400_000 : null
     return {...booking, booking:true, location:booking.place, day, minute:booking.time ? hour * 60 + minute : null}
   })
+  const stay = draft.stay || draft.days.flat()[0]
+  const journey = ['outbound', 'returnLeg'].flatMap(key => {
+    const leg = draft.journey?.[key]
+    if (!leg) return []
+    return legSteps(leg, {direction:key === 'outbound' ? 'outbound' : 'return', home:draft.journey.home, stay})
+      .filter(step => step.minute != null && step.date)
+      .map((step, index) => ({id:`journey-${key}-${index}`, title:step.title, notes:step.detail, journey:true,
+        minute:step.minute, date:step.date,
+        day:draft.departure ? Math.round((Date.parse(step.date) - Date.parse(draft.departure)) / 86_400_000) : null}))
+  })
+  const dated = [...stops, ...journey]
   return {
-    events:[...stops, ...tickets].filter(event => event.day === selectedDay)
+    events:[...dated, ...tickets].filter(event => event.day === selectedDay)
       .sort((a, b) => (a.minute ?? 1440) - (b.minute ?? 1440)),
     otherTickets:tickets.filter(ticket => ticket.day == null || ticket.day < 0 || ticket.day >= draft.days.length),
-    reminders:[...stops, ...tickets].filter(event => event.date && event.minute != null),
-    dayCount:Math.max(draft.days.length, ...stops.map(stop => stop.day + 1)),
+    reminders:[...dated, ...tickets].filter(event => event.date && event.minute != null),
+    dayCount:Math.max(draft.days.length, ...dated.filter(event => event.day != null).map(event => event.day + 1)),
+    // Journey steps before Day 1 (leaving home the day before) get their own "travel day" entries.
+    firstDay:Math.min(0, ...journey.filter(event => event.day != null).map(event => event.day)),
   }
 }

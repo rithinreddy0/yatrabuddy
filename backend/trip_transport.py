@@ -9,6 +9,7 @@ import re
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 
 from . import agents, auth
 from .agents import USER_AGENT
@@ -174,3 +175,34 @@ async def trip_transport(
         "sources": [{"name": "OpenStreetMap contributors", "url": "https://www.openstreetmap.org/copyright"},
                     {"name": "OSRM", "url": "https://project-osrm.org/"}],
     })
+
+
+class Point(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+
+
+class TransferRequest(BaseModel):
+    pairs: list[tuple[Point, Point]] = Field(min_length=1, max_length=6)
+
+
+@router.post("/trip-transport/transfers")
+async def transfers(data: TransferRequest, request: Request):
+    """Road distance and time for each pair, for example home to the airport. None when no route is found."""
+    auth.limit(request, "trip-transport-transfers", 30, 60)
+
+    async def one(start, end):
+        start, end = start.model_dump(), end.model_dump()
+        if km(start, end) < 0.2:
+            return {"kilometres": 0, "minutes": 0, "method": "same place"}
+        route = await agents.route_points([start, end])
+        if route:
+            return {"kilometres": route["kilometres"], "minutes": sum(route["legMinutes"]), "method": "road"}
+        return None
+
+    try:
+        async with asyncio.timeout(12):
+            results = await asyncio.gather(*(one(a, b) for a, b in data.pairs))
+    except TimeoutError:
+        results = [None] * len(data.pairs)
+    return {"transfers": results, "source": "OSRM", "note": "Driving estimate without live traffic"}

@@ -72,3 +72,16 @@
 @media (max-width:760px) {
   .tt-mode:not([data-active]) { display:none; }
 }
+
+/* Home-to-home journey planner */
+.jp { display:grid; gap:10px; padding:12px; border:1px solid color-mix(in srgb, var(--primary) 40%, var(--line)); border-radius:14px; background:var(--glass-strong); }
+.jp-head { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:8px; }
+.jp-head p { color:var(--muted); margin-top:3px; }
+.jp-leg { display:grid; gap:8px; min-width:0; margin:0; padding:10px; border:1px solid var(--line); border-radius:12px; }
+.jp-leg legend { padding:0 4px; font-weight:800; }
+.jp-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap:8px; }
+.jp-grid label { display:grid; gap:4px; min-width:0; font-weight:700; font-size:.88rem; }
+.jp-grid :is(input:not([type=checkbox]), select) { min-width:0; min-height:42px; }
+.jp-grid .jp-check { display:flex; align-items:center; gap:8px; min-height:42px; align-self:end; }
+.jp-preview { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap:12px; }
+.jp-preview h4 { margin:0 0 4px; }

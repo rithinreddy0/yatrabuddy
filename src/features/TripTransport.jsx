@@ -4,6 +4,7 @@ import {request} from '../api.mjs'
 import {Button, SourcePill} from '../components/UI.jsx'
 import {money} from '../planner.mjs'
 import {TransportQuotes} from './TransportSources.jsx'
+import {JourneyPlanner} from './JourneyPlanner.jsx'
 import {arrivalPoint, coords, dayLegs, distanceAdvice, flightsSearch, fuelEstimate, hours, legMode, mapsDirections, trainSchedule} from './tripTransportPlan.mjs'
 import './TripTransport.css'
 
@@ -27,12 +28,13 @@ function useResource(path) {
   return state.path === path ? state : {loading:Boolean(path)}
 }
 
-function ModeCard({id, active, icon:Glyph, title, lead, children, actions, onSave, saved}) {
+function ModeCard({id, active, icon:Glyph, title, lead, children, actions, onSave, saved, onUse}) {
   return <article className="tt-mode" id={id} data-active={active || undefined}>
     <header><span className="tt-mode-icon"><Glyph size={18} aria-hidden="true"/></span>
       <div><h4>{title}</h4>{lead && <p>{lead}</p>}</div></header>
     {children}
     <div className="tt-actions">{actions}
+      {onUse && <Button variant="primary" icon="check" onClick={onUse}>Use for my trip</Button>}
       {onSave && <Button variant="text-btn" icon={saved === 'saved' ? 'check' : 'trip'} disabled={['saving', 'saved'].includes(saved)} onClick={onSave}>
         {saved === 'saved' ? 'Saved to bookings' : saved === 'saving' ? 'Saving…' : 'Save as an option'}</Button>}
     </div>
@@ -101,13 +103,14 @@ function guidePoint(guide, title) {
   </details>
 }
 
-export function TripTransport({draft, onAsk}) {
+export function TripTransport({draft, onAsk, onSaveDraft}) {
   const heading = useId()
   const {name, country, cityId, departure, travelers = 1, localModes = []} = draft || {}
   const [route, setRoute] = useState({origin:draft?.origin || '', departure:departure || '', travelers})
   const [editing, setEditing] = useState(!draft?.origin)
   const [saved, setSaved] = useState({})
   const [chosenMode, setChosenMode] = useState(null)
+  const [startMode, setStartMode] = useState(null)
   const arrival = arrivalPoint(draft)
   const plan = useResource(arrival ? 'trip-transport?' + new URLSearchParams({lat:arrival.lat, lon:arrival.lon, name:arrival.name,
     ...(route.origin ? {origin:route.origin} : {})}) : null)
@@ -202,6 +205,9 @@ export function TripTransport({draft, onAsk}) {
       {!route.departure && <p className="tt-note tt-wide">Add a travel date so flight and train searches open on that day.</p>}
     </div>}
 
+    {onSaveDraft && arrival && <div id="tt-journey"><JourneyPlanner draft={draft} plan={data} startMode={startMode}
+      onStarted={() => setStartMode(null)} onSave={onSaveDraft}/></div>}
+
     {hasLiveQuotes && <section className="tt-live" aria-label="Live options">
       <h3>Live options for {tripDate}</h3>
       <TransportQuotes quotes={quotes.data.quotes}/>
@@ -212,7 +218,7 @@ export function TripTransport({draft, onAsk}) {
         onClick={() => setChosenMode(id)}><Glyph size={17} aria-hidden="true"/><span><strong>{label}</strong><small>{hint}</small></span></button>)}
     </div>}
     {!nearbyIntercity && <div className="tt-modes">
-      <ModeCard id="tt-fly" active={mode === 'fly'} icon={Plane} title="Fly"
+      <ModeCard id="tt-fly" onUse={onSaveDraft && arrival ? () => {setStartMode('flight'); document.getElementById('tt-journey')?.scrollIntoView({behavior:'smooth', block:'start'})} : null} active={mode === 'fly'} icon={Plane} title="Fly"
         lead={firstAirport ? `Nearest airports to ${stayLabel}` : 'No airport with scheduled-flight codes found within 150 km.'}
         onSave={route.origin ? () => track('flight', `Flight ${flightFrom} → ${firstAirport?.code || name}`, flightsSearch(flightFrom, firstAirport?.code || name, route.departure)) : null}
         saved={saved.flight}
@@ -226,7 +232,7 @@ export function TripTransport({draft, onAsk}) {
         {fromAirport && <p className="tt-note">From {origin?.name}: {fromAirport.name} ({fromAirport.code}), {fromAirport.distanceKm} km from the centre.</p>}
       </ModeCard>
 
-      <ModeCard id="tt-train" active={mode === 'train'} icon={TrainFront} title="Train"
+      <ModeCard id="tt-train" onUse={onSaveDraft && arrival ? () => {setStartMode('train'); document.getElementById('tt-journey')?.scrollIntoView({behavior:'smooth', block:'start'})} : null} active={mode === 'train'} icon={TrainFront} title="Train"
         lead={destHubs.stations.length ? `Stations near ${stayLabel}` : 'No mainline station found within 25 km.'}
         onSave={schedule ? () => track('train', `Train ${fromStation.code} → ${toStation.code}`, schedule) : null}
         saved={saved.train}
@@ -241,7 +247,7 @@ export function TripTransport({draft, onAsk}) {
         {schedule && <small>The schedule link lists trains between these two codes. Seats and fares are on IRCTC.</small>}
       </ModeCard>
 
-      <ModeCard id="tt-bus" active={mode === 'bus'} icon={Bus} title="Bus" lead={route.origin ? `Search ${route.origin} to ${name}${draft.region && draft.region !== name ? ' or ' + draft.region : ''}.` : 'Add your departure city to search buses.'}
+      <ModeCard id="tt-bus" onUse={onSaveDraft && arrival ? () => {setStartMode('bus'); document.getElementById('tt-journey')?.scrollIntoView({behavior:'smooth', block:'start'})} : null} active={mode === 'bus'} icon={Bus} title="Bus" lead={route.origin ? `Search ${route.origin} to ${name}${draft.region && draft.region !== name ? ' or ' + draft.region : ''}.` : 'Add your departure city to search buses.'}
         onSave={route.origin && country === 'India' ? () => track('bus', `Bus ${route.origin} → ${name}`, 'https://www.redbus.in/') : null}
         saved={saved.bus}
         actions={country === 'India' ? <><SourcePill url="https://www.redbus.in/" label="Search redBus"/><SourcePill url="https://www.abhibus.com/" label="Search AbhiBus"/></>
@@ -249,7 +255,7 @@ export function TripTransport({draft, onAsk}) {
         <small>Bus sites need the cities and date entered on their page. Compare boarding points and seat types there.</small>
       </ModeCard>
 
-      <ModeCard id="tt-drive" active={mode === 'drive'} icon={Car} title="Drive or hire a cab"
+      <ModeCard id="tt-drive" onUse={onSaveDraft && arrival ? () => {setStartMode('drive'); document.getElementById('tt-journey')?.scrollIntoView({behavior:'smooth', block:'start'})} : null} active={mode === 'drive'} icon={Car} title="Drive or hire a cab"
         lead={data?.road ? `${Math.round(data.road.kilometres)} km · about ${hours(data.road.minutes)} without traffic` : route.origin ? 'Road distance unavailable right now.' : 'Add your departure city for road distance.'}
         onSave={route.origin && arrivalCoords ? () => track('drive', `Drive ${route.origin} → ${name}`, mapsDirections(route.origin, arrivalCoords, 'driving')) : null}
         saved={saved.drive}

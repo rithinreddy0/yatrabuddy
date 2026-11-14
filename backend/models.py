@@ -241,6 +241,57 @@ class TripLedger(BaseModel):
         return self
 
 
+JourneyMode = Literal["flight", "train", "bus", "drive", "cab", "other"]
+ClockText = Annotated[str, StringConstraints(pattern=r"^([01][0-9]|2[0-3]):[0-5][0-9]$")]
+JourneyText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=300)]
+
+
+class JourneyPoint(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+    code: Annotated[str, StringConstraints(strip_whitespace=True, max_length=8)] | None = None
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lon: float | None = Field(default=None, ge=-180, le=180)
+
+
+class JourneyTransfer(BaseModel):
+    """Road estimate between home or the stay and a station or airport."""
+
+    kilometres: float = Field(ge=0, le=5000)
+    minutes: int = Field(ge=0, le=6000)
+
+
+class JourneyLeg(BaseModel):
+    """One way of the trip between home and the destination. Times are entered by the traveller."""
+
+    mode: JourneyMode
+    date: CalendarDate | None = None
+    departTime: ClockText | None = None
+    arriveTime: ClockText | None = None
+    arriveNextDay: bool = False
+    fromHub: JourneyPoint | None = None
+    toHub: JourneyPoint | None = None
+    firstTransfer: JourneyTransfer | None = None
+    lastTransfer: JourneyTransfer | None = None
+    mainKilometres: float | None = Field(default=None, ge=0, le=40000)
+    mainMinutes: int | None = Field(default=None, ge=0, le=6000)
+    service: Annotated[str, StringConstraints(strip_whitespace=True, max_length=80)] = ""
+    estimatedCost: int | None = Field(default=None, ge=0, le=10_000_000)
+    bookingId: Annotated[str, StringConstraints(max_length=36)] | None = None
+    notes: JourneyText = ""
+
+
+class TripJourney(BaseModel):
+    home: JourneyPoint
+    outbound: JourneyLeg | None = None
+    returnLeg: JourneyLeg | None = None
+
+    @model_validator(mode="after")
+    def validate_journey(self):
+        if self.outbound and self.returnLeg and self.outbound.date and self.returnLeg.date                 and self.returnLeg.date < self.outbound.date:
+            raise ValueError("The journey home cannot be before the journey out.")
+        return self
+
+
 class WorldwideDraft(BaseModel):
     id: UUID
     cityId: int = Field(gt=0)
@@ -271,6 +322,7 @@ class WorldwideDraft(BaseModel):
     weatherStatus: Literal["not_requested", "ready", "partial", "unavailable"] = "not_requested"
     weatherNote: str | None = Field(default=None, max_length=240)
     ledger: TripLedger | None = None
+    journey: TripJourney | None = None
 
     @model_validator(mode="after")
     def validate_draft(self):

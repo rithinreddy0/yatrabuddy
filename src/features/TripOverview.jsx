@@ -13,6 +13,7 @@ import {PlaceDetails} from './PlaceDetails.jsx'
 import {TripTransport} from './TripTransport.jsx'
 import {TripWorkspace} from './TripWorkspace.jsx'
 import {TripBudget} from './TripBudget.jsx'
+import {JourneyTimeline} from './JourneyTimeline.jsx'
 import {draftBudget, draftPreferences, tripCalendar} from './tripOverview.mjs'
 import './TripOverview.css'
 import {DictationControl} from './DictationControl.jsx'
@@ -231,6 +232,7 @@ function PrintItinerary({draft}) {
     <h1>Trip to {draft.name}</h1>
     <p>{formatDate(draft.departure)} · {draft.travelers} {draft.travelers === 1 ? 'traveler' : 'travelers'}</p>
     {draft.stay && <p>Staying at {draft.stay.name}</p>}
+    {draft.journey?.outbound && <section><h2>Journey there</h2><JourneyTimeline journey={draft.journey} draft={draft} direction="outbound"/></section>}
     {draft.days.map((_, index) => <section key={index}>
       <h2>Day {index + 1}</h2>
       <ol>{draftSchedule(draft, index).map(({place, start, end}) => <li key={place.url}>
@@ -238,6 +240,7 @@ function PrintItinerary({draft}) {
       </li>)}</ol>
       {!draft.days[index].length && <p>Free time</p>}
     </section>)}
+    {draft.journey?.returnLeg && <section><h2>Journey home</h2><JourneyTimeline journey={draft.journey} draft={draft} direction="return"/></section>}
   </section>
 }
 
@@ -407,14 +410,14 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
         {section !== 'itinerary' && placeDetails()}
         {!['travel', 'itinerary'].includes(section) && <header className="trip-section-title" key={section} tabIndex={-1} ref={sectionHeading}>
           <h2>{section === 'media' ? 'Photos, videos & memories' : title}</h2>
-          {section === 'calendar' && <Button icon="download" disabled={!active.departure}
-            title={!active.departure ? 'Set a departure date in trip preferences' : undefined} onClick={() => exportCalendar(active)}>Export calendar</Button>}
+          {section === 'calendar' && <Button icon="download" disabled={!tripCalendar(active)}
+            title={!tripCalendar(active) ? 'Set a departure date in trip preferences or plan the journey' : undefined} onClick={() => exportCalendar(active)}>Export calendar</Button>}
         </header>}
         {section === 'media' && <TripPhotoReferences key={active.id} draft={active} stops={stops} onSelect={select}/>}
         {section === 'ideas' && <DestinationBrief location={active} compact/>}
         {section === 'budget' && <><TripBudget draft={active} onSave={onSaveDraft} onOpenBookings={() => open('bookings')}/><TravelBudget draft={active}/></>}
         {section === 'preferences' && <PreferencesEditor key={active.id + ':' + active.updated} draft={active} save={updatePreferences} onClose={() => open('itinerary')}/>}
-        {section === 'transport' && <div className="trip-overview-glass trip-overview-section"><TripTransport draft={active} onAsk={onAsk && (text => onAsk(text, active.id))}/></div>}
+        {section === 'transport' && <div className="trip-overview-glass trip-overview-section"><TripTransport draft={active} onAsk={onAsk && (text => onAsk(text, active.id))} onSaveDraft={onSaveDraft}/></div>}
         {section === 'stays' && <StayOptions draft={active} nearby={nearby} onSelect={select} onEdit={onEdit} retry={() => setAttempt(value => value + 1)}/>}
         {['packing', 'journal'].includes(section) && <PersonalList key={section} kind={section} tripId={active.id}/>}
         <div className="trip-overview-content"

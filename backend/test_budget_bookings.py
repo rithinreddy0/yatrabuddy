@@ -89,3 +89,29 @@ class BookingStatusTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class JourneyModelTest(unittest.TestCase):
+    def test_home_to_home_journey_round_trips(self):
+        journey = {
+            "home": {"name": "Hyderabad", "lat": 17.38, "lon": 78.48},
+            "outbound": {"mode": "flight", "date": "2026-12-10", "departTime": "06:05", "arriveTime": "07:30",
+                         "fromHub": {"name": "Rajiv Gandhi International Airport", "code": "HYD"},
+                         "toHub": {"name": "Manohar International Airport", "code": "GOX", "lat": 15.73, "lon": 73.86},
+                         "firstTransfer": {"kilometres": 31.5, "minutes": 45}, "estimatedCost": 9000},
+            "returnLeg": {"mode": "train", "date": "2026-12-12", "departTime": "22:10", "arriveTime": "13:40",
+                          "arriveNextDay": True},
+        }
+        saved = WorldwideDraft.model_validate(draft(journey=journey))
+        self.assertEqual(saved.journey.outbound.toHub.code, "GOX")
+        self.assertTrue(saved.journey.returnLeg.arriveNextDay)
+
+    def test_journey_rejects_bad_times_and_backwards_dates(self):
+        base = {"home": {"name": "Hyderabad"}}
+        with self.assertRaises(ValidationError):
+            WorldwideDraft.model_validate(draft(journey={**base, "outbound": {"mode": "flight", "departTime": "25:00"}}))
+        with self.assertRaises(ValidationError):
+            WorldwideDraft.model_validate(draft(journey={**base, "outbound": {"mode": "rocket"}}))
+        with self.assertRaises(ValidationError):
+            WorldwideDraft.model_validate(draft(journey={**base, "outbound": {"mode": "bus", "date": "2026-12-12"},
+                                                         "returnLeg": {"mode": "bus", "date": "2026-12-10"}}))

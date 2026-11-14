@@ -7,6 +7,8 @@ import {money} from '../planner.mjs'
 import {draftSchedule, visitTime} from './draftSchedule.mjs'
 import {JourneyMap, draftMapData} from './JourneyMap.jsx'
 import {TravelMode} from './TravelMode.jsx'
+import {JourneyCard} from './JourneyTimeline.jsx'
+import {clockText, journeyEvents} from './journey.mjs'
 import {BOOKING_STATUSES, BOOKING_TYPES, statusLabel} from './budgetLedger.mjs'
 import './TripWorkspace.css'
 
@@ -269,7 +271,7 @@ function PlacePicker({draft, used, title, onClose, onPick, busy, errorText, excl
   </Dialog>
 }
 
-function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, onReplaceStop, busy, ideas, onIdeas, pinnedDays=[], onTogglePinDay}) {
+function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, onReplaceStop, busy, ideas, onIdeas, pinnedDays=[], onTogglePinDay, onPlanJourney}) {
   const [showDistances, setShowDistances] = useState(true)
   const [picker, setPicker] = useState(null)
   const [mapDay, setMapDay] = useState(null)
@@ -290,6 +292,7 @@ function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, onRep
       <Icon name="heart" size={20}/><span><strong>Ideas</strong><small>{ideas.length ? `${ideas.length} saved for later` : 'Save places you’re considering'}</small></span>
       <Icon name="chevron" size={16}/>
     </button>
+    <JourneyCard draft={draft} direction="outbound" onPlan={onPlanJourney}/>
     {draft.days.map((stops, index) => {
       const pinned = pinnedDays.includes(index)
       const schedule = draftSchedule(draft, index)
@@ -365,6 +368,7 @@ function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, onRep
         {onAddStop && <Button icon="plus" aria-label={`Add stop to day ${index + 1}`} disabled={busy || replacing || stops.length >= 5}
         onClick={() => {setPickerError('');setPicker({day:index})}}>Add stop</Button>}
     </details>})}
+    <JourneyCard draft={draft} direction="return" onPlan={onPlanJourney}/>
     {picker && <PlacePicker key={`${picker.day}:${picker.replace?.url || 'add'}`} draft={draft} used={used} excludeUrl={picker.replace?.url}
       title={picker.replace ? `Swap ${picker.replace.name} on day ${picker.day + 1}` : `Add a stop to day ${picker.day + 1}`} busy={busy || replacing}
       errorText={pickerError} onClose={() => setPicker(null)} onPick={async place => {
@@ -381,8 +385,20 @@ function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, onRep
   </div>
 }
 
+function JourneyEvent({event}) {
+  return <section className="trip-room-calendar-day">
+    <h3>{formatDate.format(new Date(event.date + 'T12:00:00Z'))}</h3>
+    <div className="trip-room-event" data-category="Journey">
+      <small>{event.start == null ? 'Time not set' : clockText(event.start) + (event.end != null ? ' – ' + clockText(event.end) + (event.end >= 1440 ? ' (+1 day)' : '') : '')}</small>
+      <strong>{event.title}</strong>
+    </div>
+  </section>
+}
+
 function Calendar({draft, onPlaceSelect}) {
+  const [outbound, back] = ['outbound', 'returnLeg'].map(key => journeyEvents(draft.journey).find(event => event.key === key))
   return <div className="trip-room-calendar" aria-label="Trip calendar">
+    {outbound && <JourneyEvent event={outbound}/>}
     {draft.days.map((_, index) => <section key={index} className="trip-room-calendar-day">
       <h3>{dayLabel(draft.departure, index)}</h3>
       {draftSchedule(draft, index).map(({place, start, end}) => <div key={place.url} className="trip-room-event" data-category={place.category}>
@@ -391,6 +407,7 @@ function Calendar({draft, onPlaceSelect}) {
       </div>)}
       {!draft.days[index].length && <p className="trip-room-muted">Free time</p>}
     </section>)}
+    {back && <JourneyEvent event={back}/>}
   </div>
 }
 
@@ -830,7 +847,8 @@ export function TripWorkspace({draft, workspaceId, inviteCode, ideas=[], media=[
         onAddStop={workspace?.isOwner ? addStop : undefined}
         onRemoveStop={workspace?.isOwner ? removeStop : undefined}
         onReplaceStop={workspace?.isOwner ? replaceStop : undefined}
-        onTogglePinDay={workspace?.isOwner ? togglePinDay : undefined}/>}
+        onTogglePinDay={workspace?.isOwner ? togglePinDay : undefined}
+        onPlanJourney={onTabChange ? () => onTabChange('transport') : undefined}/>}
       {tab === 'calendar' && <Calendar draft={shownDraft} onPlaceSelect={onPlaceSelect}/>}
       {tab === 'travel' && <TravelMode draft={shownDraft} bookings={group.filter(entry => entry.kind === 'booking')}
         onTabChange={onTabChange || setTab}/>}

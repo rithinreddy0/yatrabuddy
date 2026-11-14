@@ -64,3 +64,11 @@ test('CSV export neutralises spreadsheet formulas', () => {
   const text = ledgerCsv(draft({members:['A'], expenses:[expense('1', {note:'=HYPERLINK("x")', payer:'A'})]}))
   assert.match(text, /"'=HYPERLINK\(""x""\)"/)
 })
+
+test('journey costs feed the transport plan without double counting a confirmed booking', () => {
+  const journey = {home:{name:'Hyderabad'}, outbound:{mode:'train', estimatedCost:2400}, returnLeg:{mode:'train', estimatedCost:2400}}
+  const plain = summarizeBudget(draft({}, {journey}))
+  assert.equal(plain.categories.find(row => row.category === 'Transport').expected, 4800)
+  const booked = summarizeBudget(draft({}, {journey}), [{id:'t', status:'confirmed', bookingType:'Train', amount:2400}])
+  assert.equal(booked.categories.find(row => row.category === 'Transport').expected, 4800)
+})

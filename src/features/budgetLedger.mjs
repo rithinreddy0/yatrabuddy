@@ -1,3 +1,5 @@
+import {journeyCost} from './journey.mjs'
+
 // Trip budget arithmetic. Every amount is whole rupees on input; shares are worked out in
 // paise so splitting ₹100 three ways still adds back up to exactly ₹100.
 
@@ -38,6 +40,9 @@ export function summarizeBudget(draft, bookings = []) {
   for (const [url, amount] of Object.entries(draft.stopCosts || {})) {
     if (stopUrls.has(url) && Number.isFinite(amount)) estimate.Attractions += amount
   }
+  // Costs entered for the journey from home and back are the transport plan. A confirmed booking for the
+  // same journey is counted as booked; the category takes the larger of the two, never the sum.
+  estimate.Transport += journeyCost(draft.journey)
   const actual = blank()
   const refunds = blank()
   for (const expense of ledger.expenses) {
