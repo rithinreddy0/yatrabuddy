@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react'
-import {Button, Icon, SourcePill} from '../components/UI.jsx'
+import {Button, Icon, SourcePill, TravelArtwork} from '../components/UI.jsx'
 import {money} from '../planner.mjs'
 import {visitTime} from './draftSchedule.mjs'
 import {travelTimeline, tripClock, tripDate} from './travelTimeline.mjs'
@@ -70,6 +70,7 @@ export function TravelMode({draft, bookings, onTabChange}) {
         {next && <p>Up next · {next.date === clock.date ? 'Today' : next.date} · {visitTime(next.minute)}{next.location && ` · ${next.location}`}</p>}
         {!draft.departure && <p>Set a departure date to get day-by-day reminders.</p>}
       </div>
+      <TravelArtwork name="travel-mode" className="travel-now-art" width={180} height={135}/>
       <div className="travel-settings">
         <label>Schedule time zone<select value={zone} onChange={event => change({zone:event.target.value})}>
           {timeZones.map(item => <option key={item}>{item}</option>)}

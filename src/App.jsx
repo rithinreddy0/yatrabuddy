@@ -1,7 +1,7 @@
 import React,{useCallback,useEffect,useRef,useState} from 'react'
 import {UserRound} from 'lucide-react'
 import {needsOnboarding} from './authGate.mjs'
-import {AgentProgress,Brand,Button,Dialog,Empty,Icon} from './components/UI.jsx'
+import {AgentProgress,Brand,Button,Dialog,Empty,Icon,TravelArtwork} from './components/UI.jsx'
 import {request} from './api.mjs'
 import {allowedStop,setCatalog} from './planner.mjs'
 import {Home,Discover,Trips,storedCity} from './features/Home.jsx'
@@ -51,8 +51,11 @@ function currentRoute(){
   return {page:['agents','news','sources'].includes(page)?'guide':labels[page]?page:'home',id,section}
 }
 function storedTheme(){
-  try { if (['light','dark'].includes(localStorage.getItem('yatra.theme'))) return localStorage.getItem('yatra.theme') } catch {}
-  return 'system'
+  try {
+    const saved = localStorage.getItem('yatra.theme')
+    if (['light','dark','system'].includes(saved)) return saved
+  } catch {}
+  return 'light'
 }
 export default function App(){
   const [route,setRoute]=useState(currentRoute)
@@ -72,7 +75,7 @@ export default function App(){
   const [chatRequest,setChatRequest]=useState({query:'',id:0,context:null})
   const [activeTripId,setActiveTripId]=useState(()=>{try{return localStorage.getItem('yatra.activeTrip')||''}catch{return ''}})
   const [browseRequest,setBrowseRequest]=useState(null)
-  const [homeDestination,setHomeDestination]=useState(storedCity)
+  const [homeDestination]=useState(storedCity)
   const [histories,setHistories]=useState({})
   const state=useLibrary()
   const {user,library,ready,profileReady,change}=state
@@ -319,7 +322,7 @@ export default function App(){
     case 'preferences':content=<Preferences key={route.page} initialTab={route.page==='account'?'account':'travel'} user={user} theme={theme} onThemeChange={changeTheme} style={library.profile?.style||library.style} profile={library.profile}
       onIdentity={state.updateIdentity} onSignOut={signOut} onEditProfile={()=>{if(mustSignIn&&!user)requireSignIn('preferences');else setModal({type:'onboarding'})}}
       onResetProfile={()=>setModal({type:'clear-profile'})} onChange={style=>{if(mustSignIn&&!user){requireSignIn('preferences');return}change(data=>({...data,style,profile:data.profile?{...data.profile,style}:null}));message('Travel style saved.')}} onAccount={()=>requireSignIn('account')}/>;break
-    default:content=<Home catalog={catalog} library={user||!mustSignIn?library:{trips:[],drafts:[],profile:null}} destination={homeDestination} onDestination={setHomeDestination} onPlan={start} onAsk={ask} onNavigate={navigate} onResearch={topic=>navigate('guide/'+topic)}
+    default:content=<Home catalog={catalog} library={user||!mustSignIn?library:{trips:[],drafts:[],profile:null}} destination={homeDestination} onPlan={start} onAsk={ask} onNavigate={navigate} onResearch={topic=>navigate('guide/'+topic)}
       onRequireAccount={mustSignIn&&!user?()=>requireSignIn('saved'):undefined}/>
   }
   const close=()=>setModal(null)
@@ -327,7 +330,8 @@ export default function App(){
     signInTarget.current=target
     navigate('signin')
   }
-  if((!ready&&!guestPages.has(route.page))||restricted)return <main className="google-entry"><section className="panel google-entry-card"><AgentProgress label="Checking your YatraBuddy session"/>
+  if((!ready&&!guestPages.has(route.page))||restricted)return <main className="google-entry"><section className="panel google-entry-card session-loading">
+    <div className="session-loading-status" role="status"><TravelArtwork name="transport-plane" animated width={126} height={96}/><span>Checking your YatraBuddy session…</span></div>
     <Button variant="text-btn" icon="back" onClick={()=>navigate('home')}>Back to Home</Button></section></main>
   if(route.page==='signin')return <Account page required={mustSignIn} onClose={()=>{signInTarget.current='home';navigate('home')}} onLogin={async account=>{
     await state.login(account,{mergeGuest:false})

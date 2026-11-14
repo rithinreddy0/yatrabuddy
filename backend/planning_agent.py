@@ -25,9 +25,10 @@ from .catalog import DESTINATIONS
 from .db import Base, transaction
 from .destination_images import destination_images
 from .models import Brief, MealPreference, Pace, SourcedStay, Style, Transport, Trip, WorldwideDraft
-from .nearby import add_meal_results, distance_metres, nearby_report, transit_passes
+from .nearby import add_meal_results, distance_metres, estimate_day_route, nearby_report, transit_passes
 from .locations import compact, destination_guide, find_destinations, is_settlement, lookup
 from .place_search import lookup_places, public_url
+from .planner_commands import command_reply, trip_snapshot
 from .public_answers import contextual_query, factual_answer, research_intent, venue_subject, video_answer
 from .source_cache import SourceCache, source_result
 from .trip_intake import draft_from_sources, next_intake_question, update_intake
@@ -834,7 +835,7 @@ async def guide_answer(query, sections=None):
         guide["sections"] = [item for item in guide["sections"] if item["title"] in sections]
     if not guide["sections"]:
         guide["error"] = "I couldn’t find a guide for that topic. Try the nearest city or region."
-    return {**guide, "query": location["name"]}
+    return {**guide, "query": location["name"], "location": location}
 
 
 async def enrich_transport(result, origin, destination, local, known=None):
@@ -1006,6 +1007,89 @@ def explicit_build_request(text):
     ))
 
 
+def itinerary_change(text):
+    clean = re.sub(r"^(?:could you |can you |please )+", "", text.strip(), flags=re.I).rstrip(" .!?")
+    if match := re.fullmatch(r"(?:replace|swap)\s+(.+?)\s+(?:with|for)\s+(.+)", clean, re.I):
+        return "replace", match[1], None, match[2]
+    if match := re.fullmatch(r"add\s+(.+?)\s+(?:to|on)\s+day\s+(\d+)", clean, re.I):
+        return "add", None, int(match[2]), match[1]
+    if match := re.fullmatch(r"(remove|skip|move)\s+(.+?)(?:\s+(?:to|on|from)\s+day\s+(\d+))?", clean, re.I):
+        return match[1].casefold(), match[2], int(match[3]) if match[3] else None, None
+    return None
+
+
+async def revise_stops(draft, change, offline):
+    action, name, number, other_name = change
+    if not draft:
+        return None, "Build an itinerary first, then tell me which stop to change."
+    days = [day.copy() for day in draft["days"]]
+    if (action in {"move", "add"} and number is None) or (number is not None and not 1 <= number <= len(days)):
+        return None, f"Choose a day from 1 to {len(days)}."
+    if action == "add":
+        index = number - 1
+        if len(days[index]) >= 5:
+            return None, f"Day {number} already has five stops. Choose another day or remove a stop first."
+    else:
+        key = name.strip(" \"'“”").casefold()
+        matches = [(idx, stop) for idx, day in enumerate(days) for stop in day
+                   if key == stop["name"].casefold() and (action == "move" or not number or number == idx + 1)]
+        if len(matches) != 1:
+            return None, "Which stop should I change? Use its exact name from the itinerary."
+        index, stop = matches[0]
+        position = days[index].index(stop)
+        days[index].remove(stop)
+    if action == "move":
+        target = number - 1
+        if target == index:
+            return None, f"{stop['name']} is already on day {number}."
+        if len(days[target]) >= 5:
+            return None, f"Day {number} already has five stops. Choose another day or remove a stop first."
+        days[target].append(stop)
+        answer = f"I moved {stop['name']} to day {number}."
+    elif action in {"remove", "skip"}:
+        if not any(days):
+            return None, "Keep at least one stop in the trip. Add another stop before removing this one."
+        answer = f"I removed {stop['name']} from day {index + 1}."
+    else:
+        if offline:
+            return None, "Resume online lookups so I can verify the new stop."
+        key = other_name.strip(" \"'“”").casefold()
+        try:
+            async with asyncio.timeout(12):
+                report = await nearby_report(draft["cityId"])
+        except (TimeoutError, httpx.HTTPError, HTTPException):
+            return None, "I couldn’t check the destination’s place listings. Try again in a moment."
+        candidates = {place["url"]: place for place in report["places"] if place["category"] != "Stay" and place["name"].casefold() == key}
+        if len(candidates) != 1:
+            return None, f"I couldn’t identify one verified stop named {other_name} in {draft['name']}. Check the place name or use Edit itinerary to pick a result."
+        place = next(iter(candidates.values()))
+        if action == "replace" and place["url"] == stop["url"]:
+            return None, f"{stop['name']} is already on day {index + 1}."
+        if any(item["url"] == place["url"] for day in days for item in day):
+            return None, f"{place['name']} is already in this itinerary."
+        if action == "replace":
+            days[index].insert(position, place)
+            answer = f"I replaced {stop['name']} with {place['name']} on day {index + 1}."
+        else:
+            days[index].append(place)
+            answer = f"I added {place['name']} to day {number}."
+    retained_urls = {place["url"] for day in days for place in day}
+    routes, geometry = [], []
+    if not offline:
+        try:
+            async with asyncio.timeout(8):
+                pairs = await asyncio.gather(*(estimate_day_route(day, draft.get("stay"), include_geometry=True) for day in days))
+            routes, geometry = map(list, zip(*pairs))
+        except TimeoutError:
+            answer += " Updated driving estimates are unavailable right now."
+    revised = WorldwideDraft.model_validate({
+        **draft, "days": days, "routes": routes, "routeGeometry": geometry, "routeAdvice": None,
+        "stopCosts": {url: amount for url, amount in draft.get("stopCosts", {}).items() if url in retained_urls},
+        "updated": max(int(time() * 1000), draft["updated"] + 1),
+    })
+    return revised.model_dump(mode="json"), answer
+
+
 def apply_turn(state, turn, values=None, sourced_stay=None):
     brief = state["brief"]
     if values is None and turn.kind == "edit":
@@ -1141,7 +1225,14 @@ async def turn_stream(token: str, turn: Turn, request: Request):
     async def stream():
         turn_started = monotonic()
         state = reduce_log(active_events)
-        message = turn.text.casefold() if turn.kind == "message" else ""
+        entered_text = turn.text
+        if turn.kind == "message" and re.match(r"^\s*/trip(?:\s|$)", turn.text, re.I):
+            destination = re.sub(r"^\s*/trip\s*", "", turn.text, flags=re.I).strip()
+            text = f"Plan a trip to {destination}" if destination else "Plan a trip"
+            turn_text = text[:600]
+        else:
+            turn_text = turn.text
+        message = turn_text.casefold() if turn.kind == "message" else ""
         choice = referenced_choice(message, active_events, state["step"])
         command = turn.model_copy(update={"kind": "select", "value": choice["id"], "label": choice["name"]}) if choice else turn
         use_gemini = os.getenv("TRAVEL_CHAT_PROVIDER", "groq").strip().lower() == "gemini"
@@ -1154,6 +1245,35 @@ async def turn_stream(token: str, turn: Turn, request: Request):
                            "diet": context.mealPreference, "pace": context.pace,
                            "party": context.party.model_dump() if context.party else None} if context else {})
         previous = current["request"] if current else {k: str(v) if k == "date" else v for k, v in context_intake.items() if v is not None}
+        current_draft = (current or {}).get("draft")
+        if context and (not current or current_draft and str(context.id) == current_draft["id"] and context.updated > current_draft["updated"]):
+            current_draft = context.model_dump(mode="json")
+        if message:
+            trip = trip_snapshot(current_draft, previous, state.get("plan"), state["brief"])
+            stop_change = itinerary_change(turn.text) if turn.live_only else None
+            if stop_change and re.match(r"^(?:the )?(?:trip|itinerary|departure|travel dates?|budget|dates?|origin)\b",
+                                        stop_change[1] or "", re.I):
+                stop_change = None
+            revised = None
+            if stop_change:
+                revised, answer = await revise_stops(current_draft, stop_change, turn.offline)
+            else:
+                preview = state.get("preview") or {}
+                estimated = preview.get("ledger") if state.get("plan") else None
+                answer = (command_reply(turn_text, trip, estimated, preview.get("unpriced", []))
+                          if turn.live_only or state.get("plan") or turn_text.lstrip().startswith("/") else None)
+            if answer is not None:
+                event = {"kind": "message", "text": entered_text, "answer": answer, "answerKind": "trip", "tools": []}
+                if revised:
+                    event.update(itineraryRequest=previous, liveDraft=revised)
+                if replaces is not None:
+                    event.update(replaces=replaces, original=events[replaces].get("original", replaces))
+                if not save_log(token, raw, [*events, event]):
+                    yield event_line({"type": "error", "message": "The trip changed in another tab. Reload to continue."})
+                    return
+                yield event_line({"type": "answer", "text": answer, "answerKind": "trip"})
+                yield event_line({"type": "done", **view([*events, event])})
+                return
         recent_location = next((tool["result"]["location"] for event in reversed(visible_events(active_events))
                                 for tool in reversed(event.get("tools", []))
                                 if isinstance(tool.get("result", {}).get("location"), dict)), None)
@@ -1181,13 +1301,10 @@ async def turn_stream(token: str, turn: Turn, request: Request):
                 guide_query = guide_match[1].strip() if guide_match else active_destination
                 if not guide_query:
                     direct_lookup = ("Notice", "Which destination would you like a guide for?")
-        asks_for_plan = bool(turn.live_only and message and live_plan_request(turn.text))
+        asks_for_plan = bool(turn.live_only and message and live_plan_request(turn_text))
         build_now = turn.live_only and explicit_build_request(turn.text)
         public_research = (research_intent(turn.text, active_destination)
                            if turn.live_only and message and not (provider_intent or guide_query or direct_lookup or asks_for_plan) else None)
-        current_draft = (current or {}).get("draft")
-        if context and (not current or current_draft and str(context.id) == current_draft["id"] and context.updated > current_draft["updated"]):
-            current_draft = context.model_dump(mode="json")
         if (turn.live_only and current_draft and not (direct_lookup or provider_intent or guide_query)
                 and re.search(r"\b(?:(?:our|my|the|trip|remaining|left in the) budget|budget(?:[?!. ]*$)|total (?:cost|spent)|how much (?:is left|have we spent)|what (?:does|will) (?:my |this |the )trip cost)\b", message)
                 and re.match(r"^(?:what|how much|show|check|where|is|are|do)\b", message)):
@@ -1206,13 +1323,13 @@ async def turn_stream(token: str, turn: Turn, request: Request):
         intake = None
         if turn.live_only and message and public_research is None and not (direct_lookup or provider_intent or guide_query):
             try:
-                details = extract(turn.text, live=True)
+                details = extract(turn_text, live=True)
             except ValueError:
                 details = {}
             pending_question = next_intake_question(previous) if previous.get("collectTripDetails") else None
             awaiting_field = (pending_question or {}).get("field")
             waiting_for_destination = awaiting_field == "destination" or (current or {}).get("awaitingDestination")
-            bare_destination = turn.text.strip(" .?!")
+            bare_destination = turn_text.strip(" .?!")
             if (waiting_for_destination and not (direct_lookup or provider_intent or guide_query)
                     and re.fullmatch(r"[^\W\d_][\w .,\-'’]{1,95}", bare_destination)
                     and not details.keys() & {"days", "people", "budget", "_per_person", "budgetReduction", "origin", "diet", "pace"}
@@ -1237,13 +1354,14 @@ async def turn_stream(token: str, turn: Turn, request: Request):
                 if turn.replace_interests and (not turn.preferences or turn.preferences.interests is None):
                     yield event_line({"type": "error", "message": "Choose interests before saving your preference changes."})
                     return
-                intake = update_intake(turn.text, previous, preferences, details,
+                intake = update_intake(turn_text, previous, preferences, details,
                                        replace_interests=turn.replace_interests)
             except ValueError as error:
                 reason = str(error)
                 yield event_line({"type": "error", "message": reason if reason.startswith(("Choose", "Tell me")) else "Enter a valid calendar date."})
                 return
-            informational = re.match(r"^(?:what|where|when|why|which|who|how|is|are|will|does|do|any|tell me|show|find|recommend|suggest)\b", message)
+            proposal = re.match(r"^(?:how about|what if (?:we|i))\b", message)
+            informational = not proposal and re.match(r"^(?:what|where|when|why|which|who|how|is|are|will|does|do|any|tell me|show|find|recommend|suggest)\b", message)
             changed = intake != previous
             is_trip_update = bool(not informational and (build_now or asks_for_plan or
                                   changed and (pending_question or current_draft or intake.get("destination"))))
@@ -1452,7 +1570,7 @@ async def turn_stream(token: str, turn: Turn, request: Request):
             started_tools.clear()
             if model_answer:
                 break
-        planning = bool(message and planning_message(turn.text, state["brief"]))
+        planning = bool(message and planning_message(turn_text, state["brief"]))
         question = direct_lookup
         if provider_intent:
             question = ("Travel providers", provider_intent)
@@ -1493,7 +1611,7 @@ async def turn_stream(token: str, turn: Turn, request: Request):
                 if turn.kind == "edit" and turn.field == "origin":
                     values = {"origin": await verify_origin(turn.value, turn.offline)}
                 elif command.kind == "message":
-                    values = {**model_values, **extract(turn.text, state["brief"])}
+                    values = {**model_values, **extract(turn_text, state["brief"])}
                     if "origin" in values:
                         values["origin"] = await verify_origin(values["origin"], turn.offline)
                 sourced = None

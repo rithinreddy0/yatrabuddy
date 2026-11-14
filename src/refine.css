@@ -121,8 +121,6 @@ body{font-size:16px;line-height:1.5}
 .world-about p{max-width:60ch}
 .world-about summary{color:#314caa;cursor:pointer;padding-block:8px;font-weight:600}
 .world-search .world-map-frame{border:1px solid #d9e2ef;box-shadow:0 12px 28px #22325510}
-.world-search .world-pin{background:#354fbd;color:white;border-color:white}
-.world-search .world-pin:is(:hover,:focus-visible,.active){background:#f6d5a8;color:#382e24}
 .world-search .world-result-sources{padding-top:8px}
 .world-result-media>.place-photo-source-only .place-photo-empty,
 .world-search-embedded .world-result-media>.place-photo-source-only .place-photo-empty{height:auto;min-height:44px}

@@ -323,7 +323,6 @@ function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, onRep
           {from && <SourcePill label="Directions" url={`https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lon}&destination=${place.lat},${place.lon}`}/>}
         </div>}
         <div className="trip-room-stop">
-          <StopThumbnail place={place}/>
           <div className="trip-room-stop-copy">
             <div className="trip-room-stop-title"><Icon name={categoryIcons[place.category] || 'pin'} size={15}/>
               {onPlaceSelect ? <button type="button" className="trip-room-place-button" onClick={() => onPlaceSelect(place)}>{place.name}</button> : <strong>{place.name}</strong>}
@@ -337,6 +336,7 @@ function Itinerary({draft, onPlaceSelect, onEdit, onAddStop, onRemoveStop, onRep
             {place.openingHours && <small>Published hours · {place.openingHours}</small>}
             {place.description && <p>{place.description}</p>}
           </div>
+          <StopThumbnail place={place}/>
           <div className="trip-room-stop-actions">
             <SourcePill label={place.source} url={place.url}/>
             {onReplaceStop && <IconButton icon="edit" label={`Swap ${place.name} on day ${index + 1}`}

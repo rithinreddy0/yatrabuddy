@@ -95,7 +95,7 @@ export function PlaceDetails({place, initialTab = 'overview', onClose, onShowMap
       <span>{place.category || 'Destination'}</span>
       {onShowMap && <Button onClick={onShowMap} icon="map">Map</Button>}
     </div>
-    <PlacePhoto place={place} hideUnavailable/>
+    <PlacePhoto place={place} lookup hideUnavailable/>
     <h2>{place.name}</h2>
     {place.address && <p className="journey-detail-address"><MapPin size={15}/>{place.address}</p>}
     <div className="journey-detail-tabs" aria-label="Place views">

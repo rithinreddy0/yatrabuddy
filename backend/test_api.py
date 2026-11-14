@@ -20,6 +20,25 @@ from .models import Finding
 
 
 class ApiTest(unittest.TestCase):
+    def test_exact_landmark_photo_can_use_the_verified_article_fallback(self):
+        photo = {"url": "https://upload.wikimedia.org/wikipedia/commons/a/a1/Landmark.jpg",
+                 "sourceUrl": "https://commons.wikimedia.org/wiki/File:Landmark.jpg",
+                 "license": "CC BY-SA 4.0", "credit": "Photographer"}
+
+        async def enrich(client, places):
+            self.assertEqual(places[0]["name"], "Landmark")
+            places[0]["photo"] = photo
+
+        with (patch("backend.place_search.nearby_media", new=AsyncMock(return_value={"status": "empty", "items": []})),
+              patch("backend.place_search.attach_place_photos", new=AsyncMock(side_effect=enrich)) as lookup):
+            response = self.client.get("/api/places/media?lat=17&lon=78&q=Landmark&type=photo&exact=true")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["items"][0]["sourceUrl"], photo["sourceUrl"])
+            self.assertEqual(response.json()["items"][0]["credit"], photo["credit"])
+            venue = self.client.get("/api/places/media?lat=17&lon=78&q=Landmark&type=photo&exact=true&venue=true")
+            self.assertEqual(venue.json()["items"], [])
+            lookup.assert_awaited_once()
+
     def test_trip_transport_endpoint_exposes_timed_quotes(self):
         with patch("backend.transport_sources.transport_quotes", new=AsyncMock(return_value={"transit": {"status": "empty"}})) as quote:
             response = self.client.get("/api/travel-providers?timetable=true&local=true&origin=17.4,78.4&destination=17.5,78.5")

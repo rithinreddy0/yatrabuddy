@@ -21,17 +21,7 @@
 }
 
 
-.streaming-caret {
-  display: inline-block;
-  width: 6px;
-  height: 14px;
-  background: var(--primary, #0284c7);
-  margin-left: 3px;
-  vertical-align: -2px;
-  animation: caret-pulse 0.75s ease-in-out infinite;
-}
-
-@keyframes caret-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
+.agent-checklist-item {display:flex; align-items:baseline; gap:8px; cursor:pointer; min-height:32px}
+.agent-checklist-item input {accent-color:var(--primary); flex:none}
+.agent-checklist-item:has(input:checked) span {text-decoration:line-through; color:var(--muted)}
+.agent-markdown ul:has(.agent-checklist-item) {list-style:none; padding-inline-start:0}

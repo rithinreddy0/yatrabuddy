@@ -250,3 +250,7 @@
   .trip-overview .trip-overview-print { display: block; color: #000; }
   .trip-overview-print section { break-inside: avoid; margin-top: 18px; }
 }
+
+.trip-overview-current-stay .trip-overview-current-stay-photo {width:min(100%,96px); margin:0}
+.trip-overview-current-stay-photo img {width:100%; aspect-ratio:4 / 3; object-fit:cover; border-radius:8px}
+.trip-overview-current-stay-photo figcaption {font-size:.65rem; overflow-wrap:anywhere}

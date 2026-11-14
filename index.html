@@ -1,14 +1,40 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
   <meta name="theme-color" content="#BBD9EC">
+  <link rel="icon" type="image/svg+xml" href="/images/brand/yatrabuddy.svg">
   <meta name="description" content="Plan together, compare routes and keep your travel budget in view with YatraBuddy.">
   <title>YatraBuddy</title>
+  <style>
+    body:has(.startup-status) { margin: 0; overflow: hidden; }
+    .startup-status {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: grid;
+      align-content: center;
+      justify-items: center;
+      gap: .25rem;
+      background: #f5f4fb;
+      color: #432caa;
+      font: 600 1rem/1.4 system-ui, sans-serif;
+    }
+    .startup-status .startup-plane { display: block; width: 126px; height: 96px; }
+    .startup-status small { font-weight: 400; }
+  </style>
+  <noscript><style>.startup-status { display: none; }</style></noscript>
+  <script type="module" src="/src/startup.mjs"></script>
   <script type="module" src="/src/main.jsx"></script>
 </head>
 <body>
-  <div id="app"></div>
+  <div class="startup-status" role="status">
+    <img class="startup-plane" src="/images/brand/transport-plane.webp" width="126" height="96" alt="">
+    <span>YatraBuddy</span>
+    <small>Loading…</small>
+  </div>
+  <div id="app" inert></div>
+  <noscript>Enable JavaScript to open YatraBuddy.</noscript>
 </body>
 </html>

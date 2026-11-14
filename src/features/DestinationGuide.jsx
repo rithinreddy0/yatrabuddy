@@ -1,3 +1,4 @@
+import {useMapPanel} from './useMapPanel.mjs'
 import React, {useEffect, useRef, useState} from 'react'
 import {DestinationSearch} from '../components/DestinationSearch.jsx'
 import {DestinationBrief} from '../components/CityBrief.jsx'
@@ -21,7 +22,7 @@ export function DestinationGuide({catalog, initialDestination, profile, initialT
   const [loading, setLoading] = useState(true)
   const [resolved, setResolved] = useState(null)
   const [selected, setSelected] = useState(null)
-  const [mapOpen, setMapOpen] = useState(true)
+  const [mapOpen, setMapOpen] = useMapPanel()
   const mapToggle = useRef(null)
   const cityId = place.id.startsWith('geo:') ? place.id.slice(4) : resolved?.key === place.id ? resolved.id : null
   const {report, photosPending} = useNearbyDiscovery(cityId)

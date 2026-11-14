@@ -549,7 +549,20 @@ async def place_media(
     limit(request, "exact-place-media" if exact else "place-media", 48 if exact else 24, 60)
     async with httpx.AsyncClient(timeout=5, headers={"User-Agent": USER_AGENT}) as client:
         name = " ".join(q.split())
-        result = await nearby_media(client, lat, lon, name, radius, type, exact=exact)
+        async def landmark_photo():
+            place = {"name": name, "lat": lat, "lon": lon, "source": "OpenStreetMap",
+                     "url": f"https://www.openstreetmap.org/?mlat={lat}&mlon={lon}#{quote(name, safe='')}"}
+            await attach_place_photos(client, [place])
+            return place.get("photo")
+
+        if exact and not venue and name and type == "photo":
+            result, photo = await asyncio.gather(
+                nearby_media(client, lat, lon, name, radius, type, exact=exact), landmark_photo(),
+            )
+            if photo and not result["items"]:
+                return {**result, "status": "live", "items": [{**photo, "type": "photo", "title": name}]}
+        else:
+            result = await nearby_media(client, lat, lon, name, radius, type, exact=exact)
         key = os.getenv("GOOGLE_PLACES_API_KEY")
         if (exact and venue and type != "video" and name and key and os.getenv("ENABLE_GOOGLE_PLACE_PHOTOS") == "1"
                 and (not google_required() or await asyncio.to_thread(current_user, request))):

@@ -1,8 +1,10 @@
+import {useMapPanel} from './useMapPanel.mjs'
 import React, {useEffect,useMemo,useRef,useState} from 'react'
 import {freshnessLabel, request, travelData} from '../api.mjs'
 import {AgentProgress,Button,Dialog,Icon,IconButton,Pill,SourcePill} from '../components/UI.jsx'
 import {HotelSearch} from './TravelDesk.jsx'
 import './WorldSearch.css'
+import {JourneyMap, mapPlaceId} from './JourneyMap.jsx'
 import {PlacePhoto} from '../components/PlacePhoto.jsx'
 import {PlaceDetails} from './PlaceDetails.jsx'
 import {DestinationBrief} from '../components/CityBrief.jsx'
@@ -30,122 +32,11 @@ const interestCategories={
 const sorts=[
   ['relevance','Relevance'],['personalized','My interests'],['rating','Highest rating'],['reviews','Most reviewed'],['distance','Nearest first'],
 ]
-const TILE_SIZE=256
-const TILE_URL=import.meta.env.VITE_MAP_TILE_URL||'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
-const clamp=(value,min,max)=>Math.min(max,Math.max(min,value))
-
-function project(lat,lon,zoom){
-  const size=TILE_SIZE*2**zoom
-  const sin=Math.sin(clamp(lat,-85.0511,85.0511)*Math.PI/180)
-  return [(lon+180)/360*size,(0.5-Math.log((1+sin)/(1-sin))/(4*Math.PI))*size]
-}
-function fitMap(points,width,height){
-  const projected=points.map(point=>project(point.lat,point.lon,0))
-  const xs=projected.map(point=>point[0])
-  const ys=projected.map(point=>point[1])
-  const anchor=xs[0]
-  const wrapped=xs.map(x=>x-anchor>TILE_SIZE/2?x-TILE_SIZE:anchor-x>TILE_SIZE/2?x+TILE_SIZE:x)
-  const bounds=[Math.min(...wrapped),Math.min(...ys),Math.max(...wrapped),Math.max(...ys)]
-  const zoom=clamp(Math.floor(Math.log2(Math.min(
-    Math.max(1,width-100)/Math.max(0.001,bounds[2]-bounds[0]),
-    Math.max(1,height-100)/Math.max(0.001,bounds[3]-bounds[1])
-  ))),1,16)
-  return {zoom,x:(bounds[0]+bounds[2])/2*2**zoom,y:(bounds[1]+bounds[3])/2*2**zoom}
-}
-
-function PlaceMap({places,active,onSelect,onClose}){
-  const host=useRef(null)
-  const drag=useRef(null)
-  const dismissPreview=useRef(null)
-  const [dimensions,setDimensions]=useState({width:0,height:0})
-  const [override,setOverride]=useState(null)
-  const [hovered,setHovered]=useState(null)
-  const [focused,setFocused]=useState(null)
-  const [pinned,setPinned]=useState(null)
-  const points=useMemo(()=>places.filter(place=>Number.isFinite(place.lat)&&Number.isFinite(place.lon)),[places])
-  useEffect(()=>{
-    const node=host.current
-    const observer=new ResizeObserver(([entry])=>setDimensions({width:entry.contentRect.width,height:entry.contentRect.height}))
-    observer.observe(node)
-    return ()=>{observer.disconnect();clearTimeout(dismissPreview.current)}
-  },[])
-  const {width,height}=dimensions
-  const frame=points.length&&width?override||fitMap(points,width,height):null
-  const tiles=[]
-  const pins=[]
-  if(frame){
-    const left=frame.x-width/2
-    const top=frame.y-height/2
-    const count=2**frame.zoom
-    const size=TILE_SIZE*count
-    for(let x=Math.floor(left/TILE_SIZE);x<=Math.floor((left+width-1)/TILE_SIZE);x++){
-      for(let y=Math.floor(top/TILE_SIZE);y<=Math.floor((top+height-1)/TILE_SIZE);y++){
-        if(y<0||y>=count)continue
-        const url=TILE_URL.replace('{z}',String(frame.zoom)).replace('{x}',String((x%count+count)%count)).replace('{y}',String(y))
-        tiles.push({key:x+','+y+':'+frame.zoom,url,x:x*TILE_SIZE-left,y:y*TILE_SIZE-top})
-      }
-    }
-    points.forEach((point,index)=>{
-      let [x,y]=project(point.lat,point.lon,frame.zoom)
-      x+=Math.round((frame.x-x)/size)*size
-      x-=left
-      y-=top
-      if(x>8&&x<width-8&&y>8&&y<height-8)pins.push({point,index,x,y})
-    })
-  }
-  function zoom(delta){
-    if(!frame)return
-    const next=clamp(frame.zoom+delta,1,18)
-    const scale=2**(next-frame.zoom)
-    setOverride({zoom:next,x:frame.x*scale,y:frame.y*scale})
-  }
-  function startPan(event){
-    if(!frame||event.button!==0||event.target.closest('button,a,.world-pin-preview'))return
-    setPinned(null)
-    drag.current={clientX:event.clientX,clientY:event.clientY,frame}
-    event.currentTarget.setPointerCapture(event.pointerId)
-  }
-  function pan(event){
-    if(!drag.current)return
-    const origin=drag.current
-    const size=TILE_SIZE*2**origin.frame.zoom
-    setOverride({zoom:origin.frame.zoom,x:(origin.frame.x+origin.clientX-event.clientX)%size,
-      y:clamp(origin.frame.y+origin.clientY-event.clientY,0,size)})
-  }
-  const preview=pins.find(pin=>pin.point.id===(hovered||focused||pinned||active))
-  function clearHover(){
-    clearTimeout(dismissPreview.current)
-    dismissPreview.current=setTimeout(()=>setHovered(null),180)
-  }
-  return <section className="world-map-frame" aria-label="Map of results" tabIndex={-1}
-    onPointerLeave={()=>setHovered(null)}
-    onKeyDown={event=>{if(event.key==='Escape'){setHovered(null);setFocused(null);setPinned(null)}}}>
-    <div className="world-map" ref={host} onPointerDown={startPan} onPointerMove={pan}
-      onPointerUp={()=>{drag.current=null}} onPointerCancel={()=>{drag.current=null}}>
-      {tiles.map(tile=><img className="world-map-tile" aria-hidden="true" alt="" draggable={false} key={tile.key} src={tile.url} width={TILE_SIZE} height={TILE_SIZE}
-        style={{left:tile.x,top:tile.y}}/>)}
-      {pins.map(({point,index,x,y})=><button type="button" className={'world-pin '+(active===point.id?'active':'')}
-        key={point.id} style={{left:x,top:y}} aria-label={'Show '+point.name} aria-expanded={preview?.point.id===point.id}
-        onPointerEnter={event=>{if(event.pointerType==='mouse'){clearTimeout(dismissPreview.current);setHovered(point.id)}}}
-        onPointerLeave={clearHover}
-        onFocus={()=>setFocused(point.id)} onBlur={event=>{if(!event.relatedTarget?.closest('.world-pin-preview'))setFocused(null)}}
-        onClick={()=>setPinned(previous=>previous===point.id?null:point.id)}>{index+1}</button>)}
-      {preview&&<aside key={preview.point.id} className="world-pin-preview" aria-label={preview.point.name+' preview'}
-        onPointerEnter={()=>clearTimeout(dismissPreview.current)} onPointerLeave={clearHover}
-        style={{left:clamp(preview.x+18,8,Math.max(8,width-242)),top:clamp(preview.y-70,8,Math.max(8,height-230))}}>
-        <PlacePhoto place={preview.point} hideUnavailable/>
-        <strong>{preview.point.name}</strong>
-        <button className="world-preview-action" onClick={()=>onSelect(preview.point.id)}>Show place details</button>
-      </aside>}
-      {points.length>0&&<div className="world-map-tools">
-        <IconButton icon="close" label="Close results map" onClick={onClose}/>
-        <IconButton icon="plus" label="Zoom in" onClick={()=>zoom(1)}/>
-        <IconButton icon="minus" label="Zoom out" onClick={()=>zoom(-1)}/>
-        <IconButton icon="pin" label="Fit all places" onClick={()=>setOverride(null)}/>
-      </div>}
-      {!points.length&&<p className="world-map-empty">Map coordinates are unavailable for these results.</p>}
-      <a className="world-map-credit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a>
-    </div>
+function PlaceMap({center, places, active, onSelect, onClose}) {
+  const selected = places.find(place => place.id === active)
+  return <section className="world-map-frame" aria-label="Map of results" tabIndex={-1}>
+    <JourneyMap className="world-map" center={center} places={places} selectedId={selected && mapPlaceId(selected)}
+      onSelect={place => place && onSelect(place.id)} onClose={onClose}/>
   </section>
 }
 
@@ -292,7 +183,7 @@ export function WorldSearch({initialCategory='all',initialQuery='',initialDestin
   const [moreLoading,setMoreLoading]=useState(false)
   const [error,setError]=useState('')
   const [active,setActive]=useState('')
-  const [mapOpen,setMapOpen]=useState(true)
+  const [mapOpen,setMapOpen]=useMapPanel()
   const [photosOnly,setPhotosOnly]=useState(false)
   const moreRequest=useRef(null)
   const sequence=useRef(0)
@@ -357,9 +248,13 @@ export function WorldSearch({initialCategory='all',initialQuery='',initialDestin
 
   const selectedCategory=categories.find(item=>item.id===criteria.category)||category
   const suggestedThemes=[...new Set([...(profile?.interests||[]),profile?.style].filter(Boolean))]
-  const preferred=new Set(suggestedThemes.flatMap(theme=>interestCategories[theme]||[]))
-  const places=(result?.places||[]).filter(place=>!photosOnly||(place.photo?.url&&place.photo.kind!=='nearby'))
-  const ranked=criteria.sort==='personalized'?[...places].sort((first,second)=>Number(preferred.has(second.category))-Number(preferred.has(first.category))):places
+  const ranked=useMemo(()=>{
+    const places=(result?.places||[]).filter(place=>!photosOnly||(place.photo?.url&&place.photo.kind!=='nearby'))
+    if(criteria.sort!=='personalized')return places
+    const themes=[...(profile?.interests||[]),profile?.style]
+    const preferred=new Set(themes.flatMap(theme=>interestCategories[theme]||[]))
+    return places.sort((first,second)=>Number(preferred.has(second.category))-Number(preferred.has(first.category)))
+  },[result,photosOnly,criteria.sort,profile?.interests,profile?.style])
   const google=result?.provider==='Google Maps'||ranked.some(place=>place.source==='Google Maps')
   const verifiedRatings=google||['available','ready','empty','unavailable'].includes(result?.sources?.googleMaps?.status)
   const hasMap=ranked.some(place=>Number.isFinite(place.lat)&&Number.isFinite(place.lon))&&!google
@@ -440,7 +335,7 @@ export function WorldSearch({initialCategory='all',initialQuery='',initialDestin
           {error&&<p className="form-error" role="alert">{error}</p>}
           {result.nextPageToken&&<Button icon="plus" disabled={moreLoading} onClick={loadMore}>{moreLoading?'Loading…':'More places'}</Button>}
         </div>
-        {hasMap&&mapOpen&&<PlaceMap key={mapKey} places={ranked} active={active} onSelect={selectMap} onClose={()=>{setMapOpen(false);mapToggle.current?.focus()}}/>}
+        {hasMap&&mapOpen&&<PlaceMap key={mapKey} center={result?.location || criteria.location || {name:'Search results'}} places={ranked} active={active} onSelect={selectMap} onClose={()=>{setMapOpen(false);mapToggle.current?.focus()}}/>}
       </div>}
       {referenceCity&&<details className="world-city-brief"><summary>Destination notes for {referenceCity.name}</summary>
         <DestinationBrief location={referenceCity} topic={briefTopic} compact/>

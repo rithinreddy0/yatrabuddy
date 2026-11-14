@@ -86,7 +86,7 @@ export function Account({user,onClose,onLogin,onLogout,required=false,page=false
   }[googleState.status]
   const panel=<div className="dialog-content">
     {user?<><h2>{user.name}</h2><p>{user.email}</p><Button icon="logout" onClick={()=>onLogout()}>Sign out</Button></>:<>
-      <div className="auth-brand"><Brand/></div><h2>{required?'Start your next trip':register?'Create your account':'Welcome back'}</h2><p>{required?'Sign in to plan trips, keep your places, and travel together.':'Sync your trips and saved places across devices.'}</p>
+      <div className="auth-brand auth-brand-wordmark"><img src="/images/brand/yatrabuddy-wordmark.webp" alt="YatraBuddy" width="640" height="149"/><div className="auth-brand-dark"><Brand/></div></div><h2>{required?'Start your next trip':register?'Create your account':'Welcome back'}</h2><p>{required?'Sign in to plan trips, keep your places, and travel together.':'Sync your trips and saved places across devices.'}</p>
       <div className="social-login">
         <Button className="full" onClick={google} disabled={Boolean(pending)||googleState.status!=='ready'} aria-describedby="google-signin-status">
           <span className="google-letter" aria-hidden="true">G</span> {pending==='google'?'Signing in with Google…':'Continue with Google'}

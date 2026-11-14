@@ -1,3 +1,4 @@
+import {useMapPanel} from './useMapPanel.mjs'
 import React,{useEffect,useRef,useState} from 'react'
 import {AgentProgress,Button,Dialog,Icon,IconButton,Pill,SourcePill} from '../components/UI.jsx'
 import {freshnessLabel, travelData} from '../api.mjs'
@@ -63,7 +64,7 @@ export function Trip({trip,place,profile,onUpdate,onEdit,onMessage,history,onUnd
   const [selectedDay,setDay]=useState(0)
   const [activeStop,setActiveStop]=useState(-1)
   const [layer,setLayer]=useState('Overview')
-  const [mapOpen,setMapOpen]=useState(true)
+  const [mapOpen,setMapOpen]=useMapPanel()
   const [dialog,setDialog]=useState(null)
   const [routes,setRoutes]=useState({})
   const [routing,setRouting]=useState(false)
@@ -122,7 +123,7 @@ export function Trip({trip,place,profile,onUpdate,onEdit,onMessage,history,onUnd
       <div className="timeline">{stops.length?stops.map((item,index)=><article className={'stop '+(activeStop===index?'focused':'')} key={item.name} draggable onDragStart={event=>{event.dataTransfer.setData('text/plain',String(index));setDrag(index)}} onDragEnd={()=>setDrag(null)} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();reorder(index)}}>
         {(index===0||slot(stops[index-1])!==slot(item))&&<h3 className="day-slot">{slot(item)}</h3>}
         {item.eta>0&&<div className="transfer"><Icon name="clock" size={13}/> ~{item.eta} min transfer</div>}
-        <div className="stop-card"><button className="stop-info" onClick={()=>{setMapOpen(true);setLayer('Itinerary');setActiveStop(index)}}><span className="stop-number">{index+1}</span><span><small>{time(item.starts)} · {item.theme}</small><strong>{item.name}</strong><span>{item.area} · {item.minutes} min</span><span>{item.price?money(item.price)+' est. / person':'Free estimate'}</span></span></button><IconButton icon="edit" label={'Edit '+item.name} onClick={()=>setDialog(index)}/><IconButton icon="minus" label={'Remove '+item.name} onClick={()=>changeDay(trip.days[day].stops.filter(name=>name!==item.name))}/></div>
+        <div className="stop-card"><button className="stop-info" aria-label={'Show '+item.name+' on map'} onClick={()=>{setMapOpen(true);setLayer('Itinerary');setActiveStop(index)}}><span className="stop-number">{index+1}</span><span><small>{time(item.starts)} · {item.theme}</small><strong>{item.name}</strong><span>{item.area} · {item.minutes} min</span><span>{item.price?money(item.price)+' est. / person':'Free estimate'}</span></span></button><IconButton icon="edit" label={'Edit '+item.name} onClick={()=>setDialog(index)}/><IconButton icon="minus" label={'Remove '+item.name} onClick={()=>changeDay(trip.days[day].stops.filter(name=>name!==item.name))}/></div>
         {item.hoursConflict&&<p className="warning">This visit may overlap listed hours.</p>}
         {item.hoursSource&&<div className="venue-source"><SourcePill url={item.hoursSource} label="Official visiting hours"/></div>}
       </article>):<p className="form-note">Add a stop or leave time open.</p>}</div>
@@ -130,7 +131,7 @@ export function Trip({trip,place,profile,onUpdate,onEdit,onMessage,history,onUnd
       <Budget trip={trip} routeByDay={routeByDay}/>
         <section className="panel assistant"><div className="panel-top"><div><div className="eyebrow"><span/> TRIP TOOLS</div><h2>Fine-tune</h2></div><Icon name="sparkle"/></div>
           <div className="assistant-actions"><Button icon="clock" className="full" onClick={()=>changeDay(trip.days[day].stops,!trip.days[day].relaxed)}>{trip.days[day].relaxed?'Start at 09:30':'Start at 10:30'}</Button><Button icon="search" className="full" onClick={()=>setDialog('research')}>Research this trip</Button><Button icon="globe" className="full" onClick={()=>setDialog('news')}>Destination updates</Button><Button icon="plane" className="full" onClick={()=>setDialog('desk')}>Travel providers</Button></div>
-          {!trip.sourcedStay && lowestStay!==trip.stay&&<Button className="full" icon="wallet" onClick={()=>{onUpdate({...trip,stay:lowestStay});setMapOpen(true);setLayer('Stays');onMessage('Switched to the lowest estimated nightly rate.')}}>Switch to lower-cost stay</Button>}
+          {!trip.sourcedStay && lowestStay!==trip.stay&&<Button className="full" icon="wallet" onClick={()=>{onUpdate({...trip,stay:lowestStay});setLayer('Stays');onMessage('Switched to the lowest estimated nightly rate.')}}>Switch to lower-cost stay</Button>}
           <Concierge trip={trip} place={place} activeDay={day} onUpdate={onUpdate} onDay={index=>{setDay(index);setActiveStop(-1);setLayer('Itinerary')}}/>
           {stops.length>1&&<div className="road-check">
             <Button icon="map" className="full" disabled={routing} onClick={checkRoute}>{routing?'Checking roads…':currentRoute?'Refresh driving times':'Check driving times'}</Button>

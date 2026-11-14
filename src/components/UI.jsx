@@ -15,7 +15,14 @@ export function Pill({icon:name,active,children,...props}) {
   return <button type="button" className={'pill '+(active?'on':'')} aria-pressed={active} {...props}>{name&&<Icon name={name} size={15}/>} {children}</button>
 }
 export function Brand() {
-  return <><span className="brand-mark"><Icon name="compass" size={22}/></span><span>YatraBuddy</span></>
+  return <><span className="brand-mark brand-art"><img src="/images/brand/yatrabuddy.svg" alt="" width="37" height="37"/></span><span>YatraBuddy</span></>
+}
+export function TravelArtwork({name, animated=false, className='', width, height}) {
+  const base = '/images/brand/' + name
+  return <picture className={'travel-artwork ' + className}>
+    {animated && <source media="(prefers-reduced-motion: no-preference)" srcSet={base + '-motion.webp'}/>}
+    <img src={base + '.webp'} alt="" width={width} height={height} decoding="async"/>
+  </picture>
 }
 export function Dialog({children,onClose,className='',label}) {
   const ref=useRef(null)
@@ -24,7 +31,13 @@ export function Dialog({children,onClose,className='',label}) {
     node.showModal()
     return ()=>node.close()
   },[])
-  return <dialog ref={ref} className={className} aria-label={label} onCancel={event=>{event.preventDefault();onClose()}} onClick={event=>{if(event.target===event.currentTarget)onClose()}}>
+  return <dialog ref={ref} className={className} aria-label={label} closedby="any"
+    onCancel={event=>{event.preventDefault();onClose()}}
+    onClick={event=>{
+      if (event.target !== event.currentTarget) return
+      const {left, right, top, bottom} = event.currentTarget.getBoundingClientRect()
+      if (event.clientX < left || event.clientX > right || event.clientY < top || event.clientY > bottom) onClose()
+    }}>
     <div className="dialog-inner"><IconButton icon="close" label="Close" className="dialog-close" onClick={onClose}/>{children}</div>
   </dialog>
 }
@@ -45,9 +58,10 @@ export function WikivoyageSource({url,label}) {
     <Icon name="corner" size={13}/>
   </a>
 }
-export function AgentProgress({label='Searching for travel sources',steps=[],activeStep=null,skippedSteps=[],className=''}) {
+export function AgentProgress({label='Searching for travel sources',steps=[],activeStep=null,skippedSteps=[],className='',assistant=false}) {
   return <div className={'agent-progress '+className} role="status">
-    <span className="agent-orb"><Icon name="sparkle" size={21}/></span>
+    {assistant ? <TravelArtwork name="assistant-ring" animated className="assistant-progress-art" width={180} height={135}/> :
+      <span className="agent-orb"><Icon name="sparkle" size={21}/></span>}
     <div><strong>{label}</strong>{steps.length>0&&<div className="agent-progress-steps">{steps.map((step,index)=><span key={step}
       className={skippedSteps.includes(index)?'is-skipped':activeStep===index?'is-active':activeStep!==null&&index<activeStep?'is-complete':''}
       aria-current={activeStep===index?'step':undefined}>{step}</span>)}</div>}</div>

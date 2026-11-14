@@ -1,7 +1,7 @@
 import React, {useEffect, useId, useState} from 'react'
 import {MapPin, Plane, TrainFront} from 'lucide-react'
 import {request} from '../api.mjs'
-import {Button, SourcePill} from '../components/UI.jsx'
+import {Button, SourcePill, TravelArtwork} from '../components/UI.jsx'
 import {money} from '../planner.mjs'
 import {TransportQuotes} from './TransportSources.jsx'
 import './TripTransport.css'
@@ -168,6 +168,7 @@ export function TripTransport({draft, onAsk}) {
 
   if (!name) return null
   const providers = resources.providers?.state === resourceKey ? resources.providers : null
+  const searching = Boolean(search && resources.quotes?.state !== resourceKey)
   const guide = resources.guide?.state === cityId ? resources.guide?.data : null
   const fares = resources.fares?.state === cityId ? resources.fares?.data : null
   const legs = itineraryLegs(draft)
@@ -184,8 +185,11 @@ export function TripTransport({draft, onAsk}) {
     : `Compare public transport and cab fares in ${city}${datePrompt}.`
 
   return <section className="trip-transport" aria-labelledby={heading}>
-    <h2 id={heading}>Intercity transport</h2>
-    <RouteSearch key={draft.id || name} draft={draft} result={providers} searching={Boolean(search && resources.quotes?.state!==resourceKey)}
+    <header className="trip-transport-heading">
+      <h2 id={heading}>Intercity transport</h2>
+      <TravelArtwork name="transport-plane" animated={!providers || searching} className="transport-plane-art" width={210} height={160}/>
+    </header>
+    <RouteSearch key={draft.id || name} draft={draft} result={providers} searching={searching}
       quotes={resources.quotes?.state===resourceKey?resources.quotes:null} onSearch={next => {
       setSearch(next)
       setAttempt(value => value + 1)

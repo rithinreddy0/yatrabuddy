@@ -1,3 +1,4 @@
+import {useMapPanel} from './useMapPanel.mjs'
 import React, {useEffect, useMemo, useRef, useState} from 'react'
 import {BedDouble, CloudSun, Compass, Heart, Landmark, MapPin, Minus, Mountain, Plus, Utensils} from 'lucide-react'
 import {AgentProgress, Button, Dialog, Pill} from '../components/UI.jsx'
@@ -124,7 +125,7 @@ export function DiscoveryFeed({location, profile, onPlan, onAsk, onRequireAccoun
   const [attempt, setAttempt] = useState(0)
   const [sort, setSort] = useState('For you')
   const [category, setCategory] = useState('all')
-  const [mapOpen, setMapOpen] = useState(true)
+  const [mapOpen, setMapOpen] = useMapPanel()
   const [mapFocus, setMapFocus] = useState(null)
   const [placeKey, setPlaceKey] = useState('')
   const [status, setStatus] = useState('')

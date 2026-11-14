@@ -160,7 +160,7 @@
 .yt-sheet.yt-wide-sheet {width:min(1040px,100vw - 32px);margin:auto}
 .yt-compare-layout {display:grid;grid-template-columns:minmax(0,1fr) minmax(270px,.85fr);gap:18px;align-items:start}
 .yt-compare-map {position:sticky;top:10px}
-.yt-compare-map iframe {width:100%;height:320px;border:0;border-radius:18px;background:var(--yt-tile)}
+.yt-compare-map .journey-map {height:clamp(280px, 55dvh, 400px)}
 .yt-compare-map small {display:block}
 .yt-interests {display:flex;flex-wrap:wrap;gap:8px;border:0;padding:0;margin:0}
 .yt-interests legend {font-weight:800;margin-bottom:4px}

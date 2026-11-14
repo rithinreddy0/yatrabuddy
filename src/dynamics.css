@@ -610,140 +610,20 @@ html {
 }
 
 /* ─── Professional Card Hover & Transition Effects ─── */
-.destination-card, .trip-card, .home-explore-card, .panel {
+.destination-card, .trip-card, .panel {
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease !important;
 }
-.destination-card:hover, .trip-card:hover, .home-explore-card:hover {
+.destination-card:hover, .trip-card:hover {
   transform: translateY(-2px) !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.07) !important;
 }
 [data-theme='dark'] .destination-card:hover,
-[data-theme='dark'] .trip-card:hover,
-[data-theme='dark'] .home-explore-card:hover {
+[data-theme='dark'] .trip-card:hover {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;
-}
-
-/* ─── Bento Grid & 3D Flip Card Layout with Fixed Proportions ─── */
-.bento-section {
-  margin: 16px 0;
-}
-.bento-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
-  margin-top: 12px;
-}
-.flip-card-3d {
-  perspective: 1000px;
-  cursor: pointer;
-  height: 220px;
-}
-.flip-card-inner {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  text-align: left;
-  transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
-  transform-style: preserve-3d;
-}
-.flip-card-3d.flipped .flip-card-inner {
-  transform: rotateY(180deg);
-}
-.flip-card-front, .flip-card-back {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid var(--border, #e2e8f0);
-}
-[data-theme='dark'] .flip-card-front,
-[data-theme='dark'] .flip-card-back {
-  border-color: rgba(255, 255, 255, 0.1);
-}
-.flip-card-front img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.flip-card-front-scrim {
-  position: absolute;
-  bottom: 0; left: 0; right: 0;
-  padding: 14px;
-  background: linear-gradient(180deg, transparent 0%, rgba(15, 23, 42, 0.88) 100%);
-  color: #ffffff;
-}
-.card-badge-subtle {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  background: rgba(2, 132, 199, 0.85);
-  padding: 2px 7px;
-  border-radius: 4px;
-}
-.flip-card-back {
-  transform: rotateY(180deg);
-  background: var(--surface, #ffffff);
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-[data-theme='dark'] .flip-card-back {
-  background: #1e293b;
 }
 
 /* ─── Smooth Button & Interactive Press ─── */
 button:active:not(:disabled), a.btn:active {
   transform: scale(0.97) !important;
   transition: transform 0.05s ease-out !important;
-}
-
-
-/* ─── Trust Marquee Ticker (Smooth Horizontal Infinite Scroll) ─── */
-.marquee-container {
-  overflow: hidden;
-  user-select: none;
-  display: flex;
-  gap: 20px;
-  padding: 8px 0;
-  margin: 8px 0 12px 0;
-  border-top: 1px solid var(--border, #e2e8f0);
-  border-bottom: 1px solid var(--border, #e2e8f0);
-  mask-image: linear-gradient(90deg, transparent 0%, black 6%, black 94%, transparent 100%);
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 6%, black 94%, transparent 100%);
-}
-[data-theme='dark'] .marquee-container {
-  border-color: rgba(255, 255, 255, 0.08);
-}
-.marquee-content {
-  flex-shrink: 0;
-  display: flex;
-  justify-content: space-around;
-  gap: 32px;
-  min-width: 100%;
-  animation: marquee-scroll 28s linear infinite;
-}
-.marquee-content:hover {
-  animation-play-state: paused;
-}
-.marquee-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text-muted, #64748b);
-  white-space: nowrap;
-}
-[data-theme='dark'] .marquee-item {
-  color: #94a3b8;
-}
-@keyframes marquee-scroll {
-  from { transform: translateX(0); }
-  to { transform: translateX(-100%); }
 }

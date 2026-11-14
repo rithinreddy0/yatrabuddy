@@ -1,13 +1,11 @@
-import React, {useEffect,useRef,useState} from 'react'
+import React, {useEffect,useState} from 'react'
 import {Button,Icon,IconButton,Pill,Empty} from '../components/UI.jsx'
 import {themes,money} from '../planner.mjs'
-import {DestinationSearch} from '../components/DestinationSearch.jsx'
 import {request} from '../api.mjs'
 import {DiscoveryFeed,DiscoveryLoading,DiscoveryWeather,SavedDiscoveryPlaces} from './DiscoveryFeed.jsx'
 import {useDiscoveryShortlist,useSavedDiscoveryPlaces} from './discoveryPlaces.mjs'
 import {PlacePhoto} from '../components/PlacePhoto.jsx'
-import {ArrowRight, ChevronRight, Globe, LocateFixed, Map, MapPin, Sparkles, Utensils} from 'lucide-react'
-import {MarqueeTicker} from '../components/MarqueeTicker.jsx'
+import {ArrowRight, ChevronRight, Globe, Map, Sparkles, Utensils} from 'lucide-react'
 import {BentoExploreSection} from '../components/BentoGrid.jsx'
 
 export function DestinationCard({place,saved,onSave,onOpen}) {
@@ -35,28 +33,17 @@ function asCity(item) {
   return {...item,id:`geo:${item.id}`,region:[...new Set([item.region,item.country].filter(Boolean))].join(', ')}
 }
 
-export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onDestination,onRequireAccount,catalog = []}) {
+export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onRequireAccount,catalog = []}) {
   const [prompt,setPrompt]=useState('')
   const [suggested,setSuggested]=useState(null)
-  const [localCity,setLocalCity]=useState(storedCity)
-  const [locator,setLocator]=useState({busy:false,message:''})
   const [attempt,setAttempt]=useState(0)
   const [suggestionFailure,setSuggestionFailure]=useState(false)
-  const mounted=useRef(true)
-  const locationRequest=useRef(null)
-  const chosen=destination || localCity
-  const city=chosen || suggested
+  const city=destination || suggested
   const cityId=city?.id?.replace(/^geo:/, '')
   const shortlist=useDiscoveryShortlist(cityId)
   const name=library.profile?.homeCity?.trim() || catalog[0]?.name
-  const lastCityChoice=useRef(0)
-
   useEffect(()=>{
-    mounted.current=true
-    return ()=>{mounted.current=false;locationRequest.current?.abort()}
-  },[])
-  useEffect(()=>{
-    if (chosen || !name) return
+    if (destination || !name) return
     const controller=new AbortController()
     request('locations?q='+encodeURIComponent(name),{signal:controller.signal}).then(matches=>{
       if(controller.signal.aborted)return
@@ -65,79 +52,43 @@ export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onD
       setSuggested(found?asCity(found):null)
     }).catch(()=>{if(!controller.signal.aborted)setSuggestionFailure(true)})
     return ()=>controller.abort()
-  },[chosen,name,attempt])
-
-  function choose(city) {
-    lastCityChoice.current++
-    locationRequest.current?.abort()
-    setLocalCity(city)
-    onDestination(city)
-    setLocator({busy:false,message:''})
-    try { localStorage.setItem(homeCityKey, JSON.stringify(city)) }
-    catch { /* The selected city remains available for the session. */ }
-  }
-
-  function locate() {
-    if (!navigator.geolocation) {
-      setLocator({busy:false,message:'Location access is unavailable. Search for your city.'})
-      return
-    }
-    setLocator({busy:true,message:''})
-    const revision=++lastCityChoice.current
-    navigator.geolocation.getCurrentPosition(async ({coords})=>{
-      if(!mounted.current || revision!==lastCityChoice.current)return
-      const controller=new AbortController()
-      locationRequest.current=controller
-      // Share neighborhood precision only. Store the resolved city without the device coordinates.
-      const params=new URLSearchParams({lat:coords.latitude.toFixed(2),lon:coords.longitude.toFixed(2)})
-      try {
-        const found=await request('locations/reverse?'+params,{signal:controller.signal})
-        if(mounted.current && !controller.signal.aborted)choose(asCity(found))
-      } catch (failure) {
-        if(mounted.current && !controller.signal.aborted)setLocator({busy:false,message:failure.message})
-      }
-    },()=>{
-      if(mounted.current && revision===lastCityChoice.current)setLocator({busy:false,message:'Could not read your location. Search for a city instead.'})
-    },{enableHighAccuracy:false,timeout:8000,maximumAge:600000})
-  }
+  },[destination,name,attempt])
 
   const actions=[
-    ['guide',Globe,'Destination guide','Local highlights and travel updates','kerala'],
-    ['attractions',Map,'Things to do','Landmarks, parks, and day trips','hyderabad'],
-    ['food',Utensils,'Where to eat','Cafés, restaurants, and local food','singapore'],
+    ['guide',Globe,'Destination guide','Local highlights and travel updates'],
+    ['attractions',Map,'Things to do','Landmarks, parks, and day trips'],
+    ['food',Utensils,'Where to eat','Cafés, restaurants, and local food'],
   ]
   const lastDraft = [...library.drafts].sort((a,b)=>b.updated-a.updated)[0]
   const lastTrip = [...library.trips].sort((a,b)=>b.updated-a.updated)[0]
   const featuredDraft = lastDraft && (!lastTrip || lastDraft.updated >= lastTrip.updated) ? lastDraft : null
   const featuredPlace = !featuredDraft && catalog.find(place=>place.id===lastTrip?.brief.destination)
+  const featuredDays = featuredDraft?.days.length ?? lastTrip?.brief.days
+  const featuredTravelers = featuredDraft?.travelers ?? lastTrip?.brief.people
   const tripHref = featuredDraft ? '#draft/'+featuredDraft.id : featuredPlace ? '#trip/'+lastTrip.id : ''
   const tripPhoto = featuredDraft && [featuredDraft.stay, ...featuredDraft.days.flat()].find(place=>place?.photo?.url)
   return <div className="page yatra-overview discovery-home">
-    <div className="home-location-bar">
-      <div className="home-location-label">
-        <MapPin size={16}/>
-        <span>{city ? <>Exploring <strong>{city.name}</strong>{city.region ? <small>, {city.region}</small> : null}</> : 'Set your location'}</span>
-      </div>
-      <div className="home-location-controls">
-        <DestinationSearch catalog={[]} selected={city} onSelect={choose} global label="Location" placeholder="Search city or destination"/>
-        <button className="home-locate-btn" onClick={locate} disabled={locator.busy} title="Use my location">
-          <LocateFixed size={16}/>{locator.busy ? 'Locating…' : 'Locate me'}
-        </button>
-      </div>
-      {locator.message && <p className="home-location-status" role="status">{locator.message}</p>}
-    </div>
+    <header className="home-masthead">YatraBuddy</header>
     {tripHref && <section className="home-active-trip" aria-labelledby="home-active-title">
-      {tripPhoto ? <PlacePhoto place={tripPhoto} compact fallback/> : featuredPlace
-        ? <img src={`/images/${featuredPlace.image}.jpg`} alt=""/> : <Icon name="trip" size={36}/>}
-      <div><p className="travel-label">Your latest trip</p><h1 id="home-active-title">Trip to {featuredDraft?.name || featuredPlace.name}</h1>
-        <p>{[(featuredDraft ? featuredDraft.departure : lastTrip?.brief.date) || 'Flexible dates',
-          `${featuredDraft?.days.length || lastTrip?.brief.days} days`, `${featuredDraft?.travelers || lastTrip?.brief.people} travelers`].join(' · ')}</p>
-        <div className="travel-actions">
-          <a className="btn primary" href={tripHref}>Open trip <ArrowRight size={16}/></a>
-          {featuredDraft && <><a className="btn secondary" href={tripHref+'/invite'}>Invite teammates</a>
-            <a className="btn secondary" href={tripHref+'/travel'}>Travel Mode</a></>}
+      <div className="home-trip-heading">
+        <div className="home-trip-thumbnail">
+          {tripPhoto ? <PlacePhoto place={tripPhoto} compact/> : featuredPlace
+            ? <img src={`/images/${featuredPlace.image}.jpg`} alt=""/> : <Icon name="trip" size={26}/>}
+        </div>
+        <div className="home-trip-copy">
+          <p className="travel-label">Your latest trip</p><h1 id="home-active-title">Trip to {featuredDraft?.name || featuredPlace.name}</h1>
+          <p>{[(featuredDraft ? featuredDraft.departure : lastTrip?.brief.date) || 'Flexible dates',
+            `${featuredDays} ${featuredDays === 1 ? 'day' : 'days'}`, `${featuredTravelers} ${featuredTravelers === 1 ? 'traveler' : 'travelers'}`].join(' · ')}</p>
         </div>
       </div>
+      <nav className="home-trip-actions" aria-label="Latest trip actions">
+        <a className="btn primary" href={tripHref}>Go to trip <ArrowRight size={16}/></a>
+        {featuredDraft && <>
+          <a className="btn secondary" href={tripHref+'/preferences'} title="Change the number of travelers">Add members</a>
+          <a className="btn secondary" href={tripHref+'/invite'}>Invite members</a>
+          <a className="btn secondary" href={tripHref+'/travel'}>Trip Mode</a>
+        </>}
+      </nav>
     </section>}
     <section className="landing-grid landing-hero" aria-labelledby="landing-title">
       <div className="landing-copy">
@@ -164,12 +115,10 @@ export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onD
         <a className="landing-hero-link" href="#discover"><Map size={17}/> Explore destinations <ChevronRight size={16}/></a>
       </div>
     </section>
-    <MarqueeTicker/>
     <BentoExploreSection catalog={catalog} onPlan={id => onPlan('', id)}/>
     <section className="landing-features home-explore" aria-labelledby="landing-tools">
       <h2 id="landing-tools">Explore your way</h2>
-      <div className="home-explore-grid">{actions.map(([route,ActionIcon,title,description,photo])=><a href={'#'+route} className="home-explore-card" key={route}>
-        <img src={`/images/${photo}.jpg`} alt="" width="768" height="512" loading="lazy" decoding="async"/>
+      <div className="home-explore-grid">{actions.map(([route,ActionIcon,title,description])=><a href={'#'+route} className="home-explore-card" key={route}>
         <span className="home-explore-caption"><ActionIcon size={18}/><span><strong>{title}</strong><small>{description}</small></span><ArrowRight size={17}/></span>
       </a>)}</div>
     </section>
@@ -177,13 +126,13 @@ export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onD
     <header className="discovery-home-intro">
       <div className="discovery-home-heading">
         <h2>{city ? <>Explore <span>{city.name}</span></> : 'Explore near you'}</h2>
-        <p>{chosen || !city ? 'Find places to go, eat and stay.' : library.profile?.homeCity ? 'Near your profile city' : 'Suggested city · change location above'}</p>
+        <p>{city && !destination && library.profile?.homeCity ? 'Near your profile city' : 'Find places to go, eat and stay.'}</p>
       </div>
       {cityId && <DiscoveryWeather key={cityId} cityId={cityId}/>}
     </header>
     {city ? <DiscoveryFeed key={city.id} location={city} profile={library.profile} onPlan={onPlan} onAsk={onAsk} onRequireAccount={onRequireAccount}/>
       : name && !suggestionFailure ? <DiscoveryLoading city={name}/>
-      : suggestionFailure ? <div className="discovery-message" role="status"><p>Search for a city to show nearby places.</p><Button onClick={()=>{setSuggestionFailure(false);setAttempt(value=>value+1)}}>Retry suggestion</Button></div>
+      : suggestionFailure ? <div className="discovery-message" role="status"><p>Nearby places are temporarily unavailable.</p><Button onClick={()=>{setSuggestionFailure(false);setAttempt(value=>value+1)}}>Retry suggestion</Button><a className="btn secondary" href="#discover">Explore destinations</a></div>
       : null}
     <div className="discovery-home-links">
       <Button icon="plus" variant="primary" onClick={()=>city?onPlan('',city.id,city,false,{selected:shortlist}):onPlan()}>Plan a trip</Button>

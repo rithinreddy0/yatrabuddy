@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="304" height="304" viewBox="4 8 304 304" role="img" aria-labelledby="title desc">
+  <title id="title">YatraBuddy</title>
+  <desc id="desc">Purple location pin with an airplane, winding travel path and AI sparkle.</desc>
+  <defs>
+    <linearGradient id="pinGradient" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#A67AF9"/>
+      <stop offset="0.52" stop-color="#6743DC"/>
+      <stop offset="1" stop-color="#4324BC"/>
+    </linearGradient>
+    <linearGradient id="ribbon" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#C8B5FF"/>
+    </linearGradient>
+  </defs>
+  <!-- Brand icon: destination pin -->
+  <path d="M156 19C91 19 38 71 38 137c0 89 118 165 118 165s118-76 118-165C274 71 221 19 156 19Z" fill="url(#pinGradient)"/>
+  <!-- Elegant route ribbon -->
+  <path d="M74 210c38-17 85-43 130-78 19-15 35-30 49-46-14 33-32 61-56 85-34 34-76 55-123 67 12-9 23-18 34-28-14 3-26 5-34 0Z" fill="url(#ribbon)" opacity=".92"/>
+  <!-- Takeoff trail -->
+  <path d="M62 204c-8-20 5-42 28-51l40-15" fill="none" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round"/>
+  <!-- Airplane, intentionally simple for legibility at small sizes -->
+  <g transform="translate(150 120) rotate(-37)">
+    <path d="M0-66c-9 0-12 11-12 22v33l-51 35v16l51-18v43l-19 13v13L0 82l31 9V78L12 65V22l51 18V24L12-11v-33C12-55 9-66 0-66Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/>
+  </g>
+  <!-- AI-inspired star -->
+  <path d="M222 42 228 60 246 66 228 72 222 90 216 72 198 66 216 60Z" fill="#FFFFFF"/>
+</svg>

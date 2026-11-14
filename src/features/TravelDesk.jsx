@@ -1,5 +1,5 @@
 import React,{useEffect,useRef,useState} from 'react'
-import {AgentProgress,Button,Icon,Pill,SourcePill} from '../components/UI.jsx'
+import {AgentProgress,Button,Icon,Pill,SourcePill,TravelArtwork} from '../components/UI.jsx'
 import {request} from '../api.mjs'
 import {money} from '../planner.mjs'
 import {DestinationSearch} from '../components/DestinationSearch.jsx'
@@ -102,7 +102,10 @@ export function TravelDesk({catalog,profile,trip,initialDestination,initialTab='
   const origin=trip?.brief.origin||profile?.homeCity
   const result=useRef(null)
   return <div className="desk">
-    {!compact&&<><div className="eyebrow"><span/> THE PRACTICAL DETAILS</div><h1>Travel desk</h1><p className="lede">Check rides, compare stays, plan fuel costs and find official travel guidance.</p></>}
+    {!compact&&<header className="travel-desk-heading">
+      <div><h1>Travel desk</h1><p className="lede">Check rides, compare stays, plan fuel costs and find official travel guidance.</p></div>
+      <TravelArtwork name="transport-plane" animated className="transport-plane-art" width={210} height={160}/>
+    </header>}
     <div className="panel news-controls">
       {catalog.length>1&&<DestinationSearch catalog={catalog} selected={place} onSelect={next=>{setId(next.id);revealResult(result.current)}}/>}
       <div className="filters">{[['mobility','map','Getting around'],['stays','bed','Stays'],['fuel','wallet','Fuel and rentals'],['guide','calendar','When to go']].map(([value,icon,label])=><Pill active={tab===value} key={value} icon={icon} onClick={()=>{setTab(value);revealResult(result.current)}}>{label}</Pill>)}</div>

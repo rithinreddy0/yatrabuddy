@@ -1,3 +1,4 @@
+import {useMapPanel} from './useMapPanel.mjs'
 import React, {useEffect, useMemo, useRef, useState} from 'react'
 import {Camera, ClipboardList, NotebookPen} from 'lucide-react'
 import {request} from '../api.mjs'
@@ -5,7 +6,7 @@ import {PlacePhoto} from '../components/PlacePhoto.jsx'
 import {PhotoRail} from '../components/PhotoRail.jsx'
 import {DestinationBrief} from '../components/CityBrief.jsx'
 import {revealResult} from '../components/revealResult.mjs'
-import {AgentProgress, Button, Dialog, Icon, IconButton, Pill, SourcePill} from '../components/UI.jsx'
+import {AgentProgress, Button, Dialog, Icon, IconButton, Pill, SourcePill, TravelArtwork} from '../components/UI.jsx'
 import {money} from '../planner.mjs'
 import {draftSchedule, visitTime} from './draftSchedule.mjs'
 import {draftMapData, JourneyMap, mapPlaceId} from './JourneyMap.jsx'
@@ -171,7 +172,7 @@ function PersonalList({tripId, kind}) {
   return <section className="trip-overview-glass trip-overview-section trip-overview-personal">
     <div className="trip-overview-section-head">
       <div><h2>{label}</h2><p>Private to this browser.</p></div>
-      {packing ? <ClipboardList size={23} aria-hidden="true"/> : <NotebookPen size={23} aria-hidden="true"/>}
+      {packing ? <TravelArtwork name="packing-traveler" className="packing-heading-art" width={190} height={190}/> : <NotebookPen size={23} aria-hidden="true"/>}
     </div>
     {packing && entries.length > 0 && <p>{entries.filter(entry => entry.checked).length} of {entries.length} packed</p>}
     <form className="trip-overview-entry-form" onSubmit={add}>
@@ -203,6 +204,7 @@ function StayOptions({draft, nearby, onSelect, onEdit, retry}) {
     </div>
     {draft.stay && <article className="trip-overview-current-stay">
       <div><small>Planned stay</small><h3>{draft.stay.name}</h3></div>
+      <PlacePhoto key={draft.stay.url} place={draft.stay} lookup hideUnavailable className="trip-overview-current-stay-photo"/>
       <Button icon="map" onClick={() => onSelect(draft.stay)}>Show on map</Button>
     </article>}
     {nearby.loading && <AgentProgress label="Looking up nearby stays and photos"/>}
@@ -248,7 +250,7 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
     return 'overview'
   })
   const [invite, setInvite] = useState(initialSection === 'invite' ? 1 : 0)
-  const [mapOpen, setMapOpen] = useState(true)
+  const [mapOpen, setMapOpen] = useMapPanel()
   const [selection, setSelection] = useState(null)
   const [query, setQuery] = useState('')
   const voice = useVoiceInput({continuous:false, onTranscript:text => setQuery(current => [current.trim(), text].filter(Boolean).join(' ').slice(0,600))})
@@ -297,7 +299,6 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
 
   function select(place) {
     setSelection(place)
-    if (place) setMapOpen(true)
   }
 
   function sync(next) {

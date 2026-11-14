@@ -17,6 +17,52 @@ class PlanningAgentTest(TestCase):
         from .auth import _ATTEMPTS
         self.enterContext(patch.dict(_ATTEMPTS, clear=True))
 
+    def test_chat_commands_preserve_the_trip_and_edit_verified_stops(self):
+        def stop(name, category, index):
+            return {"name": name, "category": category, "source": "Wikipedia",
+                    "url": f"https://en.wikipedia.org/wiki/{name.replace(' ', '_')}",
+                    "lat": 15.49 + index / 1000, "lon": 73.82}
+
+        beach = stop("Miramar Beach", "Nature", 1)
+        museum = stop("Goa State Museum", "Sight", 2)
+        church = stop("Our Lady of the Immaculate Conception Church", "Sight", 3)
+        draft = {"id": str(uuid4()), "name": "Panaji", "cityId": 123, "days": [[beach], [museum]],
+                 "travelers": 2, "party": {"adults": 1, "children": 1}, "budget": 20000,
+                 "updated": 100, "stopCosts": {beach["url"]: 700}}
+        with (TestClient(app) as client, patch("backend.planning_agent.nearby_report",
+              new=AsyncMock(return_value={"places": [beach, museum, church]})),
+              patch("backend.nearby.route_points", new=AsyncMock(return_value=None))):
+            token = client.post("/api/planning-agent/sessions").json()["token"]
+            path = f"/api/planning-agent/sessions/{token}/turn"
+            version = 0
+
+            def send(text, offline=True, kind="message"):
+                nonlocal version
+                response = client.post(path, json={"version": version, "kind": kind, "text": text,
+                                                    "live_only": True, "live_context": draft, "offline": offline})
+                self.assertEqual(response.status_code, 200, response.text)
+                done = json.loads(response.text.splitlines()[-1])
+                self.assertEqual(done["type"], "done", response.text)
+                version = done["version"]
+                return done
+
+            self.assertIn("Swimwear", send("Make a packing checklist for my trip.")["events"][-1]["answer"])
+            self.assertIn("Children’s snacks", send("/pack")["events"][-1]["answer"])
+            self.assertIn("Day 1: Miramar Beach", send("/summary")["events"][-1]["answer"])
+            self.assertIn("₹700 entered", send("/budget")["events"][-1]["answer"])
+            self.assertIn("print(", send("/code")["events"][-1]["answer"])
+            self.assertIn("Bonjour", send("/translate French")["events"][-1]["answer"])
+            moved = send("Move Miramar Beach to Day 2")["currentItinerary"]["draft"]
+            self.assertEqual(moved["days"][0], [])
+            self.assertEqual(moved["stopCosts"], {beach["url"]: 700})
+            added = send(f"Add {church['name']} to day 1", offline=False)["currentItinerary"]["draft"]
+            self.assertEqual(added["days"][0][0]["name"], church["name"])
+            removed = send("Remove Miramar Beach")["currentItinerary"]["draft"]
+            self.assertEqual(removed["stopCosts"], {})
+            self.assertEqual(removed["id"], draft["id"])
+            restored = send("", kind="undo")["currentItinerary"]["draft"]
+            self.assertEqual(restored["stopCosts"], {beach["url"]: 700})
+
     def test_live_intake_builds_and_revises_a_sourced_trip(self):
         with TestClient(app) as client, patch("backend.planning_agent.live_place_research", new_callable=AsyncMock) as research:
             token = client.post("/api/planning-agent/sessions").json()["token"]

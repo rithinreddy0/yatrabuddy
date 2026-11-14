@@ -146,7 +146,7 @@ def update_intake(text, previous, profile, parsed, *, replace_interests=False):
         result.pop("date", None)
         result.pop("endDate", None)
         result["flexibleDates"] = True
-    if re.fullmatch(r"(?:start at the destination|already there|local itinerary)[.! ]*", text.strip(), re.I):
+    if re.search(r"\b(?:start(?:ing)? at (?:the|my|our) destination|already there|local itinerary)\b", text, re.I):
         result.pop("origin", None)
         result["localStart"] = True
     elif result.get("origin"):

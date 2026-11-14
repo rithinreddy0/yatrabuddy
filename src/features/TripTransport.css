@@ -10,6 +10,13 @@
   font-weight: 800;
 }
 
+.trip-transport-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .trip-transport-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 255px), 1fr));

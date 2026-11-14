@@ -1,9 +1,10 @@
-import React, {useEffect, useState} from 'react'
+import React, {useEffect, useEffectEvent, useState} from 'react'
 import {Check, CircleAlert, Copy, LoaderCircle} from 'lucide-react'
 import './AgentMessage.css'
 
 const inlinePattern = /(!?\[([^\]\n]+)\]\(([^()\s]+)\))|(\*\*([^*\n]+)\*\*)|(`([^`\n]+)`)|(\*([^*\n]+)\*)/g
 const listLine = /^\s*(- |\* |\d+\. )(.+)$/
+const wordEnd = /\S+\s*/gu
 
 function inline(line) {
   const parts = []
@@ -40,7 +41,37 @@ function CodeBlock({code, language, pending}) {
   </div>
 }
 
-export function AgentMessage({text, kind, pending = false}) {
+export function RevealingAnswer({text, onComplete}) {
+  const [visible, setVisible] = useState('')
+  const finish = useEffectEvent(onComplete)
+  useEffect(() => {
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    if (motion.matches) {
+      finish()
+      return
+    }
+    const ends = Array.from(text.matchAll(wordEnd), match => match.index + match[0].length)
+    const duration = Math.min(1800, Math.max(330, ends.length * 28))
+    const start = performance.now()
+    const timer = window.setInterval(() => {
+      const count = Math.max(1, Math.floor((performance.now() - start) / duration * ends.length))
+      if (count >= ends.length || motion.matches) {
+        window.clearInterval(timer)
+        finish()
+      } else {
+        setVisible(text.slice(0, ends[count - 1]))
+      }
+    }, 32)
+    return () => window.clearInterval(timer)
+  }, [text])
+  return <div aria-hidden="true"><AgentMessage text={visible} pending/></div>
+}
+
+function ChecklistItem({text}) {
+  return <label className="agent-checklist-item"><input type="checkbox"/><span>{inline(text)}</span></label>
+}
+
+export const AgentMessage = React.memo(function AgentMessage({text, kind, pending = false}) {
   const lines = text.trim().split(/\r?\n/)
   const content = []
   for (let index = 0; index < lines.length;) {
@@ -68,16 +99,16 @@ export function AgentMessage({text, kind, pending = false}) {
         index += 1
       }
       const List = ordered ? 'ol' : 'ul'
-      content.push(<List key={key}>{items.map((value, position) => <li key={position}>{inline(value)}</li>)}</List>)
+      content.push(<List key={key}>{items.map((value, position) => <li key={position}>{!pending && value.startsWith('[ ] ')
+        ? <ChecklistItem text={value.slice(4)}/> : inline(value)}</li>)}</List>)
     } else if (heading) content.push(<p className="agent-markdown-heading" key={key}>{inline(heading[1])}</p>)
     else content.push(<p key={key}>{inline(line)}</p>)
   }
   return <div className="agent-markdown" data-pending={pending || undefined}>
     {content}
-    {pending && <span className="streaming-caret" />}
     {kind === 'general' && <small className="agent-answer-label">General knowledge · verify before relying</small>}
   </div>
-}
+})
 
 export function AgentToolStatus({tools, running = false}) {
   if (!tools.length) return null

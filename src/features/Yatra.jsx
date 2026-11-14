@@ -1,8 +1,10 @@
 import React, {useEffect, useRef, useState} from 'react'
 import {ArrowDownToLine, ArrowRight, ArrowUpRight, BedDouble, Car, ChartNoAxesColumn, Check, ChevronRight, CloudSun, Globe, Luggage, Map, MapPin, Plane, Plus, Receipt, Route, Ship, Sparkles, TrainFront, Users, Wallet, X} from 'lucide-react'
 import seed from '../../backend/goa-escape.json'
+import catalog from '../../backend/catalog.json'
 import {freshnessLabel, request, travelData} from '../api.mjs'
 import {askTravel} from '../conversation.mjs'
+import {JourneyMap} from './JourneyMap.jsx'
 import './Yatra.css'
 
 const sourceIcons = {flight: Plane, weather: CloudSun, map: MapPin}
@@ -37,8 +39,8 @@ function IconButton({icon: Icon, label, onClick}) {
   return <button className="yt-icon" type="button" aria-label={label} title={label} onClick={onClick}><Icon size={20}/></button>
 }
 
-function PillButton({children, onClick, primary = false, type = 'button', disabled = false}) {
-  return <button type={type} className={'yt-pill-button' + (primary ? ' yt-primary' : '')} onClick={onClick} disabled={disabled}>{children}</button>
+function PillButton({children, onClick, primary = false, type = 'button', disabled = false, ...props}) {
+  return <button {...props} type={type} className={'yt-pill-button' + (primary ? ' yt-primary' : '')} onClick={onClick} disabled={disabled}>{children}</button>
 }
 
 function Gauge({percent, needle = false}) {
@@ -158,9 +160,17 @@ function Assistant({trip, profile, openOnline}) {
     <div aria-live="polite">{reply && <div className="yt-reply"><p>{reply.answer}</p>{reply.citations?.map(source => <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.title}<ArrowUpRight size={13}/></a>)}</div>}</div>
   </div>
 }
-function GoaMap() {
+const goaMapPlaces = [
+  {...seed.goaHubs[0], category: 'Airport'},
+  ...catalog.find(place => place.image === 'goa').places
+    .filter(place => ['Cabo de Rama Fort', 'Palolem Beach'].includes(place.name))
+    .map(place => ({...place, category: place.theme, address: place.area, openingHours: place.hours})),
+]
+
+function GoaMap({initiallyOpen = false}) {
   const [road, setRoad] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [mapOpen, setMapOpen] = useState(initiallyOpen)
   async function compareRoad() {
     setLoading(true)
     try {
@@ -171,8 +181,8 @@ function GoaMap() {
     finally {setLoading(false)}
   }
   return <div className="yt-stack yt-compare-map">
-    <iframe title="OpenStreetMap of South Goa" loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=73.878%2C14.962%2C74.155%2C15.400&layer=mapnik&marker=15.008889%2C74.022778"/>
-    <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer"><small>© OpenStreetMap contributors</small></a>
+    <PillButton onClick={() => setMapOpen(open => !open)} aria-expanded={mapOpen}>{mapOpen ? 'Hide map' : 'Show map'}</PillButton>
+    {mapOpen && <JourneyMap center={{name:'South Goa'}} places={goaMapPlaces} onClose={() => setMapOpen(false)}/>}
     <div className="yt-detail-row"><strong>South Goa stops</strong><p>Goa International Airport / Cabo de Rama Fort / Palolem Beach</p></div>
     <PillButton onClick={compareRoad} disabled={loading}>{loading ? 'Checking road estimate' : 'Compare local road estimates'}</PillButton>
     {road && <div className="yt-detail-row" role="status">
@@ -512,7 +522,7 @@ export function Yatra({view, scenario, libraryState, navigate}) {
     case 'Expenses': content = <div className="yt-stack"><p className="yt-sample">{sampleLabel}</p>{trip.expenses.map((item, index) => <div key={index} className="yt-detail-row yt-expense"><span>{item.name}</span><strong>{money(item.amount)}</strong></div>)}<PillButton onClick={exportExpenses}><ArrowDownToLine size={17}/> Download CSV</PillButton></div>; break
     case 'Stop details': content = <div className="yt-stack"><p className="yt-sample">{sampleLabel}</p><h3>{panel.details.name}</h3><p>{panel.details.time} / {dates[panel.details.day].toLocaleDateString('en-GB', {day: 'numeric', month: 'long', timeZone: 'UTC'})}</p><p>{panel.details.place}</p></div>; break
     case 'Bookings': content = <div className="yt-stack"><p className="yt-sample">{sampleLabel}</p>{[trip.stay, 'Delhi to Goa flight', 'Palolem transfer'].map(name => <div className="yt-detail-row yt-expense" key={name}><span>{name}</span><Check size={18}/></div>)}</div>; break
-    case 'Trip map': content = <GoaMap/>; break
+    case 'Trip map': content = <GoaMap initiallyOpen/>; break
     case 'Weather': content = <WeatherDetails weather={onlineWeather}/>; break
     case 'Online travel sources': content = <OnlineTravel trip={trip} dates={dates}/>; break
 
