@@ -634,3 +634,44 @@ main h1[tabindex="-1"]:focus { outline: none; box-shadow: none; }
 .transport-compare .filters { margin:2px 0 6px; }
 .news-impact { margin:4px 0; font-size:13.5px; color:var(--ink); }
 .news-impact strong { color:var(--forest); }
+
+/* Mobile fixes (Nov 2026 audit) */
+@media (max-width:650px) {
+  /* The active-trip layout kept the planner at 7 of 12 columns, squeezing the prompt on phones. */
+  .home-active-trip + .landing-hero .landing-copy { grid-column:1/-1; }
+  .landing-copy, .landing-prompt { width:100%; }
+}
+/* A long option label (e.g. a full itinerary leg) must not widen its card past the screen. */
+.trip-transport-card { grid-template-columns:minmax(0,1fr); }
+.trip-transport-fields label { min-width:0; }
+.trip-transport-fields :is(input, select) { width:100%; max-width:100%; min-width:0; }
+
+/* Touch screens: comfortable hit areas for compact text controls. */
+@media (pointer:coarse) {
+  main :is(select, input:not([type=checkbox],[type=radio],[type=range],[type=file],[type=color]), textarea) { min-height:40px; }
+  main :is(.trip-room-place-button, .guide-place-name, .discovery-card-caption h4 > button) {
+    display:inline-flex; align-items:center; min-height:36px; text-align:left;
+  }
+  main :is(.city-brief-points a, .city-brief-advisories a, a.city-brief-license, .place-photo figcaption a) {
+    display:inline-flex; align-items:center; min-height:32px;
+  }
+  .maplibregl-ctrl-group button { width:36px; height:36px; }
+  .journey-map-days button { min-height:36px; }
+  .journey-map .journey-map-fit { min-height:36px; }
+  .journey-map-bottom a { display:inline-flex; align-items:center; min-height:32px; }
+}
+
+/* Phone landscape: the bottom dock plus the chat composer left too little room for content,
+   so the dock becomes a vertical rail on the right edge. */
+@media (max-width:850px) and (max-height:480px) and (orientation:landscape) {
+  .travel-shell .mobile-workspace-dock {
+    left:auto; right:max(8px, env(safe-area-inset-right)); top:50%; bottom:auto;
+    transform:translateY(-50%); flex-direction:column;
+  }
+  .travel-shell .mobile-workspace-dock > :is(a,button) { width:42px; height:42px; }
+  .travel-shell .shell > main {
+    padding-bottom:max(12px, env(safe-area-inset-bottom));
+    padding-right:calc(64px + env(safe-area-inset-right));
+  }
+  .travel-shell.chat-shell .journey-chat.agent-workspace, .chat-shell .journey-chat.agent-workspace { height:calc(100dvh - 8px); }
+}
