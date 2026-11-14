@@ -6,16 +6,18 @@ import {PlacePhoto} from '../components/PlacePhoto.jsx'
 import {money} from '../planner.mjs'
 import {draftSchedule, visitTime} from './draftSchedule.mjs'
 import {JourneyMap, draftMapData} from './JourneyMap.jsx'
+import {TravelMode} from './TravelMode.jsx'
 import './TripWorkspace.css'
 
 const path = 'trip-workspaces'
 const tabs = [
+  ['travel', 'Travel Mode', 'compass'],
   ['itinerary', 'Itinerary', 'map'],
   ['ideas', 'Ideas', 'heart'],
   ['bookings', 'Bookings', 'trip'],
   ['calendar', 'Calendar', 'calendar'],
   ['chat', 'Group chat', 'chat'],
-  ['media', 'Media', 'link'],
+  ['media', 'Memories', 'link'],
 ]
 const mediaTypes = 'image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,application/pdf'
 const formatDate = new Intl.DateTimeFormat(undefined, {weekday:'short', month:'short', day:'numeric', timeZone:'UTC'})
@@ -100,13 +102,14 @@ async function upload(workspace, entry, file) {
     method:'POST', body, credentials:'same-origin', signal:AbortSignal.timeout(25000),
   })
   const data = await response.json().catch(() => null)
-  if (!response.ok) throw new Error(typeof data?.detail === 'string' ? data.detail : 'The upload could not be saved.')
+  if (!response.ok) throw new Error(typeof data?.detail === 'string' ? data.detail :
+    response.status === 413 ? 'This connection rejected the file size. Try a smaller file or add a link.' : 'The upload could not be saved.')
   return data
 }
 
-function EntryForm({kind, places, defaultPlace, onSave, onClose, busy}) {
+function EntryForm({kind, places, defaultPlace, onSave, onClose, busy, current}) {
   const placeListId = useId()
-  const [title, setTitle] = useState('')
+  const [title, setTitle] = useState(current?.title || '')
   const [file, setFile] = useState(null)
   const isMedia = kind === 'media'
   const isBooking = kind === 'booking'
@@ -117,7 +120,7 @@ function EntryForm({kind, places, defaultPlace, onSave, onClose, busy}) {
     const entry = {
       kind, title:title.trim(), place:form.get('place')?.trim() || null,
       url:form.get('url')?.trim() || null, notes:form.get('notes')?.trim() || '',
-      date:form.get('date') || null, amount:amount ? Number(amount) : null,
+      date:form.get('date') || null, time:form.get('time') || null, amount:amount ? Number(amount) : null,
     }
     onSave(entry, file)
   }
@@ -126,16 +129,20 @@ function EntryForm({kind, places, defaultPlace, onSave, onClose, busy}) {
       <input required maxLength={220} value={title} onChange={event => setTitle(event.target.value)}
         placeholder={isMedia ? 'Give it a name' : isBooking ? 'Hotel, train, or activity' : 'A place to visit'}/>
     </label>
-    <label>{isMedia ? 'Photo, video, or post link' : 'Source link'}<input type="url" name="url" placeholder="https://…" maxLength={2048} required={isMedia && !file}/></label>
+    <label>{isMedia ? 'Photo, video, or post link' : 'Source link'}<input type="url" name="url" defaultValue={current?.url || ''} placeholder="https://…" maxLength={2048} required={isMedia && !file}/></label>
     {isMedia && <label>Place<input name="place" maxLength={220} placeholder="Where this belongs"
       list={placeListId} defaultValue={defaultPlace || ''}/><datalist id={placeListId}>
       {places.map(place => <option key={place} value={place}/>)}
     </datalist></label>}
     {isBooking && <div className="trip-room-form-row">
-      <label>Booking date<input name="date" type="date"/></label>
-      <label>Amount (₹)<input name="amount" type="number" min={0} max={10000000} step={1}/></label>
+      <label>Booking date<input name="date" type="date" defaultValue={current?.date || ''} onChange={event => {
+        if (!event.target.value) event.target.form.elements.time.value = ''
+      }}/></label>
+      <label>Local time<input name="time" type="time" defaultValue={current?.time?.slice(0, 5) || ''}/></label>
+      <label>Location or meeting point<input name="place" defaultValue={current?.place || ''} maxLength={220}/></label>
+      <label>Amount (₹)<input name="amount" type="number" defaultValue={current?.amount ?? ''} min={0} max={10000000} step={1}/></label>
     </div>}
-    {(isMedia || isBooking) && <label>{isBooking ? 'Receipt or confirmation' : 'Upload a file'} <span className="trip-room-muted">(up to 12 MB)</span>
+    {(isMedia || isBooking) && !current && <label>{isBooking ? 'Receipt or confirmation' : 'Upload a file'} <span className="trip-room-muted">(up to 12 MB)</span>
       <input type="file" accept={isMedia ? mediaTypes : 'image/jpeg,image/png,image/webp,image/gif,application/pdf'}
         onChange={event => {
           const next = event.target.files[0]
@@ -143,7 +150,7 @@ function EntryForm({kind, places, defaultPlace, onSave, onClose, busy}) {
           if (next && !title) setTitle(next.name.slice(0, 220))
         }}/>
     </label>}
-    {!isMedia && <label>Notes<textarea name="notes" rows={2} maxLength={2000} placeholder={isBooking ? 'Reference number, check-in details…' : 'What makes it worth a visit?'}/></label>}
+    {!isMedia && <label>Notes<textarea name="notes" rows={2} defaultValue={current?.notes || ''} maxLength={2000} placeholder={isBooking ? 'Reference number, check-in details…' : 'What makes it worth a visit?'}/></label>}
     <div className="trip-room-actions">
       <Button onClick={onClose} disabled={busy}>Cancel</Button>
       <Button type="submit" variant="primary" disabled={busy || !title.trim()}>{busy ? 'Saving…' : 'Save'}</Button>
@@ -372,8 +379,28 @@ function Calendar({draft, onPlaceSelect}) {
   </div>
 }
 
-function WorkspaceEntries({entries, kind, ideas, media, draft, onSave, onRemove, onPlaceSelect, busy}) {
+function exportMemories(draft, entries) {
+  const lines = [`Trip to ${draft.name}`, draft.departure || 'Flexible dates', '']
+  draft.days.forEach((day, index) => lines.push(`Day ${index + 1}`, ...day.map(place => `• ${place.name}`), ''))
+  if (entries.length) lines.push('Photos and videos', ...entries.flatMap(entry => [
+    [entry.title, entry.place, entry.credit, entry.license].filter(Boolean).join(' · '),
+    entry.attachment ? new URL(entry.attachment, location.origin).href : entry.sourceUrl || entry.url || '', '',
+  ]))
+  try {
+    const journal = JSON.parse(localStorage.getItem(`yatra.trip.${draft.id}.journal`) || '[]')
+    if (journal.length) lines.push('Journal', ...journal.map(note => `${note.date.slice(0, 10)} · ${note.text}`))
+  } catch {}
+  const url = URL.createObjectURL(new Blob([lines.join('\n')], {type:'text/plain;charset=utf-8'}))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'trip-memories.txt'
+  link.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+function WorkspaceEntries({entries, kind, ideas, media, draft, onSave, onUpdate, onRemove, onPlaceSelect, busy}) {
   const [showForm, setShowForm] = useState(false)
+  const [editing, setEditing] = useState(null)
   const [mediaFilter, setMediaFilter] = useState('')
   const knownPlaces = [...new Set([draft.stay?.name, ...draft.days.flat().map(place => place.name),
     ...entries.map(entry => entry.place)].filter(Boolean))].sort((a, b) => a.localeCompare(b))
@@ -385,7 +412,10 @@ function WorkspaceEntries({entries, kind, ideas, media, draft, onSave, onRemove,
   return <>
     <div className="trip-room-section-heading">
       <p className="trip-room-muted">{entries.length} {kind === 'media' ? 'media items' : noun + (entries.length === 1 ? '' : 's')}</p>
-      {!showForm && <Button icon="plus" variant="primary" onClick={() => setShowForm(true)}>Add {noun}</Button>}
+      <div className="trip-room-actions">
+        {kind === 'media' && <Button icon="download" onClick={() => exportMemories(draft, entries)}>Download recap</Button>}
+        {!showForm && <Button icon="plus" variant="primary" onClick={() => setShowForm(true)}>Add {kind === 'media' ? 'photos or videos' : noun}</Button>}
+      </div>
     </div>
     {kind === 'media' && !!knownPlaces.length && <label className="trip-room-media-filter">Filter by place
       <select value={filter} onChange={event => setMediaFilter(event.target.value)}><option value="">All places</option>
@@ -404,10 +434,15 @@ function WorkspaceEntries({entries, kind, ideas, media, draft, onSave, onRemove,
         <div className="trip-room-entry-heading">
           <div>
             <strong>{entry.title}</strong>
-            <small>{[entry.place, entry.category, entry.date, entry.amount == null ? null : money(entry.amount)].filter(Boolean).join(' · ')}</small>
+            <small>{[entry.place, entry.category, entry.date, entry.time?.slice(0, 5), entry.amount == null ? null : money(entry.amount)].filter(Boolean).join(' · ')}</small>
           </div>
-          {entry.canRemove && <IconButton icon="trash" label={'Remove ' + entry.title} disabled={busy} onClick={() => onRemove(entry.id)}/>}
+          {entry.canRemove && <div className="trip-room-actions">
+            {kind === 'booking' && <IconButton icon="edit" label={'Edit ' + entry.title} disabled={busy} onClick={() => setEditing(entry.id)}/>}
+            <IconButton icon="trash" label={'Remove ' + entry.title} disabled={busy} onClick={() => onRemove(entry.id)}/>
+          </div>}
         </div>
+        {editing === entry.id && <EntryForm kind={kind} places={knownPlaces} current={entry} busy={busy} onClose={() => setEditing(null)}
+          onSave={async data => {if (await onUpdate(entry.id, data)) setEditing(null)}}/>}
         {entry.notes && <p>{entry.notes}</p>}
         {kind === 'media' && <MediaPreview entry={entry}/>}
         {(entry.credit || entry.license) && <small>{entry.credit}{entry.credit && entry.license && ' · '}
@@ -449,16 +484,17 @@ function GroupChat({workspace, busy, onSave, onRemove, onNameChange}) {
   const [message, setMessage] = useState('')
   const [editingName, setEditingName] = useState(false)
   const bottom = useRef(null)
+  const followMessages = useRef(true)
   const entries = workspace.entries.filter(entry => entry.kind === 'message')
   useEffect(() => {
     const viewport = bottom.current?.parentElement
-    if (viewport && viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 130) {
+    if (viewport && followMessages.current) {
       viewport.scrollTop = viewport.scrollHeight
     }
   }, [entries.length])
   return <div className="trip-room-chat">
     <div className="trip-room-section-heading">
-      <p className="trip-room-muted">{workspace.members.join(', ')}</p>
+      <div className="trip-chat-members" aria-label="Trip members">{workspace.members.map((member, index) => <span key={index}>{member}</span>)}</div>
       <Button icon="edit" onClick={() => setEditingName(value => !value)}>Display name</Button>
     </div>
     {editingName && <form className="trip-room-compose" onSubmit={async event => {
@@ -469,7 +505,10 @@ function GroupChat({workspace, busy, onSave, onRemove, onNameChange}) {
       <input aria-label="Display name" name="name" required maxLength={70} placeholder="Your name"/>
       <Button type="submit" disabled={busy}>Save</Button>
     </form>}
-    <div className="trip-room-messages" role="log" aria-label="Trip group messages">
+    <div className="trip-room-messages" role="log" aria-label="Trip group messages" onScroll={event => {
+      const viewport = event.currentTarget
+      followMessages.current = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 130
+    }}>
       {!entries.length && <p className="trip-room-muted">Start a conversation with your travel group.</p>}
       {entries.map(entry => <div className={'trip-room-message' + (entry.mine ? ' mine' : '')} key={entry.id}>
         <div><strong>{entry.author}</strong><time dateTime={entry.created}>{formatTimestamp.format(new Date(entry.created))}</time>
@@ -537,10 +576,11 @@ function InviteDialog({workspace, onClose, onRefresh}) {
 }
 
 export function TripWorkspace({draft, workspaceId, inviteCode, ideas=[], media=[], initialTab='itinerary', initialInvite=false,
-  onPlaceSelect, onShowMap, onEdit, onClose, onJoined, onDraftUpdate, embedded=false, onTabChange}) {
+  onPlaceSelect, onShowMap, onEdit, onClose, onJoined, onDraftUpdate, embedded=false, onTabChange, onInviteClose}) {
   const [workspace, setWorkspace] = useState(null)
   const [preview, setPreview] = useState(null)
-  const [tab, setTab] = useState(() => tabs.some(([id]) => id === initialTab) ? initialTab : 'itinerary')
+  const [selectedTab, setTab] = useState(() => tabs.some(([id]) => id === initialTab) ? initialTab : 'itinerary')
+  const tab = embedded ? initialTab : selectedTab
   const [error, setError] = useState('')
   const [connectionError, setConnectionError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -554,6 +594,10 @@ export function TripWorkspace({draft, workspaceId, inviteCode, ideas=[], media=[
   const tabStrip = useRef(null)
   const currentTripId = workspace?.draft?.id || draft?.id
   const pinnedDays = currentTripId ? pinnedDaysByTrip[currentTripId] || [] : []
+
+  useEffect(() => {
+    if (initialInvite) setInviteOpen(true)
+  }, [initialInvite])
 
   useEffect(() => {
     try { localStorage.setItem('yatra.trip-day-pins', JSON.stringify(pinnedDaysByTrip)) }
@@ -579,7 +623,8 @@ export function TripWorkspace({draft, workspaceId, inviteCode, ideas=[], media=[
       signal:controller.signal,
     }).then(data => {
       if (!controller.signal.aborted) (inviteCode ? setPreview : setWorkspace)(data)
-    }).catch(failure => {if (!controller.signal.aborted) setError(failure.message)})
+    }).catch(failure => {if (!controller.signal.aborted) setError(failure.status >= 500
+      ? 'The shared workspace couldn’t connect. Your saved itinerary is still available.' : failure.message)})
     return () => controller.abort()
   }, [draft, workspaceId, inviteCode, retry])
 
@@ -684,7 +729,7 @@ export function TripWorkspace({draft, workspaceId, inviteCode, ideas=[], media=[
     }
   }
 
-  const shownDraft = workspace?.draft || draft
+  const shownDraft = workspace?.draft && (!draft || workspace.draft.updated >= draft.updated) ? workspace.draft : draft
   if (!shownDraft && inviteCode) return <section className="trip-room trip-room-join">
     <Icon name="users" size={28}/>
     <h2>{preview ? `Join the trip to ${preview.name}` : error ? 'Invitation unavailable' : 'Opening the trip invitation…'}</h2>
@@ -750,14 +795,21 @@ export function TripWorkspace({draft, workspaceId, inviteCode, ideas=[], media=[
         onReplaceStop={workspace?.isOwner ? replaceStop : undefined}
         onTogglePinDay={workspace?.isOwner ? togglePinDay : undefined}/>}
       {tab === 'calendar' && <Calendar draft={shownDraft} onPlaceSelect={onPlaceSelect}/>}
-      {!workspace && !['itinerary', 'calendar'].includes(tab) && !error && <p role="status">Opening the trip workspace…</p>}
+      {tab === 'travel' && <TravelMode draft={shownDraft} bookings={group.filter(entry => entry.kind === 'booking')}
+        onTabChange={onTabChange || setTab}/>}
+      {tab === 'media' && !workspace && <Button icon="download" onClick={() => exportMemories(shownDraft, [])}>Download itinerary and journal</Button>}
+      {!workspace && !['itinerary', 'calendar', 'travel'].includes(tab) && !error && <p role="status">Opening the trip workspace…</p>}
       {workspace && tab === 'chat' && <GroupChat workspace={workspace} busy={busy} onSave={save} onRemove={remove}
         onNameChange={name => apply(() => request(`${path}/${roomId}/name`, {method:'PUT', body:{name}}))}/>}
       {workspace && ['ideas', 'bookings', 'media'].includes(tab) && <WorkspaceEntries key={tab} kind={{ideas:'idea', bookings:'booking', media:'media'}[tab]}
         entries={group.filter(entry => entry.kind === {ideas:'idea', bookings:'booking', media:'media'}[tab])}
-        ideas={ideas} media={media} draft={shownDraft} onSave={save} onRemove={remove} onPlaceSelect={onPlaceSelect} busy={busy}/>}
+        ideas={ideas} media={media} draft={shownDraft} onSave={save} onRemove={remove} onPlaceSelect={onPlaceSelect} busy={busy}
+        onUpdate={(id, body) => apply(() => request(`${path}/${roomId}/entries/${id}`, {method:'PATCH', body}))}/>}
     </div>
-    {inviteOpen && workspace?.isOwner && <InviteDialog workspace={workspace} onClose={() => setInviteOpen(false)} onRefresh={() => {
+    {inviteOpen && workspace?.isOwner && <InviteDialog workspace={workspace} onClose={() => {
+      setInviteOpen(false)
+      onInviteClose?.()
+    }} onRefresh={() => {
       const revision = mutation.current
       request(`${path}/${roomId}`).then(result => {if (revision === mutation.current) setWorkspace(result)})
         .catch(failure => setError(failure.message))

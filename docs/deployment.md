@@ -1,6 +1,6 @@
 # Deploy YatraBuddy
 
-The same GitHub repository supplies the Vite frontend to Vercel and the FastAPI backend to Render. Neon Postgres stores accounts, saved trips, chat sessions, and workspace files. Firebase Authentication verifies Google sign-in. The Vercel site proxies `/api/` to Render, so the browser can keep the session cookie on the frontend origin.
+The same GitHub repository supplies the Vite frontend to Vercel and the FastAPI backend to Render. Neon Postgres stores accounts, saved trips, chat sessions, and workspace metadata. Firebase Authentication verifies Google sign-in. The Vercel site proxies `/api/` to Render, so the browser can keep the session cookie on the frontend origin.
 
 This setup uses Vercel Hobby for personal, non-commercial use, one Render Free web service, Neon Free, and Firebase Spark. Render Free suspends an idle service after 15 minutes and can take about a minute to wake. Its local files are ephemeral, and Render Free Postgres expires after 30 days. Neon Free includes 1 GB per project and 100 compute unit hours per project, with quotas for network transfer. Keep large attachments out of the demo database. [Vercel Hobby](https://vercel.com/docs/plans/hobby), [Render Free](https://render.com/docs/free), [Neon plans](https://neon.com/docs/introduction/plans), [Firebase pricing](https://firebase.google.com/docs/projects/billing/firebase-pricing-plans)
 
@@ -17,6 +17,7 @@ Choose **New → Blueprint** and select the repository. The root `render.yaml` u
 - `DATABASE_URL` is the Neon connection string in SQLAlchemy format, such as `postgresql+psycopg://user:password@host/database?sslmode=require`.
 - `PUBLIC_ORIGINS` is the exact HTTPS frontend origin, including the scheme and excluding the trailing slash. If Vercel assigns a different hostname, update this setting in Render and restart the service. Add extra authorized frontend origins with commas only when they need access to the API.
 - `FIREBASE_PROJECT_ID`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_WEB_API_KEY`, and `FIREBASE_WEB_APP_ID` come from the Firebase web app.
+- For Firebase Storage, enable Cloud Storage for Firebase and set `FIREBASE_STORAGE_BUCKET` to the bucket name without the `gs://` prefix. Grant a dedicated service account the Storage Object User role on that bucket. Mount its credentials as a Render secret file and set `GOOGLE_APPLICATION_CREDENTIALS` to that file's absolute path. The bucket can stay private. Workspace membership is checked by the API for each file request. With no bucket configured, new uploads use the database. Existing database attachments remain available after enabling Firebase. [Firebase Admin Cloud Storage](https://firebase.google.com/docs/storage/admin/start)
 - `SECURE_COOKIES=1` and `REQUIRE_GOOGLE_SIGN_IN=1` are set by the Blueprint.
 - `SEARCH_USER_AGENT` can identify the app and its operator to public travel data sources. Optional model and provider credentials belong in Render's environment settings.
 

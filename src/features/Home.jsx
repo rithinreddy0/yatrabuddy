@@ -7,7 +7,7 @@ import {DiscoveryFeed,DiscoveryLoading,DiscoveryWeather,SavedDiscoveryPlaces} fr
 import {useDiscoveryShortlist,useSavedDiscoveryPlaces} from './discoveryPlaces.mjs'
 import {ReferencePhotos} from '../components/PhotoRail.jsx'
 import {PlacePhoto} from '../components/PlacePhoto.jsx'
-import {ArrowRight, CalendarDays, ChevronRight, Globe, LocateFixed, Map, Sparkles, Wallet} from 'lucide-react'
+import {ArrowRight, ChevronRight, Globe, LocateFixed, Map, Sparkles} from 'lucide-react'
 
 export function DestinationCard({place,saved,onSave,onOpen}) {
   return <article className="destination-card" style={{'--place-color':place.color}}>
@@ -101,16 +101,33 @@ export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onD
   }
 
   const actions=[
-    ['itinerary',CalendarDays,'Itinerary','See your plans day by day','trip-calendar'],
-    ['budget',Wallet,'Budget','Review your planned and entered costs','travel-journal'],
-    ['sources',Globe,'Travel sources','Find transport and booking providers','rail-transport'],
-    ['discover',Map,'Explore','Find stays, restaurants and places','goa'],
+    ['guide',Globe,'Destination guide','Local highlights and recent updates','rail-transport'],
+    ['discover',Map,'Explore places','Find stays, restaurants and things to do','goa'],
   ]
+  const lastDraft = [...library.drafts].sort((a,b)=>b.updated-a.updated)[0]
+  const lastTrip = [...library.trips].sort((a,b)=>b.updated-a.updated)[0]
+  const featuredDraft = lastDraft && (!lastTrip || lastDraft.updated >= lastTrip.updated) ? lastDraft : null
+  const featuredPlace = !featuredDraft && catalog.find(place=>place.id===lastTrip?.brief.destination)
+  const tripHref = featuredDraft ? '#draft/'+featuredDraft.id : featuredPlace ? '#trip/'+lastTrip.id : ''
+  const tripPhoto = featuredDraft && [featuredDraft.stay, ...featuredDraft.days.flat()].find(place=>place?.photo?.url)
   return <div className="page yatra-overview discovery-home">
+    {tripHref && <section className="home-active-trip" aria-labelledby="home-active-title">
+      {tripPhoto ? <PlacePhoto place={tripPhoto} compact fallback/> : featuredPlace
+        ? <img src={`/images/${featuredPlace.image}.jpg`} alt=""/> : <Icon name="trip" size={36}/>}
+      <div><p className="travel-label">Your latest trip</p><h1 id="home-active-title">Trip to {featuredDraft?.name || featuredPlace.name}</h1>
+        <p>{[(featuredDraft ? featuredDraft.departure : lastTrip?.brief.date) || 'Flexible dates',
+          `${featuredDraft?.days.length || lastTrip?.brief.days} days`, `${featuredDraft?.travelers || lastTrip?.brief.people} travelers`].join(' · ')}</p>
+        <div className="travel-actions">
+          <a className="btn primary" href={tripHref}>Open trip <ArrowRight size={16}/></a>
+          {featuredDraft && <><a className="btn secondary" href={tripHref+'/invite'}>Invite teammates</a>
+            <a className="btn secondary" href={tripHref+'/travel'}>Travel Mode</a></>}
+        </div>
+      </div>
+    </section>}
     <section className="landing-grid landing-hero" aria-labelledby="landing-title">
       <div className="landing-copy">
-        <h1 id="landing-title">Where do you want to go?</h1>
-        <p>Start with a destination and a budget. Get a day-by-day plan with places to visit, travel times, and a map.</p>
+        {tripHref ? <h2 id="landing-title">Plan your next trip</h2> : <h1 id="landing-title">Where do you want to go?</h1>}
+        <p>Build a day-by-day itinerary with stops, travel times, and a map.</p>
         <form className="yatra-prompt landing-prompt" onSubmit={event=>{event.preventDefault();if(prompt.trim())onAsk(prompt.trim())}}>
           <label className="yatra-sr-only" htmlFor="yatra-home-prompt">Ask YatraBuddy</label>
           <Sparkles size={18} aria-hidden="true"/>
@@ -123,10 +140,10 @@ export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onD
           <a className="btn secondary" href="#trips">Open My Trips <ChevronRight size={16}/></a>
         </div>
       </div>
-      <div className="landing-hero-visual">
+      {!tripHref && <div className="landing-hero-visual">
         <img className="landing-hero-image" src="/images/kerala.jpg" alt="" fetchPriority="high" width="640" height="420"/>
         <a className="landing-hero-link" href="#discover"><Map size={17}/> Explore destinations <ChevronRight size={16}/></a>
-      </div>
+      </div>}
     </section>
     <section className="landing-grid landing-features" aria-labelledby="landing-tools">
       <h2 id="landing-tools">Plan, explore, and get around</h2>
@@ -153,7 +170,7 @@ export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onD
       : null}
     <div className="discovery-home-links">
       <Button icon="plus" variant="primary" onClick={()=>city?onPlan('',city.id,city,false,{selected:shortlist}):onPlan()}>Plan a trip</Button>
-      <Button variant="text-btn" icon="arrow" onClick={()=>onResearch('overview')}>Destination research and weather</Button>
+      <Button variant="text-btn" icon="arrow" onClick={()=>onResearch('overview')}>Destination guide</Button>
     </div>
     </section>
   </div>

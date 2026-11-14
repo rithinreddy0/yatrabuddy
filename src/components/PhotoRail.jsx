@@ -69,13 +69,13 @@ function useAreaPhotos(name,lat,lon,cityId,enabled) {
   return {photos,loading}
 }
 
-export function ReferencePhotos({location,description,className='',loadingLabel=true,grid=false}) {
+export function ReferencePhotos({location,description,className='',loadingLabel=true,grid=false,limit}) {
   const name=location?.name
   const coordinates=location?.places?.[0]||location||{}
   const rawId=String(location?.cityId||location?.id||'').replace(/^geo:/,'')
   const {photos,loading}=useAreaPhotos(name,coordinates.lat,coordinates.lon,/^\d+$/.test(rawId)?rawId:null,Boolean(location))
   const [broken,setBroken]=useState(()=>new Set())
-  const visible=photos.filter(item=>!broken.has(item.sourceUrl))
+  const visible=photos.filter(item=>!broken.has(item.sourceUrl)).slice(0,limit)
   if(loading&&loadingLabel&&!visible.length)return <div className="reference-photos-loading" role="status"><span/>Looking for reference photos near {name}</div>
   const title=`${name} in photos`
   const caption=description||'Licensed photos of the area. See each image for its location and credit.'

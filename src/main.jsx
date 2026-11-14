@@ -8,6 +8,7 @@ import './desktop.css'
 import './dynamics.css'
 import './result-scroll.css'
 import './design-system.css'
+import './travel-ui.css'
 
 createRoot(document.getElementById('app')).render(<App/>)
 

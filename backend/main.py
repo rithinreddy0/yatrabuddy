@@ -19,6 +19,14 @@ from typing import Literal
 @asynccontextmanager
 async def lifespan(app):
     Base.metadata.create_all(engine)
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as connection:
+            current_type = connection.scalar(text(
+                "SELECT atttypid::regtype::text FROM pg_attribute "
+                "WHERE attrelid = 'trip_workspaces'::regclass AND attname = 'updated'"
+            ))
+            if current_type == "integer":
+                connection.execute(text("ALTER TABLE trip_workspaces ALTER COLUMN updated TYPE BIGINT"))
     try:
         yield
     finally:

@@ -8,11 +8,10 @@ import {Account,Preferences} from './features/Account.jsx'
 import {OnboardingChat} from './features/OnboardingChat.jsx'
 import {ProfileWizard} from './features/Profile.jsx'
 import {preferredDestination} from './profile.mjs'
-import {ResearchPage} from './features/Research.jsx'
+import {DestinationGuide} from './features/DestinationGuide.jsx'
 import {TripBrief} from './features/TripBrief.jsx'
 import {Trip} from './features/Trip.jsx'
 import {PlanningAgent} from './features/PlanningAgent.jsx'
-import {TravelNews} from './features/News.jsx'
 import {TravelDesk} from './features/TravelDesk.jsx'
 import {WorldSearch} from './features/WorldSearch.jsx'
 import {Buddy} from './features/Buddy.jsx'
@@ -24,7 +23,7 @@ import {useLibrary} from './features/useLibrary.mjs'
 import {Yatra} from './features/Yatra.jsx'
 import fallbackCatalog from '../backend/catalog.json'
 
-const pages=[['home','home','Home'],['chat','chat','Chats'],['trips','trip','My Trips'],['discover','map','Explore'],['saved','heart','Saved'],['news','globe','Updates'],['agents','sparkle','Research'],['sources','globe','Travel Sources']]
+const pages=[['home','home','Home'],['chat','chat','Chats'],['trips','trip','My Trips'],['discover','map','Explore'],['saved','heart','Saved'],['guide','globe','Destination guide']]
 const labels={
   ...Object.fromEntries(pages.map(([id,,label])=>[id,label])),
   hotels:'Hotels',stays:'Stays',chat:'AI Assistant',agents:'Destination research',
@@ -44,14 +43,23 @@ labels.budget='Budget'
 
 function currentRoute(){
   const value=location.hash.slice(1)||(new URLSearchParams(location.search).has('group')?'demo':'home')
-  const [page,id]=value.split('/')
-  return {page:labels[page]?page:'home',id}
+  const [page,id,section]=value.split('/')
+  return {page:['agents','news','sources'].includes(page)?'guide':labels[page]?page:'home',id,section}
+}
+function storedTheme(){
+  try { if (['light','dark'].includes(localStorage.getItem('yatra.theme'))) return localStorage.getItem('yatra.theme') } catch {}
+  return window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'
 }
 export default function App(){
   const [route,setRoute]=useState(currentRoute)
   const [modal,setModal]=useState(null)
   const [menu,setMenu]=useState(false)
-  const [compactNav,setCompactNav]=useState(false)
+  const [navHover,setNavHover]=useState(false)
+  const [navPinned,setNavPinned]=useState(false)
+  const [theme,setTheme]=useState(storedTheme)
+  const desktopNav=useRef(null)
+  const closeNav=()=>{setNavHover(false);setNavPinned(false);setMenu(false)}
+  const expanded=navHover||navPinned
   const [catalog,setPlaces]=useState(null)
   const [policy,setPolicy]=useState(null)
   const [loadError,setLoadError]=useState('')
@@ -75,7 +83,6 @@ export default function App(){
   const trip=tripPages.includes(route.page)?library.trips.find(item=>item.id===selectedTripId):null
   useEffect(()=>{if(trip){setActiveTripId(trip.id);try{localStorage.setItem('yatra.activeTrip',trip.id)}catch{}}},[trip?.id])
   const draft=route.page==='draft'?library.drafts.find(item=>item.id===route.id):null
-  const latestDraft=library.drafts[0]
   const place=trip&&catalog?.find(item=>item.id===trip.brief.destination)
   const history=histories[trip?.id]||{past:[],future:[]}
   const message=useCallback(value=>setNotice({value}),[])
@@ -84,7 +91,7 @@ export default function App(){
   const previousRoute=useRef(null)
 
   useEffect(()=>{
-    const routeKey=route.page+'/'+(route.id||'')
+    const routeKey=route.page+'/'+(route.id||'')+'/'+(route.section||'')
     const pageTitle=place?.name||labels[route.page]||'Travel workspace'
     document.title=pageTitle+' · YatraBuddy'
     if(previousRoute.current!==routeKey){
@@ -100,7 +107,16 @@ export default function App(){
       })
       return ()=>window.cancelAnimationFrame(frame)
     }
-  },[route.page,route.id,place?.name])
+  },[route.page,route.id,route.section,place?.name])
+
+  useEffect(()=>{
+    document.documentElement.dataset.theme=theme
+  },[theme])
+  function toggleTheme(){
+    const next=theme==='light'?'dark':'light'
+    setTheme(next)
+    try { localStorage.setItem('yatra.theme',next) } catch {}
+  }
 
   function loadCatalog(){
     setLoadError('')
@@ -234,8 +250,6 @@ export default function App(){
   else switch(route.page){
     case 'demo':
       content=<Yatra key={route.id||'demo'} view="itinerary" scenario={route.id} libraryState={state} navigate={navigate}/>;break
-    case 'sources':
-      content=<div className="page inner-page"><h1>Travel sources</h1><p className="lede">Check current availability and fares directly with providers. Your saved plan stays in this workspace.</p><TravelDesk catalog={catalog} profile={library.profile} trip={library.trips.find(item=>item.id===activeTripId)} initialDestination={preferredDestination(library,catalog)}/></div>;break
     case 'discover':
     case 'hotels':
     case 'stays':
@@ -258,7 +272,6 @@ export default function App(){
       }}
       onOpenTrip={id=>navigate('trip/'+id)}/>;break}
     case 'browse':content=<TripDiscovery key={route.id||'browse'} catalog={catalog} initialDestination={route.id} initialCity={browseRequest?.city} tripRequest={browseRequest?.tripRequest} editingDraft={browseRequest?.editingDraft} voice={browseRequest?.voice} voiceSuspended={Boolean(modal)} profile={library.profile} onSaveDraft={saveDraft}/>;break
-    case 'news':content=<div className="page inner-page"><TravelNews catalog={catalog} initialDestination={homeDestination||catalog.find(item=>library.saved.includes(item.id))?.id}/></div>;break
     case 'desk':content=<div className="page inner-page"><TravelDesk key={route.id||'mobility'} catalog={catalog} profile={library.profile} initialTab={route.id||'mobility'} initialDestination={preferredDestination(library,catalog)}/></div>;break
     case 'trips':content=<><Trips catalog={catalog} library={library} onPlan={newTripChat} onOpen={id=>navigate('trip/'+id)} onDelete={trip=>setModal({type:'delete',trip})} onOpenDraft={id=>navigate('draft/'+id)} onDeleteDraft={draft=>setModal({type:'delete-draft',draft})}/><div className="page"><TripWorkspaceList userId={user?.id} onOpen={id=>navigate('workspace/'+id)}/></div></>;break
     case 'draft':{
@@ -267,7 +280,7 @@ export default function App(){
         setBrowseRequest({id,editingDraft:draft})
         navigate('browse/'+id)
       }
-      content=draft?<TripOverview key={draft.id} draft={draft} onEdit={editDraft} onAsk={ask} onBack={()=>navigate('trips')}
+      content=draft?<TripOverview key={draft.id+'/'+(route.section||'')} draft={draft} initialSection={route.section} onEdit={editDraft} onAsk={ask} onBack={()=>navigate('trips')}
         onPreferences={next=>saveDraft(next,{stayInChat:true,silent:true})}/>:<div className="page inner-page"><Empty icon="trip" title="Draft unavailable" description="Open a saved draft from My trips."/></div>;break
     }
     case 'workspace':content=<div className="page inner-page"><TripWorkspace key={route.id} workspaceId={route.id} initialTab="chat"/></div>;break
@@ -275,29 +288,36 @@ export default function App(){
     case 'itinerary':
     case 'budget':
     case 'trip':content=!ready?<div className="page inner-page" role="status">Loading your saved trip...</div>:trip&&place?<Trip key={trip.id} view={route.page==='budget'?'budget':'itinerary'} trip={trip} place={place} profile={library.profile} onUpdate={updateTrip} onEdit={editIndex=>setModal({type:'plan',initial:trip.brief,editIndex})} onMessage={message} history={history} onUndo={()=>restore('undo')} onRedo={()=>restore('redo')}/>:<div className="page inner-page"><Empty title="Trip unavailable" description="Create and save a trip in chat, then its itinerary and budget will appear here." action={<Button onClick={()=>start()}>Create a trip</Button>}/></div>;break
-    case 'agents':content=<ResearchPage key={route.id||'overview'} catalog={catalog} topic={route.id||'overview'} profile={library.profile} defaultDestination={homeDestination || (!library.profile?.homeCity && (catalog.find(item=>library.saved.includes(item.id))?.id || catalog[0]?.id))}/>;break
+    case 'guide':content=<DestinationGuide key={route.id||'overview'} catalog={catalog} initialTopic={route.id} profile={library.profile}
+      initialDestination={homeDestination||catalog.find(item=>library.saved.includes(item.id))?.id}/>;break
     case 'preferences':content=<Preferences user={user} style={library.profile?.style||library.style} profile={library.profile} onEditProfile={()=>setModal({type:'onboarding'})} onResetProfile={()=>setModal({type:'clear-profile'})} onChange={style=>{change(data=>({...data,style,profile:data.profile?{...data.profile,style}:null}));message('Travel style saved.')}} onAccount={()=>setModal({type:'account'})}/>;break
-    default:content=<Home catalog={catalog} library={library} user={user} destination={homeDestination} onDestination={setHomeDestination} onPlan={start} onAsk={ask} onNavigate={navigate} onResearch={topic=>navigate('agents/'+topic)}/>
+    default:content=<Home catalog={catalog} library={library} destination={homeDestination} onDestination={setHomeDestination} onPlan={start} onAsk={ask} onNavigate={navigate} onResearch={topic=>navigate('guide/'+topic)}/>
   }
   const close=()=>setModal(null)
   if(!ready||policy===null)return <main className="google-entry"><section className="panel google-entry-card"><AgentProgress label="Checking your YatraBuddy session"/></section></main>
   if(mustSignIn&&!user)return <Account required onLogin={async account=>{await state.login(account,{mergeGuest:false});setModal(null)}}/>
   if(mustSignIn&&needsOnboarding(user,library,profileReady))return <OnboardingChat name={user.name} initial={{style:library.style||'Balanced'}} onDone={saveProfile} onSignOut={signOut}/>
-  return <div className={'app-layout '+(compactNav?'compact-nav':'')}>
+  return <div className={'app-layout travel-shell '+(expanded?'nav-expanded':'compact-nav')}>
     <a className="skip" href="#main" onClick={event=>{event.preventDefault();document.getElementById('main')?.focus()}}>Skip to content</a>
     {menu&&<button className="scrim" aria-label="Close menu" onClick={()=>setMenu(false)}/>}
-    <aside id="primary-navigation" className={'sidebar '+(menu?'open':'')}><div className="sidebar-heading">
+    <aside id="primary-navigation" className={'sidebar '+(menu?'open':'')}
+      onPointerEnter={event=>{if(event.pointerType==='mouse')setNavHover(true)}} onPointerLeave={()=>setNavHover(false)}
+      onKeyDown={event=>{if(event.key==='Escape'){closeNav();desktopNav.current?.focus()}}}><div className="sidebar-heading">
       <a className="brand" href="#home" aria-label="YatraBuddy home"><Brand/></a>
-      <IconButton icon="menu" label={compactNav?'Expand sidebar':'Collapse sidebar'} className="desktop-menu" onClick={()=>setCompactNav(value=>!value)}/>
+      <button ref={desktopNav} type="button" className="icon-btn desktop-menu" aria-label={expanded?'Collapse sidebar':'Expand sidebar'} aria-expanded={expanded}
+        onClick={()=>{if(expanded)closeNav();else setNavPinned(true)}}><Icon name="menu"/></button>
     </div>
       <nav aria-label="Workspace">{pages.map(([id,icon,label])=>{
-        const active=route.page===id||(['draft','browse','trip','itinerary','budget'].includes(route.page)&&id==='trips')||(['hotels','stays','food','attractions'].includes(route.page)&&id==='discover')
-        const href=id==='itinerary'&&latestDraft&&(!trip||latestDraft.updated>trip.updated)
-          ? '#draft/'+latestDraft.id : '#'+id+(['itinerary','budget'].includes(id)&&validActiveTripId?'/'+validActiveTripId:'')
+        const active=route.page===id||(['draft','browse','trip','itinerary','budget','workspace','join'].includes(route.page)&&id==='trips')||(['hotels','stays','food','attractions'].includes(route.page)&&id==='discover')
+        const href='#'+id
         const tripCount=library.trips.length+library.drafts.length
         return <a key={id} href={href} className={'nav-item '+(active?'active':'')} aria-label={label} title={label} aria-current={active?'page':undefined}><Icon name={icon}/> <span className="nav-title">{label}</span>{id==='trips'&&tripCount>0&&<small>{tripCount}</small>}</a>
       })}</nav>
-      <div className="side-bottom"><Button className="workspace-new-chat" icon="plus" onClick={()=>newTripChat()}>New chat</Button><a href="#preferences" aria-label="Preferences" title="Preferences" className={'nav-item '+(route.page==='preferences'?'active':'')}><Icon name="settings"/> <span className="nav-title">Preferences</span></a><div className="side-utilities">{accountControl}</div></div>
+      <div className="side-bottom"><Button className="workspace-new-chat" icon="plus" aria-label="New chat" onClick={()=>newTripChat()}>New chat</Button>
+        <button type="button" className="nav-item theme-control" onClick={toggleTheme} aria-label={theme==='dark'?'Switch to light mode':'Switch to dark mode'}>
+          <span aria-hidden="true">{theme==='dark'?'☀':'☾'}</span><span className="nav-title">{theme==='dark'?'Light mode':'Dark mode'}</span>
+        </button>
+        <a href="#preferences" aria-label="Preferences" title="Preferences" className={'nav-item '+(route.page==='preferences'?'active':'')}><Icon name="settings"/> <span className="nav-title">Preferences</span></a><div className="side-utilities">{accountControl}</div></div>
     </aside>
     <div className={'shell'+(route.page==='chat'&&catalog?' chat-shell':'')}>
     <div className="workspace-menu-anchor"><IconButton icon="menu" label="Toggle navigation" className="mobile-menu" aria-expanded={menu} aria-controls="primary-navigation" onClick={()=>setMenu(value=>!value)}/></div>

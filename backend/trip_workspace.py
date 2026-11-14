@@ -4,18 +4,19 @@ import asyncio
 import re
 import secrets
 from datetime import date as CalendarDate
-from datetime import datetime, timezone
+from datetime import datetime, time as ClockTime, timezone
 from time import time
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 from pydantic import BaseModel, Field, HttpUrl, StringConstraints, ValidationError
-from sqlalchemy import ForeignKey, LargeBinary, String, Text, UniqueConstraint, func, select, update
+from sqlalchemy import BigInteger, ForeignKey, LargeBinary, String, Text, UniqueConstraint, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, mapped_column
+from starlette.concurrency import run_in_threadpool
 
-from . import auth
+from . import auth, workspace_storage
 from .db import Base, transaction
 from .models import LocalMode, MealPreference, Pace, WorldwideDraft, WorldwideLeg, WorldwidePlace
 
@@ -36,7 +37,7 @@ class Workspace(Base):
     owner: Mapped[str] = mapped_column(String(72))
     draft_id: Mapped[str] = mapped_column(String(36))
     draft: Mapped[str] = mapped_column(Text)
-    updated: Mapped[int]
+    updated: Mapped[int] = mapped_column(BigInteger)
     invite_digest: Mapped[str | None] = mapped_column(String(64), unique=True)
     stored_bytes: Mapped[int] = mapped_column(default=0)
 
@@ -70,6 +71,13 @@ class Attachment(Base):
     data: Mapped[bytes] = mapped_column(LargeBinary)
 
 
+class CloudAttachment(Base):
+    __tablename__ = "trip_workspace_cloud_attachments"
+
+    entry_id: Mapped[str] = mapped_column(ForeignKey("trip_workspace_entries.id"), primary_key=True)
+    bucket: Mapped[str] = mapped_column(String(222))
+
+
 class JoinRequest(BaseModel):
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=70)]
 
@@ -99,6 +107,7 @@ class EntryInput(BaseModel):
     place: TextValue | None = None
     category: TextValue | None = None
     date: CalendarDate | None = None
+    time: ClockTime | None = None
     amount: int | None = Field(default=None, ge=0, le=10_000_000)
     lat: float | None = Field(default=None, ge=-90, le=90)
     lon: float | None = Field(default=None, ge=-180, le=180)
@@ -400,6 +409,8 @@ def new_entry(db, workspace, identity, data, file_size=0, file_mime=None):
 
 
 def validate_entry(data: EntryInput, uploading=False):
+    if data.time and (data.kind != "booking" or not data.date or data.time.tzinfo):
+        raise HTTPException(422, "Set a booking date and enter the time at the booking location.")
     if data.kind == "message" and not data.notes:
         raise HTTPException(422, "Enter a message.")
     if data.kind != "message" and not data.title:
@@ -423,13 +434,30 @@ def add_entry(workspace_id: UUID, data: EntryInput, request: Request):
         return state(db, workspace, member)
 
 
+@router.patch("/{workspace_id}/entries/{entry_id}")
+def update_booking(workspace_id: UUID, entry_id: UUID, data: EntryInput, request: Request):
+    auth.limit(request, "trip-workspace-write", 100, 60)
+    identity, _ = principal(request)
+    validate_entry(data)
+    with transaction() as db:
+        workspace, member = access(db, workspace_id, identity)
+        entry = db.scalar(select(Entry).where(Entry.id == str(entry_id), Entry.workspace_id == workspace.id).with_for_update())
+        if not entry or entry.kind != "booking" or data.kind != "booking":
+            raise HTTPException(404, "This booking is unavailable.")
+        if identity not in (entry.author, workspace.owner):
+            raise HTTPException(403, "Only its author or the organizer can edit this booking.")
+        entry.document = data.model_dump_json()
+        db.flush()
+        return state(db, workspace, member)
+
+
 @router.delete("/{workspace_id}/entries/{entry_id}")
-def remove_entry(workspace_id: UUID, entry_id: UUID, request: Request):
+def remove_entry(workspace_id: UUID, entry_id: UUID, request: Request, background: BackgroundTasks):
     auth.limit(request, "trip-workspace-write", 100, 60)
     identity, _ = principal(request)
     with transaction() as db:
         workspace, member = access(db, workspace_id, identity)
-        entry = db.get(Entry, str(entry_id))
+        entry = db.scalar(select(Entry).where(Entry.id == str(entry_id)).with_for_update())
         if not entry or entry.workspace_id != workspace.id:
             raise HTTPException(404, "This item is unavailable.")
         if identity not in (entry.author, workspace.owner):
@@ -437,7 +465,12 @@ def remove_entry(workspace_id: UUID, entry_id: UUID, request: Request):
         if entry.file_size:
             db.execute(update(Workspace).where(Workspace.id == workspace.id)
                        .values(stored_bytes=Workspace.stored_bytes - entry.file_size))
-            db.delete(db.get(Attachment, entry.id))
+            cloud = db.get(CloudAttachment, entry.id)
+            if cloud:
+                background.add_task(workspace_storage.remove, cloud.bucket, workspace.id, entry.id)
+                db.delete(cloud)
+            else:
+                db.delete(db.get(Attachment, entry.id))
             db.flush()
         db.delete(entry)
         db.flush()
@@ -490,17 +523,33 @@ async def upload_file(workspace_id: UUID, request: Request):
     mime = identify_mime(content)
     if not mime or (data.kind == "booking" and mime.startswith("video/")):
         raise HTTPException(415, "Choose a supported image, document or video file.")
-    with transaction() as db:
-        workspace, member = access(db, workspace_id, identity)
-        changed = db.execute(update(Workspace).where(
-            Workspace.id == workspace.id, Workspace.stored_bytes <= WORKSPACE_FILE_LIMIT - len(content),
-        ).values(stored_bytes=Workspace.stored_bytes + len(content)))
-        if changed.rowcount != 1:
-            raise HTTPException(409, "This workspace is out of file storage.")
-        entry = new_entry(db, workspace, identity, data, len(content), mime)
-        db.flush()
-        db.add(Attachment(entry_id=entry.id, mime=mime, data=content))
-        return state(db, workspace, member)
+    return await run_in_threadpool(save_attachment, workspace_id, identity, data, content, mime)
+
+
+def save_attachment(workspace_id, identity, data, content, mime):
+    name = workspace_storage.configured_bucket()
+    entry_id = None
+    try:
+        with transaction() as db:
+            workspace, member = access(db, workspace_id, identity)
+            changed = db.execute(update(Workspace).where(
+                Workspace.id == workspace.id, Workspace.stored_bytes <= WORKSPACE_FILE_LIMIT - len(content),
+            ).values(stored_bytes=Workspace.stored_bytes + len(content)))
+            if changed.rowcount != 1:
+                raise HTTPException(409, "This workspace is out of file storage.")
+            entry = new_entry(db, workspace, identity, data, len(content), mime)
+            db.flush()
+            if name:
+                entry_id = entry.id
+                workspace_storage.upload(name, workspace.id, entry_id, content, mime)
+                db.add(CloudAttachment(entry_id=entry.id, bucket=name))
+            else:
+                db.add(Attachment(entry_id=entry.id, mime=mime, data=content))
+            return state(db, workspace, member)
+    except Exception:
+        if entry_id:
+            workspace_storage.remove(name, str(workspace_id), entry_id)
+        raise
 
 
 @router.get("/{workspace_id}/files/{entry_id}")
@@ -509,22 +558,29 @@ def download_file(workspace_id: UUID, entry_id: UUID, request: Request):
     with transaction() as db:
         access(db, workspace_id, identity)
         entry = db.get(Entry, str(entry_id))
-        file = db.get(Attachment, str(entry_id)) if entry and entry.workspace_id == str(workspace_id) else None
-        if not file:
+        if not entry or entry.workspace_id != str(workspace_id) or not entry.file_size:
             raise HTTPException(404, "This file is unavailable.")
+        cloud = db.get(CloudAttachment, entry.id)
+        name = cloud.bucket if cloud else None
+        mime, size = entry.file_mime, entry.file_size
+        file = db.get(Attachment, entry.id) if not name else None
+        if not (name or file):
+            raise HTTPException(404, "This file is unavailable.")
+        payload = file.data if file else None
         # PDFs may contain executable document actions. Serve them as downloads.
-        disposition = "attachment" if file.mime == "application/pdf" else "inline"
+        disposition = "attachment" if mime == "application/pdf" else "inline"
         headers = {
             "Content-Disposition": disposition, "Content-Security-Policy": "default-src 'none'; sandbox",
             "Accept-Ranges": "bytes",
         }
-        match = re.fullmatch(r"bytes=(\d{0,12})-(\d{0,12})", request.headers.get("range", ""))
-        if match and (match[1] or match[2]):
-            size = len(file.data)
-            start = int(match[1]) if match[1] else max(0, size - int(match[2]))
-            end = min(size - 1, int(match[2])) if match[1] and match[2] else size - 1
-            if start > end:
-                return Response(status_code=416, headers={**headers, "Content-Range": f"bytes */{size}"})
-            headers["Content-Range"] = f"bytes {start}-{end}/{size}"
-            return Response(file.data[start:end + 1], status_code=206, media_type=file.mime, headers=headers)
-        return Response(file.data, media_type=file.mime, headers=headers)
+    match = re.fullmatch(r"bytes=(\d{0,12})-(\d{0,12})", request.headers.get("range", ""))
+    partial = bool(match and (match[1] or match[2]))
+    start, end = 0, size - 1
+    if partial:
+        start = int(match[1]) if match[1] else max(0, size - int(match[2]))
+        end = min(end, int(match[2])) if match[1] and match[2] else end
+        if start > end:
+            return Response(status_code=416, headers={**headers, "Content-Range": f"bytes */{size}"})
+        headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+    data = workspace_storage.download(name, str(workspace_id), str(entry_id), start, end) if name else payload[start:end + 1]
+    return Response(data, status_code=206 if partial else 200, media_type=mime, headers=headers)
