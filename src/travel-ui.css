@@ -675,3 +675,20 @@ main h1[tabindex="-1"]:focus { outline: none; box-shadow: none; }
   }
   .travel-shell.chat-shell .journey-chat.agent-workspace, .chat-shell .journey-chat.agent-workspace { height:calc(100dvh - 8px); }
 }
+
+/* Collapsed desktop rail: "New chat" was clipped to "Nev"; show it as an icon button there. */
+@media (min-width: 851px) {
+  .travel-shell.compact-nav .workspace-new-chat { width:44px; min-width:44px; height:44px; padding:0; justify-content:center; font-size:0; gap:0; }
+  .travel-shell.compact-nav .workspace-new-chat .icon { margin:0; }
+}
+
+/* Images: tinted placeholder while loading, then a short fade-in (no layout shift). */
+.place-photo, .hm-destination > img, .destination-card img, .home-trip-thumbnail { background-color:var(--mint); }
+.place-photo img, .hm-destination > img, .destination-cover img, .trip-photo img { animation:image-in 240ms ease-out both; }
+@keyframes image-in { from { opacity:0; } to { opacity:1; } }
+@media (prefers-reduced-motion: reduce) {
+  .place-photo img, .hm-destination > img, .destination-cover img, .trip-photo img { animation:none; }
+}
+
+/* Travel Mode dropdowns were 21px tall; give them a comfortable touch size everywhere. */
+.travel-daybar select, .travel-settings select { min-height:40px; padding-inline:8px; border-radius:10px; }

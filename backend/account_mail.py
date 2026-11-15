@@ -17,9 +17,9 @@ def send_welcome(email):
         message = EmailMessage()
         message["From"] = os.environ["SMTP_FROM"]
         message["To"] = email
-        message["Subject"] = "Welcome to Wayfarer"
+        message["Subject"] = "Welcome to YatraBuddy"
         message.set_content(
-            "Your Wayfarer account is ready. Sign in to save trips and sync your travel preferences.\n"
+            "Your YatraBuddy account is ready. Sign in to save trips and sync your travel preferences.\n"
             "If you did not create this account, you can ignore this message."
         )
         port = int(os.getenv("SMTP_PORT", "587"))

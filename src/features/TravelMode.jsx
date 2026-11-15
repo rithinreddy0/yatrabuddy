@@ -5,6 +5,8 @@ import {visitTime} from './draftSchedule.mjs'
 import {travelTimeline, tripClock, tripDate} from './travelTimeline.mjs'
 
 const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+const dayFormat = new Intl.DateTimeFormat(undefined, {weekday:'short', day:'numeric', month:'short', timeZone:'UTC'})
+const niceDate = date => date ? dayFormat.format(new Date(date + 'T12:00:00Z')) : ''
 const timeZones = [...new Set([localZone, 'UTC', ...(Intl.supportedValuesOf?.('timeZone') || [])])]
 
 function read(key) {
@@ -68,7 +70,7 @@ export function TravelMode({draft, bookings, onTabChange}) {
     <section className="travel-now">
       <div><p className="travel-label"><Icon name="compass" size={15}/> Travel Mode · {visitTime(clock.minute)}</p>
         <h2>{next ? next.title : draft.departure ? 'You’re caught up' : 'Your trip schedule'}</h2>
-        {next && <p>Up next · {next.date === clock.date ? 'Today' : next.date} · {visitTime(next.minute)}{next.location && ` · ${next.location}`}</p>}
+        {next && <p>Up next · {next.date === clock.date ? 'Today' : niceDate(next.date)} · {visitTime(next.minute)}{next.location && ` · ${next.location}`}</p>}
         {!draft.departure && <p>Set a departure date to get day-by-day reminders.</p>}
       </div>
       <TravelArtwork name="travel-mode" className="travel-now-art" width={180} height={135}/>
@@ -84,7 +86,7 @@ export function TravelMode({draft, bookings, onTabChange}) {
     <div className="travel-daybar">
       <label>Trip day<select value={day} onChange={event => setSelected(Number(event.target.value))}>
         {Array.from({length:dayCount - firstDay}, (_, offset) => offset + firstDay).map(index => <option key={index} value={index}>
-          {index < 0 || index >= draft.days.length ? 'Travel day' : `Day ${index + 1}`}{draft.departure ? ` · ${tripDate(draft.departure, index)}` : ''}</option>)}
+          {index < 0 || index >= draft.days.length ? 'Travel day' : `Day ${index + 1}`}{draft.departure ? ` · ${niceDate(tripDate(draft.departure, index))}` : ''}</option>)}
       </select></label>
       {weather && <span>{Math.round(weather.low)}–{Math.round(weather.high)}°C{weather.rainProbability != null && ` · ${weather.rainProbability}% chance of rain`}</span>}
     </div>

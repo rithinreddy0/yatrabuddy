@@ -89,7 +89,29 @@ def matches_qualifier(location, qualifier):
     )
 
 
+# Common names that the geocoder indexes under a different official name.
+CITY_ALIASES = {
+    "panaji": "Panjim", "pondicherry": "Puducherry", "pondy": "Puducherry", "bombay": "Mumbai", "madras": "Chennai",
+    "calcutta": "Kolkata", "bangalore": "Bengaluru", "trivandrum": "Thiruvananthapuram", "cochin": "Kochi",
+    "mysore": "Mysuru", "benares": "Varanasi", "banaras": "Varanasi", "gurgaon": "Gurugram", "allahabad": "Prayagraj",
+    "baroda": "Vadodara", "mangalore": "Mangaluru", "calicut": "Kozhikode",
+}
+
+
 async def find_destinations(client, query):
+    results = await search_destinations(client, query)
+    name, _, qualifier = query.partition(",")
+    alias = CITY_ALIASES.get(name.strip().casefold())
+    if alias and alias.casefold() != name.strip().casefold() and not any(
+            item["name"].casefold() == name.strip().casefold() for item in results):
+        renamed = await search_destinations(client, alias + ("," + qualifier if qualifier else ""))
+        # Keep the traveller's spelling visible while using the verified place.
+        return [{**item, "name": name.strip().title(), "officialName": item["name"]} if index == 0 else item
+                for index, item in enumerate(renamed)] or results
+    return results
+
+
+async def search_destinations(client, query):
     name, _, qualifier = query.partition(",")
     name, qualifier = name.strip(), qualifier.strip().casefold()
     key = (name.casefold(), qualifier)

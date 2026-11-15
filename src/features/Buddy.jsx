@@ -120,7 +120,7 @@ export function Buddy({catalog,defaultDestination,profile,trip,onClose,onPlan,re
         {voice.phase==='recording'&&<Button onClick={stopVoice}>Cancel recording</Button>}
       </div>
       {voice.error&&<p className="buddy-voice-error" role="alert">{voice.error}</p>}
-      {!voice.browserSupported&&!voice.recordingSupported&&<p className="buddy-voice-note">{voice.secure?'Speech recognition is unavailable here. Type your question below.':'Open Wayfarer on HTTPS or localhost to use a microphone.'}</p>}
+      {!voice.browserSupported&&!voice.recordingSupported&&<p className="buddy-voice-note">{voice.secure?'Speech recognition is unavailable here. Type your question below.':'Open YatraBuddy on HTTPS or localhost to use a microphone.'}</p>}
       {!voiceActive&&voice.recordingSupported&&<p className="buddy-voice-note">Recordings are sent to the configured speech service when you select Send recording.</p>}
     </section>
     <div className="buddy-voice-body">
@@ -138,7 +138,7 @@ export function Buddy({catalog,defaultDestination,profile,trip,onClose,onPlan,re
     {feedback&&!answer&&<section className="panel buddy-feedback" aria-live="polite"><p>{feedback}</p>{'speechSynthesis' in window&&<Button variant="text-btn" onClick={()=>speakReply(feedback)}>Read aloud</Button>}</section>}
     {choices&&<div className="quick-picks">{choices.places.map((item,index)=><Pill key={item.id} onClick={()=>ask(choices.question,{selected:item})}>{index+1}. {item.name}, {item.region||item.country}</Pill>)}</div>}
     {answer&&<section className="buddy-answer"><Answer reply={answer}/>{'speechSynthesis' in window&&<Button variant="text-btn" onClick={()=>speakReply(feedback)}>Read aloud</Button>}</section>}
-    {reminders.items.length>0&&<section className="buddy-reminders"><h3>Reminders</h3><p className="form-note">Reminders appear in this browser while Wayfarer is open.</p>
+    {reminders.items.length>0&&<section className="buddy-reminders"><h3>Reminders</h3><p className="form-note">Reminders appear in this browser while YatraBuddy is open.</p>
       {reminders.items.map(item=><div className="buddy-reminder" key={item.id}><span>{item.label} · {new Date(item.due).toLocaleString()}</span><Button variant="text-btn" onClick={()=>reminders.remove(item.id)}>Remove</Button></div>)}
     </section>}
   </div></div></Dialog>

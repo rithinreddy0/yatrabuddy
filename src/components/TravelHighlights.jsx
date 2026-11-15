@@ -5,7 +5,9 @@ import './TravelHighlights.css'
 const amount = String.raw`\d+(?:[,.]\d+)*`
 const currency = String.raw`(?:[₹€£¥฿]|(?:US|CA|AU|NZ|HK|SG|S)?\$|\b(?:INR|USD|EUR|GBP|SGD|JPY|THB|AUD|CAD|Rs\.?)\s*)`
 const price = new RegExp(String.raw`${currency}\s*${amount}(?:\s*(?:[–—-]|\bto\b)\s*(?:${currency}\s*)?${amount})?(?![\d:])|\b${amount}\s+(?:rupees?|dollars?|euros?|baht|yen)\b`, 'gi')
-const sentences = new Intl.Segmenter('en', {granularity:'sentence'})
+// Creating a Segmenter loads locale data, which is slow on low-end phones; create it on first use.
+let sentences
+const sentenceSegmenter = () => (sentences ||= new Intl.Segmenter('en', {granularity:'sentence'}))
 
 export function HighlightPrice({text}) {
   const parts = []
@@ -25,7 +27,7 @@ export function TravelHighlights({text = '', points, limit = 3, preferPrices = f
 }
 
 function excerptPoints(text, limit, preferPrices) {
-  const rows = text.trim().split(/\n+/).flatMap(paragraph => Array.from(sentences.segment(paragraph),
+  const rows = text.trim().split(/\n+/).flatMap(paragraph => Array.from(sentenceSegmenter().segment(paragraph),
     ({segment}) => segment.trim().replace(/^[-•]\s+/, ''))).filter(Boolean)
   const short = rows.filter(row => row.split(/\s+/).length <= 32)
   const independent = short.filter((row, i) => !i || !/^(?:It|They|These|Those|This|However|There are also)\s/i.test(row))

@@ -21,7 +21,7 @@ async function loadGoogle(config) {
 
 const googleErrors={
   'auth/popup-closed-by-user':'The Google sign-in window was closed. Try again when you’re ready.',
-  'auth/popup-blocked':'Your browser blocked the Google sign-in window. Allow pop-ups for Wayfarer and try again.',
+  'auth/popup-blocked':'Your browser blocked the Google sign-in window. Allow pop-ups for YatraBuddy and try again.',
   'auth/unauthorized-domain':'This address needs to be added to Firebase’s authorized domains for Google sign-in.',
   'auth/operation-not-allowed':'Google sign-in needs to be enabled in Firebase Authentication.',
   'auth/network-request-failed':'Google could not be reached. Check your connection and try again.',

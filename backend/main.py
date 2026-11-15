@@ -37,7 +37,7 @@ async def lifespan(app):
         engine.dispose()
 
 
-app = FastAPI(title="Wayfarer API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="YatraBuddy API", version="1.0.0", lifespan=lifespan)
 road_cache = SourceCache()
 PUBLIC_API_PATHS = {"/api/health", "/api/session", "/api/auth/config", "/api/auth/firebase", "/api/logout"}
 PUBLIC_BROWSE_GET = {"/api/destinations", "/api/locations", "/api/locations/reverse", "/api/city-briefing",
@@ -69,7 +69,7 @@ async def protect_api(request: Request, call_next):
             "PUBLIC_ORIGINS", "http://127.0.0.1:3000,http://localhost:3000,http://127.0.0.1:3010,http://localhost:3010"
         ).split(",")}
         if site == "cross-site" or (origin and origin not in allowed):
-            return JSONResponse({"detail": "Open Wayfarer directly and try again."}, status_code=403)
+            return JSONResponse({"detail": "Open YatraBuddy directly and try again."}, status_code=403)
     path = request.url.path.rstrip("/")
     public_browse = (request.method == "GET" and (path in PUBLIC_BROWSE_GET or PUBLIC_LOCATION.fullmatch(path))
                      or request.method == "POST" and path == "/api/research")

@@ -70,7 +70,9 @@ export default function App(){
   const mobileNav=useRef(null)
   const expanded=navHover||navFocus
   const [catalog,setPlaces]=useState(fallbackCatalog)
-  const [policy,setPolicy]=useState(null)
+  // Last known sign-in policy, so a returning visitor's saved trips render on the first frame instead of
+  // popping in (and shifting the page) when /api/auth/config answers.
+  const [policy,setPolicy]=useState(()=>{try{const value=localStorage.getItem('yatra.authPolicy');return value==null?null:value==='required'}catch{return null}})
   const [loadError,setLoadError]=useState('')
   const [notice,setNotice]=useState(null)
   const [chatRequest,setChatRequest]=useState({query:'',id:0,context:null})
@@ -157,7 +159,7 @@ export default function App(){
   },[])
   useEffect(()=>{
     const controller=new AbortController()
-    request('auth/config',{signal:controller.signal}).then(config=>setPolicy(config.googleRequired!==false)).catch(()=>{if(!controller.signal.aborted)setPolicy(true)})
+    request('auth/config',{signal:controller.signal}).then(config=>{const required=config.googleRequired!==false;setPolicy(required);try{localStorage.setItem('yatra.authPolicy',required?'required':'optional')}catch{}}).catch(()=>{if(!controller.signal.aborted)setPolicy(true)})
     return ()=>controller.abort()
   },[])
   useEffect(()=>{
@@ -397,7 +399,7 @@ export default function App(){
     {modal?.type==='buddy'&&<Buddy catalog={catalog} profile={library.profile} defaultDestination={preferredDestination(library,catalog)} trip={trip} onClose={close} onPlan={planWithChat} onDesk={()=>navigate('desk')} onTrip={close} reminders={reminders}/>}
     {modal?.type==='account'&&<Account user={user} onClose={close} onLogin={async (user,isNew,welcomeEmail)=>{await state.login(user);setModal(isNew?{type:'onboarding'}:null);message(welcomeEmail==='scheduled'?'Account created. Check your inbox shortly.':welcomeEmail==='unavailable'?'Account created. Email delivery is unavailable.':'Signed in.')}} onLogout={async()=>{try{await state.logout();navigate('home');message('Signed out.')}catch(error){message(error.message)}}}/>}
     {modal?.type==='onboarding'&&<ProfileWizard name={user?.name} catalog={catalog||[]} isEditing={Boolean(library.profile)} initial={{style:library.style||'Balanced',...library.profile}} onClose={close} onDone={profile=>{change(data=>({...data,style:profile.style,profile}));close();message('Travel profile saved.')}}/>}
-    {modal?.type==='clear-profile'&&<Dialog onClose={close} label="Clear travel profile"><div className="dialog-content"><h2>Clear your travel profile?</h2><p>Wayfarer will use the standard defaults for new trips.</p><div className="dialog-buttons"><Button onClick={close}>Cancel</Button><Button variant="danger" onClick={()=>{change(data=>({...data,style:'',profile:null}));close();message('Travel profile cleared.')}}>Clear profile</Button></div></div></Dialog>}
+    {modal?.type==='clear-profile'&&<Dialog onClose={close} label="Clear travel profile"><div className="dialog-content"><h2>Clear your travel profile?</h2><p>YatraBuddy will use the standard defaults for new trips.</p><div className="dialog-buttons"><Button onClick={close}>Cancel</Button><Button variant="danger" onClick={()=>{change(data=>({...data,style:'',profile:null}));close();message('Travel profile cleared.')}}>Clear profile</Button></div></div></Dialog>}
     {modal?.type==='plan'&&<TripBrief catalog={catalog} initial={modal.initial} query={modal.query} editIndex={modal.editIndex} selection={modal.selection} voice={modal.voice} onClose={close} onDone={finishPlan}/>}
     {modal?.type==='destination'&&<Dialog onClose={close} label={modal.place.name} className="destination-modal">
       <div className="destination-modal-image"><img src={'/images/'+modal.place.image+'.jpg'} alt=""/></div><div className="dialog-content"><div className="eyebrow"><span/> {modal.place.region.toUpperCase()}</div><h2>{modal.place.name}</h2><p>{modal.place.tagline}. Typical visiting season {modal.place.season}.</p><h3>Highlights</h3><ul className="highlight-list">{modal.place.places.slice(0,4).map(item=><li key={item.name}><Icon name="pin" size={15}/> {item.name}</li>)}</ul><div className="dialog-buttons"><Button variant="primary" icon="chat" onClick={()=>planWithChat('',modal.place.id,modal.place)}>Plan in chat</Button><Button icon="heart" onClick={()=>toggleSaved(modal.place.id)}>{library.saved.includes(modal.place.id)?'Unsave':'Save'}</Button></div></div></Dialog>}
