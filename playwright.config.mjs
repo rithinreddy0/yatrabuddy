@@ -1,4 +1,8 @@
 import {defineConfig} from '@playwright/test'
+import {existsSync} from 'node:fs'
+
+const venvPython = process.platform === 'win32' ? '.venv\\Scripts\\python.exe' : '.venv/bin/python'
+const python = existsSync(venvPython) ? venvPython : 'python'
 
 // Uses the installed Microsoft Edge, so no browser download is needed.
 // Start the API and web servers yourself, or let Playwright start them (sign-in disabled for local tests).
@@ -17,7 +21,7 @@ export default defineConfig({
     {name:'desktop', use:{viewport:{width:1280, height:800}}},
   ],
   webServer:[
-    {command:process.platform === 'win32' ? '.venv\\Scripts\\python.exe -m backend.run' : '.venv/bin/python -m backend.run',
+    {command:`${python} -m backend.run`,
       port:8000, reuseExistingServer:true, timeout:60_000, env:{REQUIRE_GOOGLE_SIGN_IN:'0', SECURE_COOKIES:'0'}},
     {command:'npm run dev', port:3000, reuseExistingServer:true, timeout:60_000},
   ],

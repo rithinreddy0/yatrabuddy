@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import httpx
 
+from . import groq_planning
 from .groq_planning import browse, generate
 
 
@@ -24,6 +25,19 @@ def response(status, body=None):
 
 
 class GroqPlanningTest(unittest.TestCase):
+    def test_transport_research_stops_on_rate_limit_without_rotating_keys(self):
+        client = ResponseSequence([response(429)])
+        with (patch.dict(os.environ, {"GROQ_API_KEY": "test", "GROQ_API_KEY_FALLBACK": "fallback"}),
+              patch.object(groq_planning, "transport_searches", groq_planning.deque()),
+              patch.object(groq_planning, "transport_cooldown", 0.0),
+              patch.object(groq_planning, "monotonic", return_value=100.0)):
+            first = asyncio.run(browse(client, "Transport test A", {}, transport=True))
+            second = asyncio.run(browse(client, "Transport test B", {}, transport=True))
+            self.assertEqual(groq_planning.transport_cooldown, 1000.0)
+        self.assertIn("rate limited", first["error"])
+        self.assertIn("usage limit", second["error"])
+        self.assertEqual(client.authorization, ["Bearer test"])
+
     def test_rate_limit_retries_with_fallback_key(self):
         client = ResponseSequence([
             response(429, {"error": {"message": "rate limited"}}),

@@ -46,6 +46,23 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(response.json()["quotes"]["transit"]["status"], "empty")
         self.assertTrue(quote.await_args.kwargs["local"])
 
+    def test_transport_research_only_sends_selected_modes_and_route(self):
+        result = {"answer": "Check the published rail timetable.", "sources": [
+            {"title": "Rail operator", "url": "https://example.org/rail"},
+        ]}
+        with patch("backend.transport_sources.groq_planning.browse", new=AsyncMock(return_value=result)) as browse:
+            response = self.client.get("/api/travel-providers", params={
+                "research": "true", "origin": "Mumbai", "destination": "Goa",
+                "departure": "2026-12-15", "research_modes": "Trains,Driving",
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), result)
+        context = browse.await_args.args[2]
+        self.assertEqual((context["origin"], context["destination"], context["date"]),
+                         ("Mumbai", "Goa", "2026-12-15"))
+        self.assertCountEqual(context["modes"], ["Trains", "Driving"])
+        self.assertTrue(browse.await_args.kwargs["transport"])
+
     def setUp(self):
         self.client = TestClient(app)
         self.client.__enter__()

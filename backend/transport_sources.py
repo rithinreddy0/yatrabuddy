@@ -5,8 +5,10 @@ from datetime import date as Date, datetime, time, timedelta, timezone
 from math import ceil
 from urllib.parse import quote, urlencode
 
+import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from . import groq_planning
 from .catalog import CATALOG
 from .place_search import public_url
 from .auth import limit
@@ -430,11 +432,27 @@ async def trip_transport_providers(
     timetable: bool = False,
     local: bool = False,
     depart_at: datetime | None = None,
+    research: bool = False,
+    research_modes: str = Query(default="", max_length=120),
 ):
     """Return public provider links for the intercity journey and for local travel."""
-    if not timetable and (not _place(destination) or (origin is not None and not _place(origin))):
+    if (research or not timetable) and (not _place(destination) or (origin is not None and not _place(origin))):
         raise HTTPException(422, "Enter a destination and a valid departure city if known.")
     limit(request, "transport-providers", 20, 60)
+    if research:
+        limit(request, "transport-research", 5, 60)
+        modes = ["bus", "metro", "rail", "taxi", "walking", "self-drive", "ferry"] if local else [
+            "Buses", "Trains", "Flights", "Driving", "Private rides"]
+        selected = set(research_modes.split(","))
+        async with httpx.AsyncClient(timeout=16) as client:
+            return await groq_planning.browse(
+                client, "Research public transport and road travel information for this journey.",
+                {"origin": _place(origin), "destination": _place(destination), "country": _text(country),
+                 "date": departure.isoformat() if departure else None,
+                 "departAt": depart_at.isoformat() if depart_at else None,
+                 "modes": [mode for mode in modes if mode in selected] or modes},
+                transport=True,
+            )
     if timetable:
         return {"quotes": await transport_quotes(origin, destination, travel_date=departure, departure=depart_at,
                                                   travelers=travelers, local=local, country=country)}

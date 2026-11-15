@@ -2,11 +2,11 @@ import React, {useEffect, useRef, useState} from 'react'
 import {request} from '../api.mjs'
 import {Button, SourcePill} from '../components/UI.jsx'
 
-export function GroqResearchResult({result}) {
+export function GroqResearchResult({result, title = 'Groq web research'}) {
   if (result?.error) return <p role="status">{result.error}</p>
   if (!result?.answer) return null
-  return <section className="nearby-groq-answer" aria-label="Groq web research">
-    <h4>Groq web research</h4>
+  return <section className="nearby-groq-answer" aria-label={title}>
+    <h4>{title}</h4>
     <p>{result.answer.replace(/^\|[-| :]+\|\s*$/gm,'').replace(/^\|\s*|\s*\|$/gm,'').replace(/\s+\|\s+/g,' · ').replace(/\*\*/g,'')}</p>
     <div className="nearby-links">{result.sources.map(source=><SourcePill key={source.url} label={source.title} url={source.url}/>)}</div>
   </section>
