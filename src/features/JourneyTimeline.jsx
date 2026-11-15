@@ -47,7 +47,7 @@ export function JourneyCard({draft, direction, onPlan}) {
     if (direction === 'return' && !journey) return null
     return <section className="jt-card jt-empty" aria-label={title}>
       <div><h3><Home size={17} aria-hidden="true"/> {direction === 'outbound' ? `From ${draft.origin || 'home'} and back` : title}</h3>
-        <p>{direction === 'outbound' ? 'Plan the trip door to door: leaving home, the journey, the transfer to your stay, and the way back.'
+        <p>{direction === 'outbound' ? 'Add your outbound and return routes, including transfers to your stay.'
           : 'Add how you will get home.'}</p></div>
       {onPlan && <Button icon="plane" variant="primary" onClick={onPlan}>Plan the journey</Button>}
     </section>

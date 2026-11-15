@@ -19,6 +19,11 @@
 .city-brief-license{margin-left:8px;opacity:.85}
 .travel-shell .city-brief-destination .city-brief-points,.guide-quick-places{grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));gap:10px}
 .city-brief-destination .city-brief-points article{padding:12px}
+.city-brief-destination .city-brief-points article{min-width:0;overflow-wrap:anywhere}
+.guide-reference-arrow{display:grid;place-items:center;width:34px;height:34px;margin-top:4px;border:1px solid var(--line);border-radius:50%;background:var(--white);color:var(--deep);cursor:pointer}
+.guide-resources summary{cursor:pointer;font-size:.85rem;font-weight:700}
+.guide-resources ul{display:flex;flex-wrap:wrap;gap:7px 16px;margin:8px 0 0;padding:0;list-style:none}
+.guide-resources a{font-size:.8rem;overflow-wrap:anywhere}
 .city-brief-points .travel-highlights{color:var(--muted);font-size:clamp(12px,1.05vw,15px)}
 .city-brief-more>summary,.guide-panel>summary{cursor:pointer;font-weight:600}
 .city-brief-more[open]>summary{margin-bottom:8px}

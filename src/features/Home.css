@@ -21,6 +21,7 @@
 /* Hero: a photo card with the planner inside it. */
 .hm-hero { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); min-height: 420px; overflow: hidden; border-radius: 24px; isolation: isolate; color: #fff; }
 .hm-hero-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
+.hm-hero-image { object-position:62% center; }
 .hm-hero::before { content: ""; position: absolute; inset: 0; z-index: -1;
   background: linear-gradient(180deg, rgb(10 12 24 / 20%) 0%, rgb(10 12 24 / 55%) 45%, rgb(10 12 24 / 88%) 100%); }
 .hm-hero-copy { display: grid; grid-template-columns: minmax(0, 1fr); align-content: end; gap: 12px; min-width: 0; padding: 20px 16px 18px; }
@@ -64,10 +65,8 @@
 .hm-section-head p { color: var(--muted); font-size: .85rem; margin-top: 2px; }
 .hm-section-head > a { flex: none; display: inline-flex; align-items: center; min-height: 36px; color: var(--primary); font-weight: 700; font-size: .9rem; text-decoration: none; }
 :root:not([data-theme="light"]) .hm-section-head > a { color: var(--accent); }
-.hm-rail { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(220px, 72%); gap: 12px; overflow-x: auto;
-  padding: 2px 0 6px; scroll-snap-type: x mandatory; scrollbar-width: none; }
-.hm-rail::-webkit-scrollbar { display: none; }
-.hm-rail > * { scroll-snap-align: start; }
+.hm-rail { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:clamp(8px,1.35vw,16px); min-width:0; }
+.hm-rail > * { min-width:0; }
 .hm-skeleton { display: block; height: 220px; border-radius: var(--hm-radius);
   background: linear-gradient(90deg, var(--mint) 0%, color-mix(in srgb, var(--mint) 55%, var(--white)) 50%, var(--mint) 100%) 0 0 / 200% 100%;
   animation: hm-shimmer 1.4s linear infinite; }
@@ -75,17 +74,20 @@
 
 .hm-destination, .hm-place { display: grid; grid-template-rows: auto 1fr; min-width: 0; overflow: hidden; border: 1px solid var(--line);
   border-radius: var(--hm-radius); background: var(--white); transition: transform 200ms ease, box-shadow 200ms ease; }
-.hm-destination > img { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; display: block; background: var(--mint); }
+.hm-destination > img { width: 100%; height: auto; aspect-ratio: 3 / 2; object-fit: cover; display: block; background: var(--mint); }
 .hm-destination > div { display: grid; gap: 4px; padding: 12px; }
 .hm-destination h3 { margin: 0; font-size: 1.02rem; }
 .hm-destination p { color: var(--muted); font-size: .82rem; }
 .hm-destination button { justify-self: start; display: inline-flex; align-items: center; gap: 4px; min-height: 36px; margin-top: 4px; padding: 0;
   border: 0; background: none; color: var(--primary); font-weight: 750; cursor: pointer; }
 :root:not([data-theme="light"]) .hm-destination button { color: var(--accent); }
-.hm-place .place-photo { aspect-ratio: 4 / 3; margin: 0; border-radius: 0; }
+.hm .hm-place .place-photo { display:block; aspect-ratio:auto; margin:0; border-radius:0; }
+.hm .hm-place .place-photo-open { position:relative; aspect-ratio:4 / 3; }
+.hm .hm-place .place-photo-open > :is(img,.place-illustration) { position:absolute; inset:0; width:100%; height:100%; }
+.hm .hm-place .place-photo figcaption { padding:5px 8px; font-size:.72rem; line-height:1.4; overflow-wrap:anywhere; }
 .hm-place .place-photo img { width: 100%; height: 100%; object-fit: cover; }
-.hm-place > button { display: grid; gap: 2px; padding: 10px 12px 12px; border: 0; background: none; color: var(--ink); text-align: left; cursor: pointer; }
-.hm-place > button strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-place > button { display:grid; align-content:start; gap:4px; padding:10px 12px 12px; border: 0; background: none; color: var(--ink); text-align: left; cursor: pointer; }
+.hm-place > button strong { overflow-wrap:anywhere; line-height:1.35; }
 .hm-place > button small { color: var(--muted); font-size: .8rem; }
 @media (hover: hover) {
   .hm-destination:hover, .hm-place:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
@@ -105,11 +107,11 @@
 .hm-footer { padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: .8rem; line-height: 1.5; }
 
 @media (min-width: 560px) {
-  .hm-rail { grid-auto-columns: minmax(240px, 44%); }
+  .hm-rail { grid-template-columns:repeat(3,minmax(0,1fr)); }
   .hm-way small { display: block; }
 }
 
-/* Tablet and up: hero splits into copy and photo; rails become grids. */
+/* Desktop: wider hero and denser destination grids. */
 @media (min-width: 900px) {
   .hm { gap: 36px; padding: 20px 28px 32px; }
   .hm h2 { font-size: 1.35rem; }
@@ -120,7 +122,7 @@
   .hm-hero::before { background: linear-gradient(90deg, rgb(10 12 24 / 88%) 0%, rgb(10 12 24 / 62%) 48%, rgb(10 12 24 / 10%) 100%); }
   .hm-chips { flex-wrap: wrap; overflow: visible; padding: 0; }
   .hm-continue { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
-  .hm-rail { grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); overflow: visible; padding: 0; }
+  .hm-rail { grid-template-columns:repeat(auto-fill,minmax(185px,1fr)); }
   .hm-destinations { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .hm-ways { gap: 12px; }
   .hm-way { grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 12px; padding: 16px; }
@@ -130,4 +132,41 @@
 @media (prefers-reduced-motion: reduce) {
   .hm-skeleton { animation: none; }
   .hm-destination, .hm-place, .hm-way, .hm-send { transition: none; }
+}
+
+.hm-search-tools { display:grid; gap:10px; min-width:0; padding:clamp(12px,2vw,20px); border:1px solid var(--line); border-radius:var(--hm-radius); background:var(--white); }
+.hm-search-tools .destination-search, .hm-landmark-form { max-width:680px; }
+.hm-landmark[open] { display:grid; gap:10px; }
+.hm-landmark summary { cursor:pointer; color:var(--deep); font-weight:700; }
+.hm-landmark-form { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:6px 8px; }
+.hm-landmark-form label { grid-column:1 / -1; }
+.hm-landmark-form input { min-width:0; min-height:44px; }
+@media (prefers-reduced-motion:no-preference) {
+  .hm-hero-image { animation:hm-hero-arrive 650ms ease-out both; }
+  @keyframes hm-hero-arrive { from { transform:scale(1.035); } to { transform:scale(1); } }
+}
+
+@media (max-width:360px) {
+  .hm-landmark-form { grid-template-columns:minmax(0,1fr); }
+  .hm-landmark-form > .btn { justify-self:start; }
+  .hm-ways { grid-template-columns:minmax(0,1fr); }
+  .hm-way { grid-template-columns:auto minmax(0,1fr); align-items:center; }
+}
+
+.trip-grid .trip-choice { justify-items:stretch; min-width:0; overflow:hidden; }
+.trip-grid .trip-choice .trip-list-photos {
+  display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); width:100%;
+  gap:5px; height:clamp(124px,15vw,208px); margin:0 0 4px; overflow:hidden; border-radius:12px;
+}
+.trip-grid .trip-choice .trip-list-photos:empty { display:none; }
+.trip-grid .trip-choice .trip-list-photos > img {
+  display:block; width:100%; height:100%; min-width:0; min-height:0; object-fit:cover; border-radius:8px;
+}
+@media (max-width:770px) {
+  .trip-grid .trip-choice { padding:12px; }
+  .trip-grid .trip-choice .trip-list-photos { height:clamp(105px,36vw,170px); }
+  .trip-grid .trip-choice .eyebrow { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+  .trip-grid .trip-choice h3,.trip-grid .trip-choice p { margin:0; overflow-wrap:anywhere; }
+  .trip-grid .trip-choice .trip-choice-actions { justify-content:space-between; }
+  .trip-grid .trip-choice .trip-choice-actions :is(.btn,.icon-btn) { min-height:42px; }
 }

@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from 'react'
+import React, {useEffect, useId, useMemo, useState} from 'react'
 import {request} from '../api.mjs'
 import {Button, Icon, IconButton, Pill} from '../components/UI.jsx'
 import {money} from '../planner.mjs'
@@ -122,7 +122,8 @@ function PlanForm({draft, ledger, onSave, busy, onClose}) {
 export function TripBudget({draft, onSave, onOpenBookings}) {
   const ledger = {...emptyLedger(), ...(draft.ledger || {})}
   const [bookings, setBookings] = useState({loading:true, items:[]})
-  const [planning, setPlanning] = useState(!draft.ledger && draft.budget == null)
+  const [editor, setEditor] = useState(!draft.ledger && draft.budget == null ? 'budget' : null)
+  const editorId = useId()
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('')
   const [filter, setFilter] = useState('')
@@ -170,16 +171,30 @@ export function TripBudget({draft, onSave, onOpenBookings}) {
       <div><h2>{phase === 'before' ? 'Before your trip' : phase === 'during' ? 'During your trip' : 'After your trip'}</h2>
         <p>{phase === 'before' ? 'Plan category budgets, then log spending during the trip.' : phase === 'during'
           ? 'Log what you spend as you go. Remaining amounts update straight away.' : 'Final spend, variance and who owes whom.'}</p></div>
-      <Icon name="wallet" size={23}/>
+      <div className="trip-budget-actions">
+        <Button icon="plus" variant="primary" aria-controls={editorId} aria-expanded={editor === 'expense'}
+          onClick={() => setEditor(editor === 'expense' ? null : 'expense')}>Record spending</Button>
+        <Button icon="edit" aria-controls={editorId} aria-expanded={editor === 'budget'}
+          onClick={() => setEditor(editor === 'budget' ? null : 'budget')}>{draft.budget == null ? 'Set budget' : 'Edit budget'}</Button>
+      </div>
     </div>
+    <div id={editorId} className="trip-budget-editor" hidden={!editor}>
+      {editor === 'budget' && <PlanForm key={draft.updated} draft={draft} ledger={ledger} busy={busy} onClose={() => setEditor(null)}
+        onSave={changes => save(changes, 'Budget plan saved.')}/>}
+      {editor === 'expense' && <>
+        {ledger.members.length === 0 && <p className="trip-budget-note">Add traveller names in the budget plan to split costs.</p>}
+        <ExpenseForm ledger={ledger} bookings={bookings.items} onAdd={addExpense} busy={busy}/>
+      </>}
+    </div>
+    {status && <p className="trip-overview-status" role="status">{status}</p>}
 
     <div className="trip-budget-tiles">
       <Tile label="Total budget" value={summary.total == null ? 'Not set' : format(summary.total)}
         hint={summary.contingency ? format(summary.contingency) + ' kept in reserve' : null}/>
-      <Tile label="Expected trip cost" value={format(summary.spent + summary.remainingCosts)} hint="Spent + still to pay"/>
       <Tile label={phase === 'after' ? 'Final spend' : 'Spent so far'} value={format(summary.spent)} hint="Logged expenses minus refunds"/>
       <Tile label="Remaining budget" value={summary.remainingBudget == null ? '—' : format(summary.remainingBudget)}
         tone={summary.remainingBudget < 0 ? 'over' : undefined}/>
+      <Tile label="Expected trip cost" value={format(summary.spent + summary.remainingCosts)} hint="Spent + still to pay"/>
       <Tile label="Still to pay (estimate)" value={format(summary.remainingCosts)}
         hint={summary.committed ? format(summary.committed) + ' in confirmed bookings' : null}/>
       <Tile label={phase === 'after' ? 'Budget variance' : 'Expected balance'} value={summary.finalBalance == null ? '—' :
@@ -217,25 +232,17 @@ export function TripBudget({draft, onSave, onOpenBookings}) {
         </tr>)}</tbody>
       </table>
     </div>
-    <p className="trip-budget-note">“Booked” counts confirmed bookings that nobody has logged as paid yet, so a ticket is never counted twice.
-      “Expected” is the larger of the plan and what is already spent or booked.</p>
+    <details className="trip-budget-note"><summary>How the estimates are calculated</summary>
+      <p>Booked includes confirmed bookings that haven’t been logged as paid. Expected uses the larger of the plan and the amount already spent or booked.</p>
+    </details>
 
     <div className="trip-budget-actions">
-      <Button icon="edit" aria-expanded={planning} onClick={() => setPlanning(value => !value)}>{planning ? 'Close budget plan' : 'Edit budget plan'}</Button>
       <Button icon="download" disabled={!ledger.expenses.length} onClick={() => download((draft.name || 'trip') + '-expenses.csv', ledgerCsv(draft), 'text/csv;charset=utf-8')}>Export CSV</Button>
       <Button icon="link" onClick={async () => {
         const text = budgetSummaryText(draft, summary, transfers, format)
         try { await navigator.clipboard.writeText(text); setStatus('Budget summary copied.') } catch { setStatus('Copying is blocked in this browser.') }
       }}>Copy summary</Button>
     </div>
-    {planning && <PlanForm key={draft.updated} draft={draft} ledger={ledger} busy={busy} onClose={() => setPlanning(false)}
-      onSave={changes => save(changes, 'Budget plan saved.')}/>}
-
-    <h3>Record spending</h3>
-    {ledger.members.length === 0 && <p className="trip-budget-note">Add traveller names in the budget plan to split costs and see who owes whom.</p>}
-    <ExpenseForm ledger={ledger} bookings={bookings.items} onAdd={addExpense} busy={busy}/>
-    {status && <p className="trip-overview-status" role="status">{status}</p>}
-
     {ledger.expenses.length > 0 && <>
       <div className="trip-budget-list-head"><h3>Expenses <small>{ledger.expenses.length}</small></h3>
         <label>Show<select value={filter} onChange={event => setFilter(event.target.value)}><option value="">All categories</option>

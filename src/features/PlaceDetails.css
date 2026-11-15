@@ -1,0 +1,98 @@
+dialog.discovery-details-dialog:has(.journey-place-detail) {
+  --place-dialog-pad: clamp(14px, 3vw, 24px);
+  box-sizing: border-box;
+  width: min(700px, calc(100% - 24px));
+  max-height: min(88dvh, 850px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--white);
+  color: var(--ink);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.discovery-details-dialog:has(.journey-place-detail)::backdrop { background: rgb(14 16 30 / 57%); backdrop-filter: blur(5px); }
+.discovery-details-dialog:has(.journey-place-detail) .dialog-inner { padding: 0; }
+.discovery-details-dialog:has(.journey-place-detail) .dialog-close {
+  top: 12px;
+  right: var(--place-dialog-pad);
+  width: 40px;
+  height: 40px;
+  background: var(--white);
+  color: var(--ink);
+}
+.discovery-details-dialog .journey-place-detail {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 11px;
+  min-width: 0;
+  height: auto;
+  padding: var(--place-dialog-pad);
+  overflow: visible;
+}
+.discovery-details-dialog .journey-detail-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  width: 100%;
+  padding: 0 46px 0 0;
+  border: 0;
+}
+.discovery-details-dialog .journey-detail-bar > span {
+  margin: 0;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--mint);
+  color: var(--deep);
+  font-size: .77rem;
+  font-weight: 700;
+}
+.discovery-details-dialog .journey-place-detail > .place-photo {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  border-radius: 14px;
+}
+.discovery-details-dialog .journey-place-detail > .place-photo img {
+  display: block;
+  width: 100%;
+  height: clamp(150px, 29dvh, 300px);
+  object-fit: cover;
+}
+.discovery-details-dialog .place-photo figcaption {
+  padding: 6px 10px;
+  font-size: .73rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.discovery-details-dialog .journey-place-detail h2 {
+  margin: 2px 0 0;
+  font-size: clamp(22px, 4vw, 32px);
+  line-height: 1.16;
+  overflow-wrap: anywhere;
+}
+.discovery-details-dialog .journey-detail-address { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: var(--muted); }
+.discovery-details-dialog .journey-detail-address svg { flex: none; margin-top: 2px; }
+.discovery-details-dialog .journey-detail-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding-block: 7px;
+  border-block: 1px solid var(--line);
+}
+.discovery-details-dialog .journey-detail-tabs .btn { min-height: 40px; border-radius: 9px; }
+.discovery-details-dialog .journey-detail-tabs [aria-pressed="true"] { background: var(--mint); color: var(--deep); border-color: var(--primary); }
+.discovery-details-dialog .journey-place-detail > :is(.journey-facts,.journey-visit-checks,.place-detail-rail) { width:100%; min-width:0; }
+.discovery-details-dialog .journey-links { display:flex; flex-wrap:wrap; gap:8px; }
+
+@media (max-width: 560px) {
+  dialog.discovery-details-dialog:has(.journey-place-detail) { border-radius: 17px; }
+  .discovery-details-dialog .journey-place-detail { gap: 9px; }
+  .discovery-details-dialog .journey-place-detail > .place-photo img { height: clamp(130px, 27dvh, 220px); }
+}

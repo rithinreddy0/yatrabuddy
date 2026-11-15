@@ -1,6 +1,6 @@
 import {useMapPanel} from './useMapPanel.mjs'
 import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react'
-import {ArrowDown, ArrowUp, Bookmark, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Ellipsis, ExternalLink, Heart, MapPin, Minus, Pencil, Plus, RotateCcw, Sparkles, Square, Trash2, Volume2, X} from 'lucide-react'
+import {ArrowDown, ArrowUp, Bookmark, CalendarDays, Camera, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Ellipsis, ExternalLink, Heart, MapPin, Minus, Pencil, Plus, RotateCcw, Sparkles, Square, Trash2, Video, Volume2, X} from 'lucide-react'
 import {PlacePhoto} from '../components/PlacePhoto.jsx'
 import {HighlightPrice, TravelHighlights} from '../components/TravelHighlights.jsx'
 import {GoogleMapsLink} from '../components/GoogleMapsLink.jsx'
@@ -1113,16 +1113,25 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
       <section className="agent-chat" aria-label="Travel conversation">
         <div className="agent-thread" ref={transcript} onScroll={updateScroll} tabIndex={0} aria-label="Conversation messages">
         {missingContext && <section className="agent-welcome"><h2>Trip unavailable</h2><a className="btn secondary" href="#trips">Open My Trips</a></section>}
-        {!model?.events.length && !busy && !resuming && !missingContext && <section className="agent-welcome">
+        {!model?.events.length && !busy && !resuming && !missingContext && <section className="agent-welcome journey-welcome">
+          <div className="journey-welcome-copy">
+            <h2>Where are we going?</h2>
+            <p>Share a destination, dates, or budget to start planning.</p>
+            <div className="journey-welcome-start">
+              <Button variant="primary" disabled={!ready || !connected} onClick={continueTrip}>Start planning</Button>
+              <Button className="journey-example-prompt" icon="arrow" onClick={() => {setQuery('Plan 3 days in Varkala from Mumbai for 2 people under ₹25,000');composer.current?.focus()}}>Try a three-day Varkala trip</Button>
+            </div>
+          </div>
           <TravelArtwork name="cabin-window" animated className="journey-welcome-photo" width={320} height={320}/>
-          <h2>Where are we going?</h2>
-          <p>Share a destination, dates, or budget to start planning.</p>
-          <Button className="journey-example-prompt" onClick={() => {setQuery('Plan 3 days in Varkala from Mumbai for 2 people under ₹25,000');composer.current?.focus()}}>Try a three-day Varkala trip</Button>
-          <div className="agent-pills"><Button variant="primary" disabled={!ready || !connected} onClick={continueTrip}>Start planning</Button>{[
-            ['Find stays', 'Find hotels in '],
-            ['Explore places', 'What can I see in '], ['Find photos', 'Show photos of '], ['Find videos', 'Show videos of '],
-          ].map(([label, prompt]) => <Button key={label} onClick={() => {setQuery(prompt);composer.current?.focus()}}>{label}</Button>)}
-          {onProfile && <Button onClick={onProfile}>{profile ? 'Edit travel profile' : 'Personalize my trips'}</Button>}</div>
+          <div className="journey-welcome-tools" role="group" aria-label="Travel research shortcuts">
+            {[
+              ['Find stays', 'Find hotels in ', 'bed'], ['Explore places', 'What can I see in ', 'map'],
+              ['Find photos', 'Show photos of ', null, Camera], ['Find videos', 'Show videos of ', null, Video],
+            ].map(([label, prompt, icon, Glyph]) => <Button key={label} icon={icon} onClick={() => {setQuery(prompt);composer.current?.focus()}}>
+              {Glyph && <Glyph size={17} aria-hidden="true"/>}{label}
+            </Button>)}
+            {onProfile && <Button icon="settings" onClick={onProfile}>{profile ? 'Edit travel profile' : 'Personalize my trips'}</Button>}
+          </div>
         </section>}
         {resuming && !error && <p className="agent-tool" role="status">Opening your conversation…</p>}
         {model?.events.map((event, index, events) => {
@@ -1139,7 +1148,7 @@ export function PlanningAgent({catalog, initialQuery, onSave, onOpenTrip, ready,
             {label && <div className="agent-user-message"><p className="agent-user-turn">{label}</p>
               {canReplace && <button type="button" className="agent-action" aria-label="Edit last message" title="Edit last message" disabled={busy} onClick={editLastMessage}><Pencil size={17}/></button>}
             </div>}
-            {(response || notice || sources.length > 0 || event.liveDraft || event.buildConfirmation || (contextId && event.draftPreview)) && <section className="agent-reply" aria-label="YatraBuddy’s answer" aria-live={isLast ? 'polite' : undefined}>
+            {(response || notice || sources.length > 0 || event.liveDraft || event.buildConfirmation || (contextId && event.draftPreview)) && <section className="agent-reply journey-answer-turn" aria-label="YatraBuddy’s answer" aria-live={isLast ? 'polite' : undefined}>
               <span className="agent-avatar" aria-hidden="true"><Sparkles size={18}/></span>
               <div className="agent-answer" ref={isLatestAnswer ? replyHeading : undefined} tabIndex={isLatestAnswer ? -1 : undefined}>
                 <div className="agent-answer-content">

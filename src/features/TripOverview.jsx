@@ -253,7 +253,7 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
     return 'itinerary'
   })
   const [invite, setInvite] = useState(initialSection === 'invite' ? 1 : 0)
-  const [mapOpen, setMapOpen] = useState(true)
+  const [mapOpen, setMapOpen] = useState(() => !window.matchMedia('(max-width: 770px)').matches)
   const [selection, setSelection] = useState(null)
   const [query, setQuery] = useState('')
   const [placeQuery, setPlaceQuery] = useState('')
@@ -378,6 +378,8 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
 
   const suggestedIdeas = (nearby.data?.places || []).filter(place =>
     place.category !== 'Stay' && !stops.some(stop => stop.url === place.url))
+    .sort((a,b) => (b.fitScore ?? 0) - (a.fitScore ?? 0) ||
+      (a.distanceMetres ?? Infinity) - (b.distanceMetres ?? Infinity))
 
   return <article className="page trip-overview" data-section={section}>
     <header className="trip-overview-header trip-overview-glass">
@@ -401,6 +403,12 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
     </header>
     <div className="trip-overview-layout" data-map-open={mapVisible}>
       {section !== 'travel' && <nav className="trip-overview-shortcuts" aria-label="Trip sections">
+        <label className="trip-overview-mobile-section">
+          <span>Trip section</span>
+          <select value={section} onChange={event=>open(event.target.value)}>
+            {shortcuts.map(([id,label])=><option key={id} value={id}>{label}</option>)}
+          </select>
+        </label>
         {shortcuts.map(([id, label, glyph]) => <button key={id} type="button" aria-pressed={section === id} onClick={() => open(id)}>
           {typeof glyph === 'string' ? <Icon name={glyph} size={17}/> : React.createElement(glyph, {size:17, 'aria-hidden':true})}
           <span>{label}</span>{id === 'itinerary' && <small>{stops.length}</small>}
@@ -414,7 +422,6 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
             title={!tripCalendar(active) ? 'Set a departure date in trip preferences or plan the journey' : undefined} onClick={() => exportCalendar(active)}>Export calendar</Button>}
         </header>}
         {section === 'media' && <TripPhotoReferences key={active.id} draft={active} stops={stops} onSelect={select}/>}
-        {section === 'ideas' && <DestinationBrief location={active} compact/>}
         {section === 'budget' && <><TripBudget draft={active} onSave={onSaveDraft} onOpenBookings={() => open('bookings')}/><TravelBudget draft={active}/></>}
         {section === 'preferences' && <PreferencesEditor key={active.id + ':' + active.updated} draft={active} save={updatePreferences} onClose={() => open('itinerary')}/>}
         {section === 'transport' && <div className="trip-overview-glass trip-overview-section"><TripTransport draft={active} onAsk={onAsk && (text => onAsk(text, active.id))} onSaveDraft={onSaveDraft}/></div>}
@@ -428,6 +435,9 @@ export function TripOverview({draft, initialSection, onEdit, onAsk, onPreference
           <TripWorkspace draft={active} initialTab={section} initialInvite={section === 'chat' ? invite : 0} embedded onTabChange={next => open(next)}
             onInviteClose={() => setInvite(0)}
             ideas={suggestedIdeas} onPlaceSelect={select} onEdit={onEdit} onDraftUpdate={sync}/>
+          {section === 'ideas' && <details className="trip-ideas-context"><summary>Destination background</summary>
+            <DestinationBrief location={active} compact/>
+          </details>}
         </div>}
         </div>
         {onAsk && section === 'itinerary' && <form className="trip-overview-composer" onSubmit={event => {

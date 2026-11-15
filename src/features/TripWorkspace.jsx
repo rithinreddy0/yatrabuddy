@@ -430,15 +430,51 @@ function exportMemories(draft, entries) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-function WorkspaceEntries({entries, kind, ideas, media, draft, onSave, onUpdate, onRemove, onPlaceSelect, busy}) {
+function IdeaSuggestion({place, days, onAddStop, onSave, onPlaceSelect, busy}) {
+  const dayId = useId()
+  const [error, setError] = useState('')
+  const available = days.map((stops,index)=>stops.length<5?index:null).filter(index=>index!==null)
+  return <li className="trip-idea-suggestion">
+    <div>
+      <h4>{place.name}</h4>
+      <small>{[place.category, Number.isFinite(place.distanceMetres) && `${(place.distanceMetres / 1000).toFixed(1)} km from city centre`,
+        place.publishedPrice].filter(Boolean).join(' · ')}</small>
+      {place.fitReasons?.[0] && <p>{place.fitReasons[0]}</p>}
+    </div>
+    <div className="trip-room-actions">
+      {onPlaceSelect && <Button variant="text-btn" onClick={()=>onPlaceSelect(place)}>Details</Button>}
+      <Button icon="heart" disabled={busy} onClick={()=>onSave({
+        kind:'idea',title:place.name,url:place.url,category:place.category,lat:place.lat,lon:place.lon,
+      })}>Save idea</Button>
+    </div>
+    {onAddStop && available.length>0 && <form className="trip-idea-add" onSubmit={async event=>{
+      event.preventDefault()
+      const day=Number(new FormData(event.currentTarget).get('day'))
+      setError('')
+      try { await onAddStop(day,place) }
+      catch (failure) { setError(failure.message || 'Could not add this place. Try again.') }
+    }}>
+      <label htmlFor={dayId}>Add {place.name} to</label>
+      <select id={dayId} name="day" defaultValue={available[0]}>
+        {available.map(index=><option key={index} value={index}>Day {index+1}</option>)}
+      </select>
+      <Button type="submit" icon="plus" disabled={busy}>Add to itinerary</Button>
+      {error && <p role="alert" className="form-error">{error}</p>}
+    </form>}
+  </li>
+}
+
+function WorkspaceEntries({entries, kind, ideas, media, draft, onSave, onUpdate, onRemove, onPlaceSelect, onAddStop, busy}) {
   const [showForm, setShowForm] = useState(false)
+  const [ideaStatus, setIdeaStatus] = useState('')
   const [editing, setEditing] = useState(null)
   const [mediaFilter, setMediaFilter] = useState('')
   const knownPlaces = [...new Set([draft.stay?.name, ...draft.days.flat().map(place => place.name),
     ...entries.map(entry => entry.place)].filter(Boolean))].sort((a, b) => a.localeCompare(b))
   const filter = knownPlaces.includes(mediaFilter) ? mediaFilter : ''
   const shown = kind === 'media' && filter ? entries.filter(entry => entry.place === filter) : entries
-  const candidates = kind === 'idea' ? ideas.filter(place => place?.name && place.url && !entries.some(entry => entry.url === place.url)) : []
+  const candidates = kind === 'idea' ? ideas.filter(place => place?.name && place.url &&
+    !entries.some(entry => entry.url === place.url) && !draft.days.some(day=>day.some(stop=>stop.url===place.url))) : []
   const mediaCandidates = kind === 'media' ? media.filter(item => item?.url && !entries.some(entry => entry.url === item.url)) : []
   const noun = kind === 'idea' ? 'idea' : kind === 'booking' ? 'booking' : 'media'
   const [bookingQuery, setBookingQuery] = useState('')
@@ -449,9 +485,14 @@ function WorkspaceEntries({entries, kind, ideas, media, draft, onSave, onUpdate,
     [entry.title, entry.place, entry.notes, entry.date, entry.reference].some(value =>
       value?.toLowerCase().includes(bookingQuery.trim().toLowerCase())))
     .sort((a, b) => statusOrder.indexOf(a.status) - statusOrder.indexOf(b.status) || (a.date || '9').localeCompare(b.date || '9')) : shown
+  const addIdeaToDay = onAddStop && (async (day,place)=>{
+    setIdeaStatus('')
+    await onAddStop(day,place)
+    setIdeaStatus(`${place.name} added to Day ${day+1}.`)
+  })
   return <>
     <div className="trip-room-section-heading">
-      <p className="trip-room-muted">{entries.length} {kind === 'media' ? 'media items' : noun + (entries.length === 1 ? '' : 's')}</p>
+      <p className="trip-room-muted">{entries.length} {kind === 'media' ? 'media items' : noun + (entries.length === 1 ? '' : 's')}{kind==='idea'?' saved':''}</p>
       <div className="trip-room-actions">
         {kind === 'booking' && entries.length > 0 && <input className="trip-room-booking-search" type="search"
           placeholder="Search bookings" aria-label="Search bookings" value={bookingQuery} onChange={event => setBookingQuery(event.target.value)}/>}
@@ -462,6 +503,7 @@ function WorkspaceEntries({entries, kind, ideas, media, draft, onSave, onUpdate,
         {!showForm && <Button icon="plus" variant="primary" onClick={() => setShowForm(true)}>Add {kind === 'media' ? 'photos or videos' : noun}</Button>}
       </div>
     </div>
+    {ideaStatus && <p role="status">{ideaStatus}</p>}
     {kind === 'media' && !!knownPlaces.length && <label className="trip-room-media-filter">Filter by place
       <select value={filter} onChange={event => setMediaFilter(event.target.value)}><option value="">All places</option>
         {knownPlaces.map(place => <option key={place}>{place}</option>)}
@@ -469,10 +511,19 @@ function WorkspaceEntries({entries, kind, ideas, media, draft, onSave, onUpdate,
     </label>}
     {showForm && <EntryForm kind={kind} places={knownPlaces} defaultPlace={filter} busy={busy} onClose={() => setShowForm(false)}
       onSave={async (entry, file) => {if (await onSave(entry, file)) setShowForm(false)}}/>}
-    {!entries.length && !showForm && <div className="trip-room-empty">
+    {!entries.length && !showForm && !candidates.length && <div className="trip-room-empty">
       <Icon name={kind === 'idea' ? 'heart' : kind === 'booking' ? 'trip' : 'link'} size={27}/>
       <p>{kind === 'idea' ? 'Keep places you’re considering.' : kind === 'booking' ? 'Track options you are considering and the bookings you confirm, with references and receipts. Opening a provider page never marks anything as booked.' : 'Save photos, videos, and links for the trip.'}</p>
     </div>}
+    {kind === 'idea' && candidates.length>0 && <section className="trip-idea-options" aria-label="Places to add">
+      <h3>Places to add around {draft.name}</h3>
+      <ul>{candidates.slice(0,4).map(place=><IdeaSuggestion key={place.url} place={place} days={draft.days}
+        onAddStop={addIdeaToDay} onSave={onSave} onPlaceSelect={onPlaceSelect} busy={busy}/>)}</ul>
+      {candidates.length>4 && <details><summary>More places</summary>
+        <ul>{candidates.slice(4,20).map(place=><IdeaSuggestion key={place.url} place={place} days={draft.days}
+          onAddStop={addIdeaToDay} onSave={onSave} onPlaceSelect={onPlaceSelect} busy={busy}/>)}</ul>
+      </details>}
+    </section>}
     {filter && !shown.length && <p className="trip-room-muted">No media saved for {filter}.</p>}
     {kind === 'booking' && shown.length > 0 && !matching.length && <p role="status">No bookings match your search.</p>}
     {matching.length > 0 && <ul className={`trip-room-entries trip-room-entries-${kind}${kind === 'media' ? ' trip-room-media' : ''}`}>
@@ -510,14 +561,6 @@ function WorkspaceEntries({entries, kind, ideas, media, draft, onSave, onUpdate,
         </div>
       </li>)}
     </ul>}
-    {candidates.length > 0 && <details className="trip-room-candidates"><summary>Suggestions from your search</summary>
-      <ul>{candidates.slice(0, 20).map(place => <li key={place.url}>
-        <span><strong>{place.name}</strong><small>{place.category}</small></span>
-        <Button icon="heart" disabled={busy} onClick={() => onSave({
-          kind:'idea', title:place.name, url:place.url, category:place.category, lat:place.lat, lon:place.lon,
-        })}>Save idea</Button>
-      </li>)}</ul>
-    </details>}
     {mediaCandidates.length > 0 && <div className="trip-room-candidates">
       <h3>From your search</h3>
       <ul>{mediaCandidates.slice(0, 20).map(item => {
@@ -859,6 +902,7 @@ export function TripWorkspace({draft, workspaceId, inviteCode, ideas=[], media=[
       {workspace && ['ideas', 'bookings', 'media'].includes(tab) && <WorkspaceEntries key={tab} kind={{ideas:'idea', bookings:'booking', media:'media'}[tab]}
         entries={group.filter(entry => entry.kind === {ideas:'idea', bookings:'booking', media:'media'}[tab])}
         ideas={ideas} media={media} draft={shownDraft} onSave={save} onRemove={remove} onPlaceSelect={onPlaceSelect} busy={busy}
+        onAddStop={workspace.isOwner ? addStop : undefined}
         onUpdate={(id, body) => apply(() => request(`${path}/${roomId}/entries/${id}`, {method:'PATCH', body}))}/>}
     </div>
     {Boolean(inviteOpen) && workspace?.isOwner && <InviteDialog workspace={workspace} onClose={() => {

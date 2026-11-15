@@ -91,8 +91,8 @@ export function DestinationGuide({catalog, initialDestination, profile, initialT
         <Pill key={id} active={id === topic} icon={icon} onClick={() => setTopic(id)}>{label}</Pill>)}
     </div>
     {place.image && <div className="guide-cover"><img src={`/images/${place.image}.jpg`} alt=""/><strong>{place.name}</strong></div>}
-    {topic === 'overview' && <GuideEssentials place={place} point={canMap ? center : null} report={report} profile={profile} onAsk={onAsk}/>}
     <DestinationBrief location={place} topic={topic} destination attempt={attempt}/>
+    {topic === 'overview' && <GuideEssentials key={place.id} place={place} point={canMap ? center : null} report={report} profile={profile} onAsk={onAsk}/>}
     {research?.weather && <p className="guide-weather"><Icon name="globe" size={17}/> {research.weather.temperature}°C · {research.weather.conditions}{research.airQuality && ` · US AQI ${research.airQuality.index}`}</p>}
     {['overview','experiences'].includes(topic) && collections.some(([, items]) => items.length) && <section className="panel guide-panel">
       <h2>Places to consider</h2><div className="guide-quick-places">

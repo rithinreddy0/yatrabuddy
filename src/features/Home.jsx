@@ -2,6 +2,7 @@ import React, {Suspense,lazy,useEffect,useState} from 'react'
 import {Button,Dialog,Icon,IconButton,Pill,Empty} from '../components/UI.jsx'
 import {themes,money} from '../planner.mjs'
 import {request} from '../api.mjs'
+import {DestinationSearch} from '../components/DestinationSearch.jsx'
 import {DiscoveryWeather,useNearbyDiscovery} from './discoveryData.jsx'
 const SavedDiscoveryPlaces = lazy(() => import('./DiscoveryFeed.jsx').then(module => ({default:module.SavedDiscoveryPlaces})))
 // Loaded only when a place is opened, so the home page does not download the details view up front.
@@ -32,19 +33,20 @@ export function storedCity() {
   } catch { return null }
 }
 
-function asCity(item) {
-  return {...item,id:`geo:${item.id}`,region:[...new Set([item.region,item.country].filter(Boolean))].join(', ')}
-}
-
 function HomePlaces({city, onOpenPlace}) {
-  const {report, photosPending} = useNearbyDiscovery(city?.id?.replace(/^geo:/, ''))
+  const {report, error, photosPending} = useNearbyDiscovery(city?.id?.replace(/^geo:/, ''))
   const [failed, setFailed] = useState(() => new Set())
   // Only places with a matched photo make the home rail; the full list lives in Explore and the guide.
   const places = (report?.places || []).filter(place => place.category !== 'Stay' && place.photo?.url
     && place.photo.kind !== 'nearby' && !failed.has(place.url)).slice(0, 10)
   const skeletons = <div className="hm-rail" aria-hidden="true">{Array.from({length:4}, (_, index) => <i key={index} className="hm-skeleton"/>)}</div>
-  if (!places.length) return !report || photosPending ? skeletons
-    : <p className="hm-muted">Photos for nearby places are not available right now. <a href="#guide">Open the destination guide</a></p>
+  if (error || report?.status === 'unavailable') return <p className="hm-muted" role="status">Nearby places are temporarily unavailable.</p>
+  if (!places.length) {
+    if (!report || photosPending) return skeletons
+    const listings = (report.places || []).filter(place => place.category !== 'Stay').slice(0, 10)
+    return listings.length ? <PlaceGrid places={listings} onOpenPlace={onOpenPlace}/>
+      : <p className="hm-muted">No nearby places were found.</p>
+  }
   return <div className="hm-rail" role="list">{places.map(place => <article className="hm-place" role="listitem" key={place.url}>
     <PlacePhoto place={place} hideUnavailable onOpen={() => onOpenPlace(place)}
       onUnavailable={() => setFailed(current => new Set([...current, place.url]))}/>
@@ -53,25 +55,104 @@ function HomePlaces({city, onOpenPlace}) {
   </article>)}</div>
 }
 
-export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onRequireAccount,catalog = []}) {
-  const [prompt,setPrompt]=useState('')
-  const [suggested,setSuggested]=useState(null)
-  const [attempt,setAttempt]=useState(0)
-  const [suggestionFailure,setSuggestionFailure]=useState(false)
-  const [openPlace,setOpenPlace]=useState(null)
-  const city=destination || suggested
-  const name=library.profile?.homeCity?.trim() || catalog[0]?.name
+function PlaceGrid({places,onOpenPlace,lookup=false}) {
+  return <div className="hm-rail" role="list">{places.map(place=><article className="hm-place" role="listitem" key={place.url}>
+    <PlacePhoto place={place} lookup={lookup} onOpen={()=>onOpenPlace(place)}/>
+    <button type="button" onClick={()=>onOpenPlace(place)}><strong>{place.name}</strong>
+      <small>{[place.category,Number.isFinite(place.distanceMetres)&&`${(place.distanceMetres/1000).toFixed(1)} km away`].filter(Boolean).join(' · ')}</small>
+    </button>
+  </article>)}</div>
+}
+
+function homeCity(result) {
+  return {...result,id:'geo:'+result.id,
+    region:[...new Set([result.region,result.country].filter(Boolean))].join(', ')}
+}
+
+async function searchLandmark(text,signal) {
+  const parts=text.match(/^([^,]+),\s*(.+)$/) || text.match(/^(.+?)\s+(?:in|near|around)\s+(.+)$/i)
+  const lookup=q=>request('places/search?'+new URLSearchParams({q}),{signal})
+  const result=await lookup(parts?`${parts[1].trim()} in ${parts[2].trim()}`:text)
+  const city=result.location
+  if(!parts||result.places?.length||!Number.isFinite(city?.lat)||!Number.isFinite(city?.lon))return result
+
+  // Exact article titles can omit the city. Keep only matches near the resolved city.
+  const exact=await lookup(parts[1].trim())
+  const places=(exact.places||[]).filter(place=>{
+    if(!Number.isFinite(place.lat)||!Number.isFinite(place.lon))return false
+    const longitude=(place.lon-city.lon+540)%360-180
+    return Math.hypot(place.lat-city.lat,longitude*Math.cos(city.lat*Math.PI/180))<=0.45
+  })
+  return places.length?{...result,places}:result
+}
+
+function LandmarkSearch({onOpenPlace}) {
+  const [term,setTerm]=useState('')
+  const [query,setQuery]=useState(null)
+  const [result,setResult]=useState(null)
   useEffect(()=>{
-    if (destination || !name) return
+    if(!query)return
     const controller=new AbortController()
-    request('locations?q='+encodeURIComponent(name),{signal:controller.signal}).then(matches=>{
-      if(controller.signal.aborted)return
-      const found=matches[0]
-      setSuggestionFailure(!found)
-      setSuggested(found?asCity(found):null)
-    }).catch(()=>{if(!controller.signal.aborted)setSuggestionFailure(true)})
+    searchLandmark(query.text,controller.signal)
+      .then(data=>{if(!controller.signal.aborted)setResult(data)})
+      .catch(()=>{if(!controller.signal.aborted)setResult({status:'unavailable'})})
     return ()=>controller.abort()
-  },[destination,name,attempt])
+  },[query])
+
+  return <details className="hm-landmark">
+    <summary>Search for a specific place</summary>
+    <form className="hm-landmark-form" onSubmit={event=>{
+      event.preventDefault()
+      if(term.trim().length<2)return
+      setResult(null)
+      setQuery({text:term.trim()})
+    }}>
+      <label htmlFor="hm-landmark-input">Place name and city</label>
+      <input id="hm-landmark-input" value={term} onChange={event=>setTerm(event.target.value)}
+        placeholder="e.g. Louvre, Paris" minLength={2} maxLength={150} required/>
+      <Button type="submit" icon="search">Search places</Button>
+    </form>
+    {query&&(!result?<p role="status">Searching for {query.text}…</p>
+      :result.places?.length?<PlaceGrid places={result.places.slice(0,8)} lookup onOpenPlace={onOpenPlace}/>
+      :<p role="status">{result.status==='unavailable'?'Place search is temporarily unavailable.':'No places found. Try adding the city to the place name.'}</p>)}
+  </details>
+}
+
+export function Home({library,onAsk,onResearch,onPlan,catalog = []}) {
+  const [prompt,setPrompt]=useState('')
+  const [selectedCity,setSelectedCity]=useState(null)
+  const [detectedCity,setDetectedCity]=useState(null)
+  const [locationStatus,setLocationStatus]=useState('')
+  const [locationAttempt,setLocationAttempt]=useState(0)
+  const [openPlace,setOpenPlace]=useState(null)
+  const city=selectedCity || detectedCity
+  const cityId=city?.id.slice(4)
+
+  useEffect(()=>{
+    if(selectedCity)return
+    if(!navigator.geolocation){
+      setLocationStatus('Device location is unavailable. Search for a city.')
+      return
+    }
+    const controller=new AbortController()
+    const {signal}=controller
+    const unavailable=()=>{
+      if(!signal.aborted)setLocationStatus('Couldn’t get your location. Search for a city.')
+    }
+    setLocationStatus('Finding your current city…')
+    navigator.geolocation.getCurrentPosition(async ({coords})=>{
+      if(signal.aborted)return
+      try{
+        const result=await request('locations/reverse?'+new URLSearchParams({
+          lat:coords.latitude.toFixed(2),lon:coords.longitude.toFixed(2),
+        }),{signal})
+        if(signal.aborted)return
+        setDetectedCity(homeCity(result))
+        setLocationStatus('')
+      }catch{unavailable()}
+    },unavailable,{timeout:8000,maximumAge:300_000})
+    return ()=>controller.abort()
+  },[selectedCity,locationAttempt])
 
   const actions=[
     ['guide',Globe,'Destination guide','Best time, costs and getting there'],
@@ -90,7 +171,6 @@ export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onR
   const tripDate = rawDate ? new Intl.DateTimeFormat(undefined, {weekday:'short', day:'numeric', month:'short', timeZone:'UTC'}).format(new Date(rawDate + 'T12:00:00Z')) : null
   const greeting = library.profile?.preferredName ? `Hi ${library.profile.preferredName}, where to next?` : 'Where to next?'
   const submit = text => { if (text.trim()) onAsk(text.trim()) }
-  const skeletons = <div className="hm-rail" aria-hidden="true">{Array.from({length:4}, (_, index) => <i key={index} className="hm-skeleton"/>)}</div>
   return <div className="page hm">
     <header className="hm-top">
       <span className="hm-brand"><img src="/images/brand/yatrabuddy.svg" alt="" width="30" height="30"/> YatraBuddy</span>
@@ -98,7 +178,7 @@ export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onR
     </header>
 
     <section className="hm-hero" aria-labelledby="hm-title">
-      <img className="hm-hero-image" src="/images/kerala.jpg" alt="" fetchPriority="high" width="1280" height="840"/>
+      <img className="hm-hero-image" src="/images/hero.jpg" alt="" fetchPriority="high" width="1536" height="608"/>
       <div className="hm-hero-copy">
         <p className="hm-kicker"><Sparkles size={15} aria-hidden="true"/> Your AI travel buddy</p>
         <h1 id="hm-title">{greeting}</h1>
@@ -148,16 +228,23 @@ export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onR
     </section>
 
     <section className="hm-section" aria-labelledby="hm-near">
-      <div className="hm-section-head"><div><h2 id="hm-near">{city ? <>Around {city.name}</> : 'Places to explore'}</h2>
-        <p>{city && !destination && library.profile?.homeCity ? 'Near your home city' : 'Photographed places from open travel sources'}</p></div>
-        {city && <DiscoveryWeather key={city.id} cityId={city.id.replace(/^geo:/, '')}/>}</div>
-      {city ? <HomePlaces city={city} onOpenPlace={setOpenPlace}/>
-        : suggestionFailure ? <div className="discovery-message" role="status"><p>Nearby places are temporarily unavailable.</p>
-          <Button onClick={()=>{setSuggestionFailure(false);setAttempt(value=>value+1)}}>Try again</Button></div>
-        : skeletons}
+      <div className="hm-section-head"><div><h2 id="hm-near">{city ? `Around ${city.name}` : 'Places to explore'}</h2>
+        <p>{city ? city.region : 'Choose a city or search for a specific place.'}</p></div>
+        {cityId && <DiscoveryWeather key={cityId} cityId={cityId}/>}</div>
+      <div className="hm-search-tools">
+        <DestinationSearch catalog={[]} selected={city} global label="Search worldwide"
+          placeholder="Search for a city worldwide" onSelect={setSelectedCity} maxLength={100}/>
+        {locationStatus && !selectedCity && <p className="hm-muted" role="status">{locationStatus}</p>}
+        {selectedCity && <div><Button icon="pin" onClick={()=>{
+          setSelectedCity(null)
+          setLocationAttempt(value=>value+1)
+        }}>Use my location</Button></div>}
+        <LandmarkSearch onOpenPlace={setOpenPlace}/>
+      </div>
+      {cityId && <HomePlaces key={cityId} city={city} onOpenPlace={setOpenPlace}/>}
       <div className="hm-actions">
         <Button variant="primary" icon="chat" onClick={()=>city?onPlan('',city.id,city):onPlan()}>{city ? `Plan a trip to ${city.name}` : 'Plan a trip'}</Button>
-        <Button icon="globe" onClick={()=>onResearch('overview')}>Destination guide</Button>
+        <Button icon="globe" onClick={()=>onResearch('overview',city)}>Destination guide</Button>
       </div>
     </section>
 
@@ -165,7 +252,7 @@ export function Home({library,onAsk,onResearch,onPlan,onNavigate,destination,onR
       <p>Places from OpenStreetMap, Wikipedia and Wikivoyage. Weather from Open-Meteo. Prices and timings are estimates unless a provider confirms them.</p>
     </footer>
     {openPlace && <Dialog label={openPlace.name} className="discovery-details-dialog" onClose={()=>setOpenPlace(null)}>
-      <Suspense fallback={<p role="status" className="hm-muted">Opening details…</p>}><PlaceDetails key={openPlace.url} place={openPlace} initialTab="media"/></Suspense>
+      <Suspense fallback={<p role="status" className="hm-muted">Opening details…</p>}><PlaceDetails key={openPlace.url} place={openPlace}/></Suspense>
     </Dialog>}
   </div>
 }

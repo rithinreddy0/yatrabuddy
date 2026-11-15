@@ -1,5 +1,5 @@
-import React,{useEffect,useState} from 'react'
-import {BusFront,CalendarDays,CloudSun,Compass,Hotel,Mountain,ShieldCheck,TreePine,Utensils} from 'lucide-react'
+import React,{useEffect,useRef,useState} from 'react'
+import {ArrowDown,BusFront,CalendarDays,CloudSun,Compass,Hotel,Mountain,ShieldCheck,TreePine,Utensils} from 'lucide-react'
 import {Icon} from './UI.jsx'
 import {visibleSource} from './sourceUrl.mjs'
 import {TravelHighlights} from './TravelHighlights.jsx'
@@ -49,20 +49,35 @@ export function useCityBrief(location,topic='overview',attempt=0) {
 }
 
 export function CityBrief({name,report,weather,airQuality,loading,compact=false,destination=false,children}) {
+  const resources=useRef(null)
   const rows=report?.sections||[]
   const checked=report?.retrievedAt
   const advice=report?.advisories||[]
   if(compact&&!rows.length&&!loading&&!children&&!advice.length)return null
   const shown=compact?rows.slice(0,3):rows
-  const primary=destination&&report?.topic==='overview'?shown.slice(0,6):shown
-  const renderPoints=points=><div className="city-brief-points">{points.map(point=>{
+  const priority=['Why visit','What to plan around','Nature and outdoors']
+  const preferred=priority.map(title=>shown.find(point=>point.title===title)).filter(Boolean)
+  const primary=destination&&report?.topic==='overview'?[...new Set([...preferred,...shown])].slice(0,3):shown
+  const remaining=shown.filter(point=>!primary.includes(point))
+  const references=[...new Map([...shown,...advice].flatMap(point=>[
+    [visibleSource(point.sourceUrl)?.href,point.source||point.title],
+    [visibleSource(point.licenseUrl)?.href,point.license],
+  ]).filter(([url])=>url)).entries()]
+  function showResources(){
+    resources.current.open=true
+    resources.current.querySelector('summary').focus({preventScroll:true})
+    resources.current.scrollIntoView({block:'nearest'})
+  }
+  const renderPoints=(points,limit=2)=><div className="city-brief-points">{points.map(point=>{
     const Glyph=icons[point.kind]||Compass
     const source=visibleSource(point.sourceUrl)
     return <article key={point.title} data-kind={point.kind}>
       <h3><span className="city-point-icon"><Glyph size={17} aria-hidden="true"/></span>{point.title}</h3>
-      <TravelHighlights text={point.text} points={point.points} limit={2}/>
-      {source&&<a href={source.href} target="_blank" rel="noreferrer">{point.source||'Source'} ↗</a>}
-      {point.licenseUrl&&<a className="city-brief-license" href={point.licenseUrl} target="_blank" rel="noreferrer">{point.license}</a>}
+      <TravelHighlights text={point.text} points={point.points} limit={limit}/>
+      {destination&&source&&<button type="button" className="guide-reference-arrow" onClick={showResources}
+        aria-label={`Go to resources for ${point.title}`}><ArrowDown size={15}/></button>}
+      {!destination&&source&&<a href={source.href} target="_blank" rel="noreferrer">{point.source||'Source'} ↗</a>}
+      {!destination&&point.licenseUrl&&<a className="city-brief-license" href={point.licenseUrl} target="_blank" rel="noreferrer">{point.license}</a>}
     </article>
   })}</div>
   return <section className={'panel city-brief'+(compact?' city-brief-compact':'')+(destination?' city-brief-destination':'')} aria-label={`City briefing for ${name}`}>
@@ -70,8 +85,12 @@ export function CityBrief({name,report,weather,airQuality,loading,compact=false,
       {checked&&Number.isFinite(Date.parse(checked))&&<time dateTime={checked}>Checked {new Date(checked).toLocaleString()}{report.freshness==='cached'?' · cached guide':''}</time>}</div></header>
     {weather&&<p className="city-brief-weather"><Icon name="globe" size={17}/><span><strong>{weather.temperature}°C · {weather.conditions}</strong>{airQuality&&` · Model US AQI ${airQuality.index}`}</span></p>}
     {loading&&<p className="city-brief-loading" role="status"><span/>Reading the city guide and safety notes…</p>}
-    {!!primary.length&&renderPoints(primary)}
-    {shown.length>primary.length&&<details className="city-brief-more"><summary>More practical details</summary>{renderPoints(shown.slice(primary.length))}</details>}
+    {!!primary.length&&renderPoints(primary,remaining.length?1:2)}
+    {shown.length>primary.length&&<details className="city-brief-more"><summary>More practical details</summary>{renderPoints(remaining)}</details>}
+    {destination&&references.length>0&&<details className="guide-resources" ref={resources}>
+      <summary>Resources</summary>
+      <ul>{references.map(([url,label])=><li key={url}><a href={url} target="_blank" rel="noreferrer">{label||'Source'} ↗</a></li>)}</ul>
+    </details>}
     {destination&&rows.some(point=>['transport','stays','events'].includes(point.kind))&&<small className="travel-source-note">Confirm published prices, hours, and event dates before you go.</small>}
     {!compact&&report&&!rows.length&&<p className="city-brief-limit">City guide details aren’t available from our sources right now.</p>}
     {children}

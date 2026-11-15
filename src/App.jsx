@@ -79,6 +79,7 @@ export default function App(){
   const [activeTripId,setActiveTripId]=useState(()=>{try{return localStorage.getItem('yatra.activeTrip')||''}catch{return ''}})
   const [browseRequest,setBrowseRequest]=useState(null)
   const [homeDestination]=useState(storedCity)
+  const [guideLocation,setGuideLocation]=useState(null)
   const [histories,setHistories]=useState({})
   const state=useLibrary()
   const {user,library,ready,profileReady,change}=state
@@ -113,6 +114,9 @@ export default function App(){
       if(!hadRoute)return
       const frame=window.requestAnimationFrame(()=>{
         const main=document.getElementById('main')
+        if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+          main?.animate?.([{opacity:.86},{opacity:1}],{duration:180,easing:'ease-out'})
+        }
         const heading=main?.querySelector('h1')
         const target=heading||main
         if(heading&&!heading.hasAttribute('tabindex'))heading.tabIndex=-1
@@ -292,7 +296,8 @@ export default function App(){
     }
   }
   const common={catalog,library,onSave:toggleSaved,onOpen:place=>setModal({type:'destination',place})}
-  const accountControl=<a className="icon-btn account-nav-icon" href="#account" aria-label={user?'Account':'Sign in'} title={user?'Account':'Sign in'}><UserRound size={20}/></a>
+  const accountName=user?.name?.trim().replace(/^\p{L}/u,letter=>letter.toLocaleUpperCase()) || 'Account'
+  const accountControl=<a className="nav-item sidebar-account" href={user?'#account':'#signin'} aria-label={user?'Account for '+accountName:'Sign in'} title={user?accountName:'Sign in'}><UserRound size={20}/><span className="nav-title">{user?accountName:'Sign in'}</span></a>
   let content
   if(!catalog)content=<div className="page inner-page"><AgentProgress label="Loading your travel workspace"/></div>
   else switch(route.page){
@@ -336,14 +341,13 @@ export default function App(){
     case 'itinerary':
     case 'budget':
     case 'trip':content=!ready?<div className="page inner-page" role="status">Loading your saved trip...</div>:trip&&place?<Trip key={trip.id} view={route.page==='budget'?'budget':'itinerary'} trip={trip} place={place} profile={library.profile} onUpdate={updateTrip} onEdit={editIndex=>setModal({type:'plan',initial:trip.brief,editIndex})} onMessage={message} history={history} onUndo={()=>restore('undo')} onRedo={()=>restore('redo')}/>:<div className="page inner-page"><Empty title="Trip unavailable" description="Create and save a trip in chat, then its itinerary and budget will appear here." action={<Button onClick={()=>newTripChat()}>Create a trip</Button>}/></div>;break
-    case 'guide':content=<DestinationGuide key={route.id||'overview'} catalog={catalog} initialTopic={route.id} profile={library.profile}
-      initialDestination={homeDestination||catalog.find(item=>library.saved.includes(item.id))?.id} onPlan={planWithChat} onAsk={ask}/>;break
+    case 'guide':content=<DestinationGuide key={JSON.stringify([route.id,guideLocation?.id])} catalog={catalog} initialTopic={route.id} profile={library.profile}
+      initialDestination={guideLocation||homeDestination||catalog.find(item=>library.saved.includes(item.id))?.id} onPlan={planWithChat} onAsk={ask}/>;break
     case 'account':
     case 'preferences':content=<Preferences key={route.page} initialTab={route.page==='account'?'account':'travel'} user={user} theme={theme} onThemeChange={changeTheme} style={library.profile?.style||library.style} profile={library.profile}
       onIdentity={state.updateIdentity} onSignOut={signOut} onEditProfile={()=>{if(mustSignIn&&!user)requireSignIn('preferences');else setModal({type:'onboarding'})}}
       onResetProfile={()=>setModal({type:'clear-profile'})} onChange={style=>{if(mustSignIn&&!user){requireSignIn('preferences');return}change(data=>({...data,style,profile:data.profile?{...data.profile,style}:null}));message('Travel style saved.')}} onAccount={()=>requireSignIn('account')}/>;break
-    default:content=<Home catalog={catalog} library={user||!mustSignIn?library:{trips:[],drafts:[],profile:null}} destination={homeDestination} onPlan={planWithChat} onAsk={ask} onNavigate={navigate} onResearch={topic=>navigate('guide/'+topic)}
-      onRequireAccount={mustSignIn&&!user?()=>requireSignIn('saved'):undefined}/>
+    default:content=<Home catalog={catalog} library={user||!mustSignIn?library:{trips:[],drafts:[],profile:null}} onPlan={planWithChat} onAsk={ask} onResearch={(topic,city)=>{setGuideLocation(city);navigate('guide/'+topic)}}/>
   }
   const close=()=>setModal(null)
   function requireSignIn(target) {

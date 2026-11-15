@@ -4,7 +4,7 @@ if (!location.hash || location.hash === '#home') {
   const hero = document.createElement('link')
   hero.rel = 'preload'
   hero.as = 'image'
-  hero.href = '/images/kerala.jpg'
+  hero.href = '/images/hero.jpg'
   hero.fetchPriority = 'high'
   document.head.append(hero)
 }

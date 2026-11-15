@@ -9,6 +9,7 @@ import {request} from '../api.mjs'
 import {placeInterestScores} from './discoveryPlaces.mjs'
 import {revealResult} from '../components/revealResult.mjs'
 import {isWikivoyage, visibleSource} from '../components/sourceUrl.mjs'
+import './PlaceDetails.css'
 
 export function PlaceSource({url, children}) {
   if (isWikivoyage(url)) return <WikivoyageSource url={url} label={typeof children === 'string' ? children : undefined}/>
